@@ -238,6 +238,17 @@ function TripsPage() {
         .limit(1)
         .maybeSingle();
 
+      // Insere itens de viagem para cotação individual por item
+      if (created?.id) {
+        const itemsPayload = [
+          { requisition_id: created.id, item_type: 'voo', sort_order: 0 },
+          ...(needsHotel ? [{ requisition_id: created.id, item_type: 'hotel', sort_order: 1 }] : []),
+          ...(needsLocalCar ? [{ requisition_id: created.id, item_type: 'carro', sort_order: 2 }] : []),
+        ];
+        const { error: itemsError } = await supabaseBrowser.from('requisition_items').insert(itemsPayload);
+        if (itemsError) console.warn('[requisition_items]', itemsError.message);
+      }
+
       toast.success("Requisição de viagem criada!", { description: created?.ticket_number ?? "" });
       void notifyVpClickClient({
         stage: "V1",

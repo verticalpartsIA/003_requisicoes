@@ -54,6 +54,14 @@ interface SupplierQuote {
   isWinner: boolean;
 }
 
+export interface PurchaseTravelItem {
+  approvalItemId: string;
+  itemId: string;
+  itemType: 'voo' | 'hotel' | 'carro';
+  supplierName: string;
+  price: number;
+}
+
 export interface PurchaseItem {
   requisitionId: string;
   approvalId: string;
@@ -62,6 +70,7 @@ export interface PurchaseItem {
   id: string;
   title: string;
   module: string;
+  moduleCode?: string;
   category: "viagem" | "servico" | "frete" | "locacao" | "produto" | "manutencao";
   requesterName: string;
   requesterNotes: string;
@@ -72,6 +81,7 @@ export interface PurchaseItem {
   approvedAt: string;
   suppliers: SupplierQuote[];
   status: "pendente";
+  approvedTravelItems?: PurchaseTravelItem[];
 }
 
 const confirmPurchaseSchema = z.object({
@@ -139,6 +149,7 @@ function mapPurchaseItem(
     id: requisition.ticket_number,
     title: requisition.title,
     module: getModuleLabel(requisition.module),
+    moduleCode: requisition.module,
     category: getCategory(requisition.module),
     requesterName: requisition.requester_name,
     requesterNotes: requisition.justification,

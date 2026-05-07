@@ -16,6 +16,8 @@ import {
   Building2,
   AlertTriangle,
   XCircle,
+  Hotel,
+  Car,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -158,12 +160,23 @@ function PurchasingPage() {
     if (!selected) return;
     setDialogError(null);
 
+    // Para M2 usa os itens aprovados como referência de fornecedor/valor
+    const isM2 = selected.moduleCode === "M2";
+    const approvedItems = selected.approvedTravelItems || [];
+
     // ── Validações antes de chamar o backend ──────────────────────────
-    const winner = selected.suppliers.find((supplier) => supplier.isWinner);
-    if (!winner) {
+    const winner = isM2 ? null : selected.suppliers.find((supplier) => supplier.isWinner);
+    if (!isM2 && !winner) {
       setDialogError({
         message: "Nenhum fornecedor vencedor definido nesta cotação.",
         action: "Volte à etapa V2 — Cotação, abra este ticket e marque o fornecedor vencedor antes de finalizar a compra.",
+      });
+      return;
+    }
+    if (isM2 && approvedItems.length === 0) {
+      setDialogError({
+        message: "Nenhum item de viagem aprovado encontrado.",
+        action: "Verifique a etapa V3 — Aprovação para garantir que ao menos um item foi aprovado.",
       });
       return;
     }
@@ -184,13 +197,21 @@ function PurchasingPage() {
       return;
     }
 
+    // Consolida supplier/price para M2
+    const supplierNameFinal = isM2
+      ? approvedItems.map((i) => i.supplierName).filter(Boolean).join(", ")
+      : winner!.name;
+    const supplierPriceFinal = isM2
+      ? approvedItems.reduce((sum, i) => sum + i.price, 0)
+      : winner!.price;
+
     setIsSaving(true);
     try {
       await confirmPurchaseClient({
         requisitionId: selected.requisitionId,
         approvalId: selected.approvalId,
-        supplierName: winner.name,
-        supplierPrice: winner.price,
+        supplierName: supplierNameFinal,
+        supplierPrice: supplierPriceFinal,
         purchaseOrderNumber,
         invoiceNumber,
         paymentMethod,
@@ -277,7 +298,8 @@ function PurchasingPage() {
         <div className="space-y-3">
           <p className="text-sm font-semibold text-foreground">Compras Pendentes</p>
           {pending.map((item) => {
-            const winner = item.suppliers.find((s) => s.isWinner);
+            const isM2Item = item.moduleCode === "M2";
+            const winner = isM2Item ? null : item.suppliers.find((s) => s.isWinner);
             const cat = categoryConfig[item.category];
 
             return (
@@ -306,12 +328,25 @@ function PurchasingPage() {
                     </div>
                   </div>
                   <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                    <Trophy className="h-3.5 w-3.5 text-vp-yellow-dark" />
-                    <span className="font-medium text-foreground">{winner?.name}</span>
-                    <span>•</span>
-                    <span>R$ {winner?.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                    <span>•</span>
-                    <span>Critério: {winCriteriaLabel[item.winCriteria]}</span>
+                    {isM2Item ? (
+                      <>
+                        <Plane className="h-3.5 w-3.5 text-vp-yellow-dark" />
+                        <span className="font-medium text-foreground">
+                          {(item.approvedTravelItems || []).length} item(s) aprovado(s)
+                        </span>
+                        <span>•</span>
+                        <span>R$ {(item.approvedTravelItems || []).reduce((s, i) => s + i.price, 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trophy className="h-3.5 w-3.5 text-vp-yellow-dark" />
+                        <span className="font-medium text-foreground">{winner?.name}</span>
+                        <span>•</span>
+                        <span>R$ {winner?.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                        <span>•</span>
+                        <span>Critério: {winCriteriaLabel[item.winCriteria]}</span>
+                      </>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -323,7 +358,9 @@ function PurchasingPage() {
       <Dialog open={!!selected} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           {selected && (() => {
-            const winner = selected.suppliers.find((s) => s.isWinner);
+            const isM2 = selected.moduleCode === "M2";
+            const approvedItems = selected.approvedTravelItems || [];
+            const winner = isM2 ? null : selected.suppliers.find((s) => s.isWinner);
             const cat = categoryConfig[selected.category];
 
             return (
@@ -356,46 +393,89 @@ function PurchasingPage() {
                   </CardContent>
                 </Card>
 
-                <div className="flex items-center gap-2 rounded-lg bg-accent/50 p-3">
-                  {winCriteriaIcon[selected.winCriteria]}
-                  <span className="text-sm font-semibold text-foreground">
-                    Critério de vitória: {winCriteriaLabel[selected.winCriteria]}
-                  </span>
-                </div>
+                {!isM2 && (
+                  <div className="flex items-center gap-2 rounded-lg bg-accent/50 p-3">
+                    {winCriteriaIcon[selected.winCriteria]}
+                    <span className="text-sm font-semibold text-foreground">
+                      Critério de vitória: {winCriteriaLabel[selected.winCriteria]}
+                    </span>
+                  </div>
+                )}
 
-                <div className="space-y-3">
-                  <p className="text-sm font-semibold text-foreground">
-                    Fornecedores Cotados ({selected.suppliers.length})
-                  </p>
-                  {selected.suppliers.map((sup, i) => (
-                    <Card
-                      key={`${selected.approvalId}-${i}`}
-                      className={`border ${sup.isWinner ? "border-vp-yellow bg-vp-yellow/5 ring-1 ring-vp-yellow/30" : "border-border"}`}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-foreground">{sup.name}</span>
-                            {sup.isWinner && (
-                              <Badge className="bg-vp-yellow/20 text-vp-yellow-dark border-vp-yellow/40 text-[10px]">
-                                <Trophy className="h-3 w-3 mr-1" /> Vencedor
-                              </Badge>
-                            )}
+                {isM2 ? (
+                  <div className="space-y-3">
+                    <p className="text-sm font-semibold text-foreground">
+                      Itens de Viagem Aprovados ({approvedItems.length})
+                    </p>
+                    {approvedItems.map((item, i) => {
+                      const travelIcon =
+                        item.itemType === "voo" ? <Plane className="h-4 w-4" />
+                        : item.itemType === "hotel" ? <Hotel className="h-4 w-4" />
+                        : <Car className="h-4 w-4" />;
+                      const travelLabel =
+                        item.itemType === "voo" ? "Passagem Aérea"
+                        : item.itemType === "hotel" ? "Hospedagem"
+                        : "Locação de Carro";
+                      return (
+                        <Card key={i} className="border border-green-300 bg-green-50/30">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                {travelIcon}
+                                <span className="text-sm font-semibold text-foreground">{travelLabel}</span>
+                                <Badge className="bg-green-100 text-green-700 border-green-300 text-[10px]">Aprovado</Badge>
+                              </div>
+                              <span className="font-mono text-sm font-bold text-foreground">
+                                R$ {item.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">{item.supplierName}</p>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                    <div className="rounded-lg bg-accent/50 p-3 text-sm flex items-center justify-between">
+                      <span className="text-muted-foreground">Total aprovado</span>
+                      <span className="font-bold text-foreground">
+                        R$ {approvedItems.reduce((s, i) => s + i.price, 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm font-semibold text-foreground">
+                      Fornecedores Cotados ({selected.suppliers.length})
+                    </p>
+                    {selected.suppliers.map((sup, i) => (
+                      <Card
+                        key={`${selected.approvalId}-${i}`}
+                        className={`border ${sup.isWinner ? "border-vp-yellow bg-vp-yellow/5 ring-1 ring-vp-yellow/30" : "border-border"}`}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-foreground">{sup.name}</span>
+                              {sup.isWinner && (
+                                <Badge className="bg-vp-yellow/20 text-vp-yellow-dark border-vp-yellow/40 text-[10px]">
+                                  <Trophy className="h-3 w-3 mr-1" /> Vencedor
+                                </Badge>
+                              )}
+                            </div>
+                            <span className="font-mono text-sm font-bold text-foreground">
+                              R$ {sup.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </span>
                           </div>
-                          <span className="font-mono text-sm font-bold text-foreground">
-                            R$ {sup.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" /> Prazo: {sup.deadline}
+                          <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" /> Prazo: {sup.deadline}
+                            </div>
+                            <div>Obs: {sup.notes || "—"}</div>
                           </div>
-                          <div>Obs: {sup.notes || "—"}</div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">

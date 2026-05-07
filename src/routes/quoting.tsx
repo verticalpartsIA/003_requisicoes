@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { FileSearch, Plus, Trash2, Trophy, DollarSign, Clock, Scale, CheckCircle2, ArrowRight } from "lucide-react";
+import { FileSearch, Plus, Trash2, Trophy, DollarSign, Clock, Scale, CheckCircle2, ArrowRight, Plane, Hotel, Car } from "lucide-react";
 import { useState } from "react";
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,6 +22,7 @@ import {
   saveQuotationSuppliers,
   type QuotationQueueItem,
   type SupplierEntry,
+  type TravelItem,
 } from "@/features/quotations/api";
 import { toast } from "sonner";
 import { AccessGuard } from "@/components/access-guard";
@@ -31,6 +32,8 @@ import {
   listQuotationQueueClient,
   saveQuotationProposalsClient,
   saveQuotationSuppliersClient,
+  saveM2QuoteClient,
+  type M2ItemQuote,
 } from "@/features/quotations/client";
 import { useAuth } from "@/features/auth/auth-context";
 
@@ -83,6 +86,12 @@ const criteriaLabels: Record<WinCriteria, { label: string; icon: React.ReactNode
   price_deadline: { label: "Preço + Prazo", icon: <Scale className="h-4 w-4" /> },
 };
 
+const travelItemLabels: Record<string, { label: string; icon: React.ReactNode }> = {
+  voo: { label: "Passagem Aérea", icon: <Plane className="h-4 w-4" /> },
+  hotel: { label: "Hospedagem", icon: <Hotel className="h-4 w-4" /> },
+  carro: { label: "Locação de Carro", icon: <Car className="h-4 w-4" /> },
+};
+
 function getInitialPhase(item: QuotationQueueItem): Phase {
   if (item.status === "selecting_winner") return "winner";
   if (item.status === "awaiting_proposals" || item.status === "quoting") return "proposals";
@@ -105,12 +114,32 @@ function QuotingPage() {
   const [confirmDialog, setConfirmDialog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // M2 state
+  const [m2Item, setM2Item] = useState<QuotationQueueItem | null>(null);
+  const [m2Quotes, setM2Quotes] = useState<Record<string, Omit<M2ItemQuote, "itemId" | "itemType">>>({});
+  const [isM2Saving, setIsM2Saving] = useState(false);
+
   useEffect(() => {
     if (!session) return;
     void listQuotationQueueClient().then(setQueue);
   }, [session]);
 
   const openQuotation = (item: QuotationQueueItem) => {
+    if (item.module === "M2") {
+      // Inicializa campos com dados já salvos, se houver
+      const initial: Record<string, Omit<M2ItemQuote, "itemId" | "itemType">> = {};
+      (item.travelItems || []).forEach((ti) => {
+        initial[ti.id] = {
+          supplierName: ti.supplierName || "",
+          price: ti.supplierPrice ? Number(ti.supplierPrice) : 0,
+          deadline: ti.supplierDeadline || "",
+          notes: ti.supplierNotes || "",
+        };
+      });
+      setM2Quotes(initial);
+      setM2Item(item);
+      return;
+    }
     setSelectedItem(item);
     setSuppliers(item.suppliers.length > 0 ? item.suppliers : [createEmptySupplier()]);
     setPhase(getInitialPhase(item));
@@ -144,6 +173,11 @@ function QuotingPage() {
     setWinnerIndex(null);
     setPhase("suppliers");
     setWinCriteria("price");
+  };
+
+  const closeM2Dialog = () => {
+    setM2Item(null);
+    setM2Quotes({});
   };
 
   const advanceToProposals = async () => {
@@ -251,6 +285,59 @@ function QuotingPage() {
     }
   };
 
+  const handleM2Submit = async () => {
+    if (!m2Item) return;
+
+    const travelItems = m2Item.travelItems || [];
+    if (travelItems.length === 0) {
+      toast.error("Nenhum item de viagem encontrado para esta requisição.");
+      return;
+    }
+
+    // Valida campos obrigatórios
+    for (const ti of travelItems) {
+      const q = m2Quotes[ti.id];
+      if (!q?.supplierName?.trim()) {
+        toast.error(`Informe o fornecedor para: ${travelItemLabels[ti.itemType]?.label ?? ti.itemType}`);
+        return;
+      }
+      if (!q.price || q.price <= 0) {
+        toast.error(`Informe o valor para: ${travelItemLabels[ti.itemType]?.label ?? ti.itemType}`);
+        return;
+      }
+    }
+
+    setIsM2Saving(true);
+    try {
+      const itemQuotes: M2ItemQuote[] = travelItems.map((ti) => ({
+        itemId: ti.id,
+        itemType: ti.itemType,
+        supplierName: m2Quotes[ti.id]?.supplierName?.trim() || "",
+        price: m2Quotes[ti.id]?.price || 0,
+        deadline: m2Quotes[ti.id]?.deadline || "",
+        notes: m2Quotes[ti.id]?.notes || "",
+      }));
+
+      await saveM2QuoteClient(m2Item.requisitionId, itemQuotes);
+      toast.success("Cotação de viagem finalizada e enviada para aprovação.");
+      void notifyVpClickClient({
+        stage: "V2",
+        requisitionId: m2Item.requisitionId,
+        ticketNumber: m2Item.ticketNumber,
+        title: m2Item.title,
+        module: "M2",
+        requesterName: "",
+      }).catch(console.warn);
+      closeM2Dialog();
+      setQueue(await listQuotationQueueClient());
+      await router.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível finalizar a cotação de viagem.");
+    } finally {
+      setIsM2Saving(false);
+    }
+  };
+
   const summaryStatuses: QuotationStatus[] = ["pending", "awaiting_proposals", "selecting_winner", "completed"];
 
   return (
@@ -312,6 +399,7 @@ function QuotingPage() {
         )}
       </div>
 
+      {/* Dialog padrão (não-M2) */}
       <Dialog open={!!selectedItem && !confirmDialog} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -507,6 +595,113 @@ function QuotingPage() {
             <Button variant="ghost" onClick={() => setConfirmDialog(false)}>Cancelar</Button>
             <Button variant="vp" onClick={handleConfirmWinner} disabled={isSaving}>
               Confirmar e Enviar ao V3
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog M2 — cotação por item de viagem */}
+      <Dialog open={!!m2Item} onOpenChange={(open) => !open && closeM2Dialog()}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-lg flex items-center gap-2">
+              <Plane className="h-5 w-5 text-vp-yellow-dark" />
+              Cotação de Viagem — {m2Item?.ticketNumber}
+            </DialogTitle>
+            <DialogDescription>{m2Item?.title}</DialogDescription>
+          </DialogHeader>
+
+          {m2Item?.requesterNotes && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs font-semibold text-amber-800 mb-1">Observações do Requisitante</p>
+              <p className="text-sm text-amber-900">{m2Item.requesterNotes}</p>
+            </div>
+          )}
+
+          <p className="text-sm text-muted-foreground">
+            Atribua um fornecedor para cada item de viagem abaixo.
+          </p>
+
+          <div className="space-y-4">
+            {(m2Item?.travelItems || []).map((ti) => {
+              const cfg = travelItemLabels[ti.itemType] ?? { label: ti.itemType, icon: null };
+              const q = m2Quotes[ti.id] ?? { supplierName: "", price: 0, deadline: "", notes: "" };
+              const update = (field: string, value: string | number) =>
+                setM2Quotes((prev) => ({ ...prev, [ti.id]: { ...prev[ti.id], [field]: value } }));
+
+              return (
+                <Card key={ti.id} className="border border-border">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      {cfg.icon}
+                      {cfg.label}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="col-span-2 space-y-1">
+                        <Label className="text-xs">Fornecedor / Empresa *</Label>
+                        <Input
+                          placeholder="Ex.: LATAM Airlines, Hoteis.com, Localiza..."
+                          value={q.supplierName}
+                          onChange={(e) => update("supplierName", e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Valor (R$) *</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="0,00"
+                          value={q.price || ""}
+                          onChange={(e) => update("price", parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Data / Prazo</Label>
+                        <Input
+                          type="date"
+                          value={q.deadline}
+                          onChange={(e) => update("deadline", e.target.value)}
+                        />
+                      </div>
+                      <div className="col-span-2 space-y-1">
+                        <Label className="text-xs">Observações</Label>
+                        <Textarea
+                          placeholder="Número do voo, condições, categoria do hotel..."
+                          value={q.notes}
+                          onChange={(e) => update("notes", e.target.value)}
+                          className="min-h-[56px]"
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+
+            {(m2Item?.travelItems || []).length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Nenhum item de viagem encontrado. A requisição pode ter sido criada antes desta funcionalidade.
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-lg bg-accent/50 p-3 text-xs text-muted-foreground">
+            Valor total estimado:{" "}
+            <strong className="text-foreground">
+              R$ {Object.values(m2Quotes).reduce((sum, q) => sum + (q.price || 0), 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+            </strong>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={closeM2Dialog}>Cancelar</Button>
+            <Button
+              variant="vp"
+              disabled={isM2Saving || (m2Item?.travelItems || []).length === 0}
+              onClick={handleM2Submit}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1" />
+              {isM2Saving ? "Salvando..." : "Finalizar Cotação de Viagem"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -48,6 +48,16 @@ interface ApprovalSupplierQuote {
   isWinner: boolean;
 }
 
+export interface ApprovalTravelItem {
+  approvalItemId: string;
+  itemId: string;
+  itemType: 'voo' | 'hotel' | 'carro';
+  supplierName: string;
+  price: number;
+  decision: 'pending' | 'approved' | 'rejected';
+  notes: string;
+}
+
 export interface ApprovalRequestItem {
   requisitionId: string;
   approvalId: string;
@@ -55,6 +65,7 @@ export interface ApprovalRequestItem {
   id: string;
   title: string;
   module: string;
+  moduleCode?: string;
   requesterName: string;
   requesterNotes: string;
   totalValue: number;
@@ -62,6 +73,7 @@ export interface ApprovalRequestItem {
   winCriteria: WinCriteria;
   suppliers: ApprovalSupplierQuote[];
   createdAt: string;
+  travelItems?: ApprovalTravelItem[];
 }
 
 const decisionSchema = z.object({
@@ -93,6 +105,7 @@ function mapApprovalRequest(
       : requisition.module === "M5" ? "Frete"
       : "Locação"
     }`,
+    moduleCode: requisition.module,
     requesterName: requisition.requester_name,
     requesterNotes: requisition.justification,
     totalValue: approval.total_value || 0,

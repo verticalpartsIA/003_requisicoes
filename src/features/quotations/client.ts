@@ -1,5 +1,5 @@
 import { supabaseBrowser } from "@/lib/supabase-browser";
-import type { QuotationQueueItem, SupplierEntry } from "@/features/quotations/api";
+import type { QuotationQueueItem, SupplierEntry, TravelItem } from "@/features/quotations/api";
 import { getApprovalLevelForValue } from "@/lib/approval";
 import { friendlySupabaseError } from "@/lib/supabase-error";
 
@@ -50,6 +50,54 @@ export async function listQuotationQueueClient() {
     suppliersByQuotation.set(supplier.quotation_id, current);
   });
 
+  // Fetch travel items for M2 requisitions
+  const m2RequisitionIds = requisitions.filter((r) => r.module === "M2").map((r) => r.id);
+  const travelItemsByRequisition = new Map<string, TravelItem[]>();
+
+  if (m2RequisitionIds.length > 0) {
+    const { data: travelItemRows } = await supabaseBrowser
+      .from("requisition_items")
+      .select("id,requisition_id,item_type,description,status,sort_order")
+      .in("requisition_id", m2RequisitionIds)
+      .order("sort_order", { ascending: true });
+
+    // Also fetch quotation_suppliers with item_id for M2
+    const m2QuotationIds = (quotations || [])
+      .filter((q) => m2RequisitionIds.includes(q.requisition_id))
+      .map((q) => q.id);
+
+    let m2SuppliersByItem = new Map<string, (typeof suppliers extends Array<infer T> ? T : never) & { item_id: string | null }>();
+    if (m2QuotationIds.length > 0) {
+      const { data: m2Suppliers } = await supabaseBrowser
+        .from("quotation_suppliers")
+        .select("id,quotation_id,supplier_name,price,deadline,notes,item_id,is_winner")
+        .in("quotation_id", m2QuotationIds);
+
+      (m2Suppliers || []).forEach((s) => {
+        if (s.item_id) m2SuppliersByItem.set(s.item_id, s as typeof s & { item_id: string });
+      });
+    }
+
+    (travelItemRows || []).forEach((row) => {
+      const sup = m2SuppliersByItem.get(row.id);
+      const item: TravelItem = {
+        id: row.id,
+        itemType: row.item_type as TravelItem["itemType"],
+        description: row.description,
+        status: row.status,
+        sortOrder: row.sort_order,
+        supplierId: sup?.id,
+        supplierName: sup?.supplier_name,
+        supplierPrice: sup?.price?.toString(),
+        supplierDeadline: sup?.deadline ?? undefined,
+        supplierNotes: sup?.notes ?? undefined,
+      };
+      const current = travelItemsByRequisition.get(row.requisition_id) || [];
+      current.push(item);
+      travelItemsByRequisition.set(row.requisition_id, current);
+    });
+  }
+
   return requisitions.map((requisition) => {
     const quotation = quotationByRequisition.get(requisition.id);
     const quotationSuppliers = quotation ? suppliersByQuotation.get(quotation.id) || [] : [];
@@ -73,6 +121,7 @@ export async function listQuotationQueueClient() {
         isWinner: supplier.is_winner,
       })),
       winCriteria: (quotation?.win_criteria as WinCriteria | null) || "price",
+      travelItems: requisition.module === "M2" ? (travelItemsByRequisition.get(requisition.id) || []) : undefined,
     };
   });
 }
@@ -332,4 +381,114 @@ export async function finalizeQuotationClient(
     },
   });
   if (secondLogError) console.warn("[audit_logs] APPROVAL_REQUESTED failed:", secondLogError.message);
+}
+
+export interface M2ItemQuote {
+  itemId: string;
+  itemType: 'voo' | 'hotel' | 'carro';
+  supplierName: string;
+  price: number;
+  deadline: string;
+  notes: string;
+}
+
+export async function saveM2QuoteClient(requisitionId: string, itemQuotes: M2ItemQuote[]) {
+  // 1. Cria ou busca cotação
+  const quotationId = await ensureQuotation(requisitionId, "completed");
+
+  // 2. Upsert quotation_suppliers — um por item, já como vencedor
+  const supplierPayload = itemQuotes.map((item) => ({
+    quotation_id: quotationId,
+    item_id: item.itemId,
+    supplier_name: item.supplierName,
+    price: item.price,
+    deadline: item.deadline || null,
+    notes: item.notes || null,
+    proposal_received: true,
+    is_winner: true,
+  }));
+
+  const { error: suppliersError } = await supabaseBrowser
+    .from("quotation_suppliers")
+    .upsert(supplierPayload, { onConflict: "quotation_id,item_id" });
+  if (suppliersError) throw new Error(friendlySupabaseError(suppliersError));
+
+  // 3. Total e nível de aprovação
+  const totalValue = itemQuotes.reduce((sum, item) => sum + item.price, 0);
+  const approvalLevel = getApprovalLevelForValue(totalValue);
+
+  // 4. Upsert approval
+  const { error: approvalUpsertError } = await supabaseBrowser
+    .from("approvals")
+    .upsert({
+      requisition_id: requisitionId,
+      quotation_id: quotationId,
+      approval_level: approvalLevel,
+      total_value: totalValue,
+      decision: "pending",
+    }, { onConflict: "requisition_id" });
+  if (approvalUpsertError) throw new Error(friendlySupabaseError(approvalUpsertError));
+
+  // 5. Busca o approval_id
+  const { data: approvalRow, error: approvalFetchError } = await supabaseBrowser
+    .from("approvals")
+    .select("id")
+    .eq("requisition_id", requisitionId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (approvalFetchError) throw new Error(friendlySupabaseError(approvalFetchError));
+  if (!approvalRow?.id) throw new Error("Não foi possível recuperar o ID de aprovação.");
+
+  // 6. Upsert approval_items — um por item
+  const approvalItemsPayload = itemQuotes.map((item) => ({
+    approval_id: approvalRow.id,
+    item_id: item.itemId,
+    item_type: item.itemType,
+    supplier_name: item.supplierName,
+    price: item.price,
+    decision: "pending",
+  }));
+
+  const { error: approvalItemsError } = await supabaseBrowser
+    .from("approval_items")
+    .upsert(approvalItemsPayload, { onConflict: "approval_id,item_id" });
+  if (approvalItemsError) throw new Error(friendlySupabaseError(approvalItemsError));
+
+  // 7. Atualiza status dos requisition_items para 'quoted'
+  const itemIds = itemQuotes.map((item) => item.itemId);
+  const { error: itemStatusError } = await supabaseBrowser
+    .from("requisition_items")
+    .update({ status: "quoted" })
+    .in("id", itemIds);
+  if (itemStatusError) console.warn("[requisition_items] status update failed:", itemStatusError.message);
+
+  // 8. Atualiza requisição para APROVAÇÃO
+  const { data: requisition, error: requisitionError } = await supabaseBrowser
+    .from("requisitions")
+    .select("ticket_number,status")
+    .eq("id", requisitionId)
+    .single();
+  if (requisitionError) throw new Error(friendlySupabaseError(requisitionError));
+
+  const { error: requisitionUpdateError } = await supabaseBrowser
+    .from("requisitions")
+    .update({ status: "APROVAÇÃO" })
+    .eq("id", requisitionId);
+  if (requisitionUpdateError) throw new Error(friendlySupabaseError(requisitionUpdateError));
+
+  // 9. Audit log
+  const { error: logError } = await supabaseBrowser.from("audit_logs").insert({
+    requisition_id: requisitionId,
+    ticket_number: requisition.ticket_number,
+    action: "M2_QUOTE_COMPLETED",
+    old_status: requisition.status,
+    new_status: "APROVAÇÃO",
+    details: {
+      total_value: totalValue,
+      approval_level: approvalLevel,
+      items: itemQuotes.map((item) => ({ item_type: item.itemType, supplier: item.supplierName, price: item.price })),
+    },
+  });
+  if (logError) console.warn("[audit_logs] M2_QUOTE_COMPLETED failed:", logError.message);
 }

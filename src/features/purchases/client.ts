@@ -1,5 +1,5 @@
 import { supabaseBrowser } from "@/lib/supabase-browser";
-import type { PurchaseItem } from "@/features/purchases/api";
+import type { PurchaseItem, PurchaseTravelItem } from "@/features/purchases/api";
 
 function getCategory(module: string): PurchaseItem["category"] {
   switch (module) {
@@ -64,12 +64,40 @@ export async function listPendingPurchasesClient() {
     suppliersByQuotation.set(supplier.quotation_id, current);
   });
 
+  // Fetch approved approval_items for M2 approvals
+  const m2ApprovalIds = approvals
+    .filter((a) => (requisitionById.get(a.requisition_id))?.module === "M2")
+    .map((a) => a.id);
+
+  const approvedTravelItemsByApproval = new Map<string, PurchaseTravelItem[]>();
+  if (m2ApprovalIds.length > 0) {
+    const { data: approvalItemRows } = await supabaseBrowser
+      .from("approval_items")
+      .select("id,approval_id,item_id,item_type,supplier_name,price")
+      .in("approval_id", m2ApprovalIds)
+      .eq("decision", "approved");
+
+    (approvalItemRows || []).forEach((row) => {
+      const item: PurchaseTravelItem = {
+        approvalItemId: row.id,
+        itemId: row.item_id,
+        itemType: row.item_type as PurchaseTravelItem["itemType"],
+        supplierName: row.supplier_name || "",
+        price: row.price || 0,
+      };
+      const current = approvedTravelItemsByApproval.get(row.approval_id) || [];
+      current.push(item);
+      approvedTravelItemsByApproval.set(row.approval_id, current);
+    });
+  }
+
   return approvals
     .map((approval) => {
       const requisition = requisitionById.get(approval.requisition_id);
       if (!requisition) return null;
       const quotation = quotationByRequisition.get(requisition.id);
       const quotationSuppliers = quotation ? suppliersByQuotation.get(quotation.id) || [] : [];
+      const isM2 = requisition.module === "M2";
 
       return {
         requisitionId: requisition.id,
@@ -79,6 +107,7 @@ export async function listPendingPurchasesClient() {
         id: requisition.ticket_number,
         title: requisition.title,
         module: getModuleLabel(requisition.module),
+        moduleCode: requisition.module,
         category: getCategory(requisition.module),
         requesterName: requisition.requester_name,
         requesterNotes: requisition.justification,
@@ -95,6 +124,7 @@ export async function listPendingPurchasesClient() {
           isWinner: supplier.is_winner,
         })),
         status: "pendente" as const,
+        approvedTravelItems: isM2 ? (approvedTravelItemsByApproval.get(approval.id) || []) : undefined,
       };
     })
     .filter(Boolean) as PurchaseItem[];

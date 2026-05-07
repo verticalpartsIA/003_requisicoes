@@ -34,6 +34,19 @@ interface SupplierRow {
   is_winner: boolean;
 }
 
+export interface TravelItem {
+  id: string;
+  itemType: 'voo' | 'hotel' | 'carro';
+  description: string | null;
+  status: string;
+  sortOrder: number;
+  supplierId?: string;
+  supplierName?: string;
+  supplierPrice?: string;
+  supplierDeadline?: string;
+  supplierNotes?: string;
+}
+
 export interface SupplierEntry {
   id?: string;
   name: string;
@@ -42,6 +55,7 @@ export interface SupplierEntry {
   notes: string;
   proposalReceived: boolean;
   isWinner?: boolean;
+  itemId?: string;
 }
 
 export interface QuotationQueueItem {
@@ -55,6 +69,7 @@ export interface QuotationQueueItem {
   status: QuotationStatus;
   suppliers: SupplierEntry[];
   winCriteria: WinCriteria;
+  travelItems?: TravelItem[];
 }
 
 const supplierSchema = z.object({
