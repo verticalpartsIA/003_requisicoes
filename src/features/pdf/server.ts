@@ -279,9 +279,11 @@ export const generateRequisitionPdf = createServerFn({ method: "POST" })
       throw new Error(`reportgen.io error ${genResp.status}: ${text}`);
     }
 
-    const genJson = (await genResp.json()) as { report_id?: string; id?: string };
-    const report_id = genJson.report_id ?? genJson.id ?? "";
-    if (!report_id) throw new Error("reportgen.io não retornou report_id.");
+    const genJson = (await genResp.json()) as Record<string, unknown>;
+    // Support nested { data: { report_id } } or flat { report_id } or { id }
+    const inner = (genJson.data ?? genJson) as Record<string, unknown>;
+    const report_id = (inner.report_id ?? inner.id ?? genJson.report_id ?? genJson.id ?? "") as string;
+    if (!report_id) throw new Error(`reportgen.io não retornou report_id. Resposta: ${JSON.stringify(genJson)}`);
 
     for (let i = 0; i < 20; i++) {
       await new Promise((r) => setTimeout(r, 1500));
@@ -289,11 +291,29 @@ export const generateRequisitionPdf = createServerFn({ method: "POST" })
         headers: { "X-API-Key": apiKey },
       });
       if (dlResp.ok) {
-        const buffer = await dlResp.arrayBuffer();
-        const base64 = Buffer.from(buffer).toString("base64");
-        return { base64 };
+        const contentType = dlResp.headers.get("content-type") ?? "";
+        if (contentType.includes("application/pdf")) {
+          // Raw PDF bytes
+          const buffer = await dlResp.arrayBuffer();
+          return { base64: Buffer.from(buffer).toString("base64") };
+        }
+        // JSON envelope — .data is a URL or base64 string
+        const dlJson = (await dlResp.json()) as Record<string, unknown>;
+        const pdfData = (dlJson.data ?? dlJson.url ?? "") as string;
+        if (!pdfData) throw new Error(`reportgen.io download sem dados. Resposta: ${JSON.stringify(dlJson)}`);
+        if (pdfData.startsWith("http")) {
+          // Fetch the actual PDF from the URL
+          const pdfResp = await fetch(pdfData);
+          const buffer = await pdfResp.arrayBuffer();
+          return { base64: Buffer.from(buffer).toString("base64") };
+        }
+        // Already base64
+        return { base64: pdfData };
       }
-      if (dlResp.status !== 404 && dlResp.status !== 202) break;
+      if (dlResp.status !== 404 && dlResp.status !== 202) {
+        const errText = await dlResp.text().catch(() => "");
+        throw new Error(`reportgen.io download error ${dlResp.status}: ${errText}`);
+      }
     }
 
     throw new Error("PDF generation timed out. Tente novamente em alguns segundos.");
