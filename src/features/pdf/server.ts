@@ -27,24 +27,23 @@ async function db<T>(path: string): Promise<T | null> {
   } catch { return null; }
 }
 
-// ─── Supabase Storage → URL assinada (1h) ────────────────────────────────────
+// ─── Supabase Storage → Base64 data URI (para embutir no HTML do PDF) ───────
 
-async function signUrl(bucket: string, path: string): Promise<string | null> {
+async function fetchImageAsDataUri(bucket: string, path: string): Promise<string | null> {
   const key = SUPA_KEY();
   if (!key || !path) return null;
   try {
-    const resp = await fetch(`${SUPA_URL()}/storage/v1/object/sign/${bucket}/${path}`, {
-      method: "POST",
+    const resp = await fetch(`${SUPA_URL()}/storage/v1/object/${bucket}/${path}`, {
       headers: {
         apikey: key,
         Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
       },
-      body: JSON.stringify({ expiresIn: 3600 }),
     });
     if (!resp.ok) return null;
-    const json = (await resp.json()) as { signedURL?: string };
-    return json.signedURL ? `${SUPA_URL()}${json.signedURL}` : null;
+    const ct = resp.headers.get("content-type") ?? "image/jpeg";
+    const buf = await resp.arrayBuffer();
+    const b64 = Buffer.from(buf).toString("base64");
+    return `data:${ct};base64,${b64}`;
   } catch { return null; }
 }
 
@@ -399,20 +398,20 @@ export const generateRequisitionPdf = createServerFn({ method: "POST" })
     const imageUrls: Record<string, string> = {};
 
     if (req.module === "M1" && moduleData.photo_path) {
-      const url = await signUrl("travel-docs", String(moduleData.photo_path));
-      if (url) imageUrls.photo = url;
+      const uri = await fetchImageAsDataUri("travel-docs", String(moduleData.photo_path));
+      if (uri) imageUrls.photo = uri;
     }
     if (req.module === "M5" && moduleData.cargo_photo_path) {
-      const url = await signUrl("travel-docs", String(moduleData.cargo_photo_path));
-      if (url) imageUrls.cargo = url;
+      const uri = await fetchImageAsDataUri("travel-docs", String(moduleData.cargo_photo_path));
+      if (uri) imageUrls.cargo = uri;
     }
     if (req.module === "M2") {
       const travelers = (moduleData.travelers ?? []) as Array<Record<string, unknown>>;
       for (let i = 0; i < travelers.length; i++) {
         const photoPath = travelers[i].docPhotoPath ?? travelers[i].doc_photo_path;
         if (photoPath) {
-          const url = await signUrl("travel-docs", String(photoPath));
-          if (url) imageUrls[`traveler_${i}`] = url;
+          const uri = await fetchImageAsDataUri("travel-docs", String(photoPath));
+          if (uri) imageUrls[`traveler_${i}`] = uri;
         }
       }
     }
