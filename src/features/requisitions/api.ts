@@ -23,43 +23,50 @@ export const updateRequisition = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
-    const current = await supabaseRest<Array<{ edition: number; ticket_number: string }>>(
-      `requisitions?select=edition,ticket_number&id=eq.${data.requisitionId}`,
-    );
-    const rec = current.data?.[0];
-    const newEdition = (rec?.edition ?? 1) + 1;
-    const ticketNumber = rec?.ticket_number ?? "";
+    let step = "fetch-current";
+    try {
+      const current = await supabaseRest<Array<{ edition: number; ticket_number: string }>>(
+        `requisitions?select=edition,ticket_number&id=eq.${data.requisitionId}`,
+      );
+      const rec = current.data?.[0];
+      const newEdition = (rec?.edition ?? 1) + 1;
+      const ticketNumber = rec?.ticket_number ?? "";
 
-    await supabaseRest(`requisitions?id=eq.${data.requisitionId}`, {
-      method: "PATCH",
-      headers: { Prefer: "return=minimal" },
-      body: {
-        title: data.title,
-        description: data.description,
-        justification: data.justification,
-        urgency: data.urgency,
-        desired_date: data.desiredDate ?? null,
-        module_data: data.moduleData,
-        edition: newEdition,
-        updated_at: new Date().toISOString(),
-      },
-    });
-
-    await supabaseRest("audit_logs", {
-      method: "POST",
-      headers: { Prefer: "return=minimal" },
-      body: [
-        {
-          requisition_id: data.requisitionId,
-          ticket_number: ticketNumber,
-          action: "REQUISITION_EDITED",
-          details: { edition: newEdition },
-          actor_name: data.editorName,
+      step = "patch-requisition";
+      await supabaseRest(`requisitions?id=eq.${data.requisitionId}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: {
+          title: data.title,
+          description: data.description,
+          justification: data.justification,
+          urgency: data.urgency,
+          desired_date: data.desiredDate ?? null,
+          module_data: data.moduleData,
+          edition: newEdition,
+          updated_at: new Date().toISOString(),
         },
-      ],
-    });
+      });
 
-    return { ok: true, edition: newEdition, ticketNumber };
+      step = "insert-audit-log";
+      await supabaseRest("audit_logs", {
+        method: "POST",
+        headers: { Prefer: "return=minimal" },
+        body: [
+          {
+            requisition_id: data.requisitionId,
+            ticket_number: ticketNumber,
+            action: "REQUISITION_EDITED",
+            details: { edition: newEdition },
+            actor_name: data.editorName,
+          },
+        ],
+      });
+
+      return { ok: true, edition: newEdition, ticketNumber };
+    } catch (err) {
+      throw new Error(`[${step}] ${err instanceof Error ? err.message : String(err)}`);
+    }
   });
 
 // ─── Excluir requisição (somente admin) ───────────────────────────────────────
