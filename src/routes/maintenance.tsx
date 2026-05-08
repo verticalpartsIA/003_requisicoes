@@ -20,6 +20,8 @@ import { friendlySupabaseError } from "@/lib/supabase-error";
 import { useAuth } from "@/features/auth/auth-context";
 import { toast } from "sonner";
 import { notifyVpClickClient } from "@/features/vpclick/client";
+import { updateRequisitionClient } from "@/features/requisitions/client";
+import { useRouter } from "@tanstack/react-router";
 
 const MAINTENANCE_TYPES = [
   { value: "CORRETIVA", label: "Corretiva" },
@@ -43,6 +45,9 @@ const STEPS = [
 const DIALOG_KEY = 'vpreq_m4';
 
 export const Route = createFileRoute("/maintenance")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    edit: typeof search.edit === "string" ? search.edit : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "M4 Manutenção — VPRequisições" },
@@ -53,11 +58,16 @@ export const Route = createFileRoute("/maintenance")({
 });
 
 function MaintenancePage() {
+  const { edit: editTicketNumber } = Route.useSearch();
+  const router = useRouter();
   const { session, profile, user } = useAuth();
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editReqId, setEditReqId] = useState<string | null>(null);
+  const [editEdition, setEditEdition] = useState(1);
 
   const [equipmentName, setEquipmentName] = useState("");
   const [equipmentTag, setEquipmentTag] = useState("");
@@ -110,6 +120,32 @@ function MaintenancePage() {
   useEffect(() => { void loadTickets(); }, [session]);
 
   useEffect(() => {
+    if (!editTicketNumber || !session) return;
+    void (async () => {
+      const { data } = await supabaseBrowser
+        .from("requisitions")
+        .select("id,description,justification,urgency,module_data,edition")
+        .eq("ticket_number", editTicketNumber)
+        .maybeSingle();
+      if (!data) { toast.error("Requisição não encontrada."); return; }
+      const md = (data.module_data ?? {}) as Record<string, unknown>;
+      setEditMode(true);
+      setEditReqId(data.id as string);
+      setEditEdition((data.edition as number | undefined) ?? 1);
+      setEquipmentName((md.equipment_name as string | undefined) ?? "");
+      setEquipmentTag((md.equipment_tag as string | undefined) ?? "");
+      setSector((md.sector as string | undefined) ?? "");
+      setMaintenanceType((md.maintenance_type as string | undefined) ?? "");
+      setMachineDown((md.machine_down as boolean | undefined) ?? false);
+      setProblemDescription((data.description as string) ?? "");
+      setUrgencyLevel((data.urgency as string) ?? "");
+      setJustification((data.justification as string) ?? "");
+      setStep(0);
+      setDialogOpen(true);
+    })();
+  }, [editTicketNumber, session]);
+
+  useEffect(() => {
     if (!dialogOpen) return;
     try {
       sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
@@ -155,12 +191,40 @@ function MaintenancePage() {
   const handleSubmit = async () => {
     if (!validateStep()) return;
     setIsSubmitting(true);
+    const computedTitle = `${equipmentName}${equipmentTag ? ` (${equipmentTag})` : ""} — ${maintenanceType}`;
+    const moduleData = {
+      equipment_name: equipmentName,
+      equipment_tag: equipmentTag,
+      sector,
+      maintenance_type: maintenanceType,
+      machine_down: machineDown,
+    };
     try {
+      if (editMode && editReqId) {
+        const result = await updateRequisitionClient({
+          requisitionId: editReqId,
+          title: computedTitle,
+          description: problemDescription,
+          justification,
+          urgency: urgencyLevel as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
+          desiredDate: null,
+          moduleData,
+          editorName: profile?.full_name || user?.email || "Usuário VP",
+        });
+        const ordinals = ["1ª", "2ª", "3ª", "4ª", "5ª", "6ª", "7ª", "8ª", "9ª", "10ª"];
+        const ordinal = ordinals[(result.edition ?? 2) - 1] ?? `${result.edition}ª`;
+        toast.success(`Requisição editada — ${ordinal} Edição`, { description: editTicketNumber ?? "" });
+        setDialogOpen(false);
+        resetForm();
+        setEditMode(false); setEditReqId(null); setEditEdition(1);
+        void router.navigate({ to: "/logs" });
+        return;
+      }
       const { error } = await supabaseBrowser
         .from("requisitions")
         .insert({
           module: "M4",
-          title: `${equipmentName}${equipmentTag ? ` (${equipmentTag})` : ""} — ${maintenanceType}`,
+          title: computedTitle,
           description: problemDescription,
           justification,
           urgency: urgencyLevel,
@@ -169,13 +233,7 @@ function MaintenancePage() {
           requester_email: profile?.email || user?.email || "",
           requester_department: profile?.department || "Não informado",
           requester_profile_id: user?.id ?? null,
-          module_data: {
-            equipment_name: equipmentName,
-            equipment_tag: equipmentTag,
-            sector,
-            maintenance_type: maintenanceType,
-            machine_down: machineDown,
-          },
+          module_data: moduleData,
         });
 
       if (error) throw error;
@@ -235,8 +293,12 @@ function MaintenancePage() {
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button]:hidden">
           <DialogHeader>
-            <DialogTitle>Nova Requisição de Manutenção</DialogTitle>
-            <DialogDescription>Informe o equipamento e o problema.</DialogDescription>
+            <DialogTitle>
+              {editMode ? `Editando ${editTicketNumber} — ${editEdition + 1}ª Edição` : "Nova Requisição de Manutenção"}
+            </DialogTitle>
+            <DialogDescription>
+              {editMode ? "Altere os campos desejados e salve para registrar nova versão." : "Informe o equipamento e o problema."}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="flex items-center justify-between mb-2">

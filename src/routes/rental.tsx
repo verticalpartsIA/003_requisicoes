@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
 import {
   Key, Plus, ChevronRight, ChevronLeft, CalendarIcon, Cog, ClipboardList, AlertTriangle,
@@ -20,6 +20,7 @@ import { friendlySupabaseError } from "@/lib/supabase-error";
 import { useAuth } from "@/features/auth/auth-context";
 import { toast } from "sonner";
 import { notifyVpClickClient } from "@/features/vpclick/client";
+import { updateRequisitionClient } from "@/features/requisitions/client";
 
 const EQUIPMENT_CATEGORIES = [
   { value: "GUINDASTE", label: "Guindaste" },
@@ -55,6 +56,9 @@ const DIALOG_KEY = 'vpreq_m6';
 const LONG_RENTAL_DAYS = 30;
 
 export const Route = createFileRoute("/rental")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    edit: typeof search.edit === "string" ? search.edit : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "M6 Locação — VPRequisições" },
@@ -65,11 +69,16 @@ export const Route = createFileRoute("/rental")({
 });
 
 function RentalPage() {
+  const { edit: editTicketNumber } = Route.useSearch();
+  const router = useRouter();
   const { session, profile, user } = useAuth();
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editReqId, setEditReqId] = useState<string | null>(null);
+  const [editEdition, setEditEdition] = useState(1);
 
   const [categories, setCategories] = useState<string[]>([]);
   const [specs, setSpecs] = useState("");
@@ -135,6 +144,35 @@ function RentalPage() {
   useEffect(() => { void loadTickets(); }, [session]);
 
   useEffect(() => {
+    if (!editTicketNumber || !session) return;
+    const load = async () => {
+      const { data } = await supabaseBrowser
+        .from("requisitions")
+        .select("id,edition,urgency,justification,desired_date,module_data")
+        .eq("ticket_number", editTicketNumber)
+        .eq("module", "M6")
+        .maybeSingle();
+      if (!data) { toast.error("Requisição não encontrada."); return; }
+      const md = (data.module_data ?? {}) as Record<string, unknown>;
+      setEditMode(true);
+      setEditReqId(data.id as string);
+      setEditEdition((data.edition as number | undefined) ?? 1);
+      if (Array.isArray(md.categories)) setCategories(md.categories as string[]);
+      else if (typeof md.category === "string" && md.category) setCategories([md.category as string]);
+      if (typeof md.specs === "string") setSpecs(md.specs);
+      if (typeof md.quantity === "number") setQuantity(String(md.quantity));
+      if (typeof md.start_date === "string") setStartDate(new Date(md.start_date));
+      if (typeof md.end_date === "string") setEndDate(new Date(md.end_date));
+      if (typeof md.delivery_location === "string") setDeliveryLocation(md.delivery_location);
+      if (typeof data.urgency === "string") setUrgencyLevel(data.urgency);
+      if (typeof data.justification === "string") setJustification(data.justification);
+      sessionStorage.removeItem(DIALOG_KEY);
+      setDialogOpen(true);
+    };
+    void load();
+  }, [editTicketNumber, session]);
+
+  useEffect(() => {
     if (!dialogOpen) return;
     try {
       sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
@@ -153,6 +191,7 @@ function RentalPage() {
     setCategories([]); setSpecs(""); setQuantity("1");
     setStartDate(undefined); setEndDate(undefined); setDeliveryLocation("");
     setUrgencyLevel(""); setJustification("");
+    setEditMode(false); setEditReqId(null); setEditEdition(1);
   };
 
   const validateStep = (): boolean => {
@@ -182,6 +221,38 @@ function RentalPage() {
     if (!validateStep()) return;
     setIsSubmitting(true);
     try {
+      const moduleData = {
+        categories,
+        category: categories[0] ?? "",
+        specs,
+        quantity: parseInt(quantity),
+        start_date: startDate?.toISOString().slice(0, 10),
+        end_date: endDate?.toISOString().slice(0, 10),
+        rental_days: rentalDays,
+        delivery_location: deliveryLocation,
+        long_rental: isLongRental,
+      };
+
+      if (editMode && editReqId) {
+        const result = await updateRequisitionClient({
+          requisitionId: editReqId,
+          title: `Locação: ${categoryLabel} — ${rentalDays} dia(s)`,
+          description: justification,
+          justification,
+          urgency: urgencyLevel as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
+          desiredDate: startDate?.toISOString().slice(0, 10) ?? null,
+          moduleData,
+          editorName: profile?.full_name || user?.email || "Usuário VP",
+        });
+        const ordinals = ["1ª", "2ª", "3ª", "4ª", "5ª", "6ª", "7ª", "8ª", "9ª", "10ª"];
+        const ordinal = ordinals[(result.edition ?? 2) - 1] ?? `${result.edition}ª`;
+        toast.success(`Requisição editada — ${ordinal} Edição`, { description: editTicketNumber ?? "" });
+        setDialogOpen(false);
+        resetForm();
+        void router.navigate({ to: "/logs" });
+        return;
+      }
+
       const { error } = await supabaseBrowser
         .from("requisitions")
         .insert({
@@ -195,17 +266,7 @@ function RentalPage() {
           requester_email: profile?.email || user?.email || "",
           requester_department: profile?.department || "Não informado",
           requester_profile_id: user?.id ?? null,
-          module_data: {
-            categories,
-            category: categories[0] ?? "",
-            specs,
-            quantity: parseInt(quantity),
-            start_date: startDate?.toISOString().slice(0, 10),
-            end_date: endDate?.toISOString().slice(0, 10),
-            rental_days: rentalDays,
-            delivery_location: deliveryLocation,
-            long_rental: isLongRental,
-          },
+          module_data: moduleData,
         });
 
       if (error) throw error;
@@ -265,7 +326,7 @@ function RentalPage() {
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button]:hidden">
           <DialogHeader>
-            <DialogTitle>Nova Requisição de Locação</DialogTitle>
+            <DialogTitle>{editMode ? `Editando ${editTicketNumber} — ${editEdition + 1}ª Edição` : "Nova Requisição de Locação"}</DialogTitle>
             <DialogDescription>Informe o equipamento e período de locação.</DialogDescription>
           </DialogHeader>
 
@@ -430,7 +491,7 @@ function RentalPage() {
               <Button variant="vp" onClick={handleNext}>Próximo <ChevronRight className="h-4 w-4 ml-1" /></Button>
             ) : (
               <Button variant="vp" onClick={() => void handleSubmit()} disabled={isSubmitting}>
-                <Key className="h-4 w-4 mr-1" /> {isSubmitting ? "Enviando..." : "Enviar Requisição"}
+                <Key className="h-4 w-4 mr-1" /> {isSubmitting ? (editMode ? "Salvando..." : "Enviando...") : (editMode ? "Salvar Edição" : "Enviar Requisição")}
               </Button>
             )}
           </DialogFooter>

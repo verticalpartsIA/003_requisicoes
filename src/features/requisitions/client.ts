@@ -1,6 +1,27 @@
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import { friendlySupabaseError } from "@/lib/supabase-error";
 import type { TicketRow } from "@/components/tickets-table";
+import { updateRequisition, deleteRequisition } from "@/features/requisitions/api";
+
+export interface UpdateRequisitionInput {
+  requisitionId: string;
+  title: string;
+  description: string;
+  justification: string;
+  urgency: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+  desiredDate?: string | null;
+  moduleData: Record<string, unknown>;
+  editorName: string;
+}
+
+export async function updateRequisitionClient(input: UpdateRequisitionInput) {
+  const result = await updateRequisition({ data: input });
+  return result;
+}
+
+export async function deleteRequisitionClient(requisitionId: string, actorId: string) {
+  await deleteRequisition({ data: { requisitionId, actorId } });
+}
 
 interface ProductRequisitionInput {
   productName: string;

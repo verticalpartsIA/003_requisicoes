@@ -25,6 +25,8 @@ import { friendlySupabaseError } from "@/lib/supabase-error";
 import { useAuth } from "@/features/auth/auth-context";
 import { toast } from "sonner";
 import { notifyVpClickClient } from "@/features/vpclick/client";
+import { updateRequisitionClient } from "@/features/requisitions/client";
+import { useRouter } from "@tanstack/react-router";
 
 interface Traveler {
   id: string;
@@ -72,6 +74,9 @@ const STEPS = [
 ];
 
 export const Route = createFileRoute("/trips")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    edit: typeof search.edit === "string" ? search.edit : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "M2 Viagens — VPRequisições" },
@@ -84,11 +89,17 @@ export const Route = createFileRoute("/trips")({
 const DIALOG_KEY = "vpreq_m2";
 
 function TripsPage() {
+  const { edit: editTicketNumber } = Route.useSearch();
+  const router = useRouter();
   const { session, profile, user } = useAuth();
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editReqId, setEditReqId] = useState<string | null>(null);
+  const [editEdition, setEditEdition] = useState(1);
+  const [travelerExistingPaths, setTravelerExistingPaths] = useState<Record<string, string | null>>({});
 
   const [travelers, setTravelers] = useState<Traveler[]>([makeTraveler()]);
   const [originCity, setOriginCity] = useState("");
@@ -200,6 +211,44 @@ function TripsPage() {
   }, [session]);
 
   useEffect(() => {
+    if (!editTicketNumber || !session) return;
+    void (async () => {
+      const { data } = await supabaseBrowser
+        .from("requisitions")
+        .select("id,title,description,justification,urgency,desired_date,module_data,edition")
+        .eq("ticket_number", editTicketNumber)
+        .maybeSingle();
+      if (!data) { toast.error("Requisição não encontrada."); return; }
+      const md = (data.module_data ?? {}) as Record<string, unknown>;
+      setEditMode(true);
+      setEditReqId(data.id as string);
+      setEditEdition((data.edition as number | undefined) ?? 1);
+      setOriginCity((md.origin_city as string | undefined) ?? "");
+      setDestinationCity((md.destination_city as string | undefined) ?? "");
+      if (md.departure_date) setDepartureDate(new Date(md.departure_date as string));
+      if (md.return_date) setReturnDate(new Date(md.return_date as string));
+      setTransportMode((md.transport_mode as string | undefined) ?? "");
+      setNeedsHotel((md.needs_hotel as boolean | undefined) ?? false);
+      setHotelNights(String((md.hotel_nights as number | undefined) ?? ""));
+      setNeedsLocalCar((md.needs_local_car as boolean | undefined) ?? false);
+      setPurposes((md.purposes as string[] | undefined) ?? []);
+      setJustification((data.justification as string) ?? "");
+      setShortNoticeJustification((md.short_notice_justification as string | undefined) ?? "");
+      const travelersData = (md.travelers as Array<{ id?: string; full_name: string; doc_type: string; doc_number: string; doc_photo_path?: string | null }> | undefined) ?? [];
+      const pathMap: Record<string, string | null> = {};
+      const restoredTravelers = travelersData.map((t) => {
+        const tid = t.id ?? crypto.randomUUID();
+        pathMap[tid] = t.doc_photo_path ?? null;
+        return { id: tid, fullName: t.full_name ?? "", docType: (t.doc_type ?? "CPF") as "CPF" | "RG" | "CNH", docNumber: t.doc_number ?? "", docPhotoFile: null, docPhotoPreview: null };
+      });
+      if (restoredTravelers.length > 0) setTravelers(restoredTravelers);
+      setTravelerExistingPaths(pathMap);
+      setStep(0);
+      setDialogOpen(true);
+    })();
+  }, [editTicketNumber, session]);
+
+  useEffect(() => {
     if (!dialogOpen) return;
     try {
       const travelersData = travelers.map(
@@ -273,7 +322,7 @@ function TripsPage() {
           toast.error(`${label}: informe o número do ${t.docType}.`);
           return false;
         }
-        if (!t.docPhotoFile) {
+        if (!t.docPhotoFile && !travelerExistingPaths[t.id]) {
           toast.error(`${label}: foto do documento é obrigatória.`);
           return false;
         }
@@ -339,7 +388,7 @@ function TripsPage() {
     try {
       const travelersWithPaths = await Promise.all(
         travelers.map(async (t, i) => {
-          let photoPath: string | null = null;
+          let photoPath: string | null = travelerExistingPaths[t.id] ?? null;
           if (t.docPhotoFile) {
             const ext = t.docPhotoFile.name.split(".").pop()?.toLowerCase() || "jpg";
             const path = `${user?.id ?? "anon"}/${Date.now()}_${i}.${ext}`;
@@ -350,6 +399,7 @@ function TripsPage() {
             photoPath = uploadData.path;
           }
           return {
+            id: t.id,
             full_name: t.fullName.trim(),
             doc_type: t.docType,
             doc_number: t.docNumber.trim(),
@@ -359,6 +409,43 @@ function TripsPage() {
       );
 
       const urgency = !isAdvancedNotice ? "URGENT" : durationDays > 7 ? "HIGH" : "MEDIUM";
+      const moduleData = {
+        traveler_name: travelersWithPaths[0]?.full_name ?? "",
+        travelers: travelersWithPaths,
+        origin_city: originCity,
+        destination_city: destinationCity,
+        departure_date: departureDate?.toISOString().slice(0, 10),
+        return_date: returnDate?.toISOString().slice(0, 10),
+        duration_days: durationDays,
+        transport_mode: transportMode,
+        needs_hotel: needsHotel,
+        hotel_nights: hotelNights ? parseInt(hotelNights) : null,
+        needs_local_car: needsLocalCar,
+        purposes,
+        short_notice_justification: shortNoticeJustification || null,
+      };
+
+      if (editMode && editReqId) {
+        const result = await updateRequisitionClient({
+          requisitionId: editReqId,
+          title: `Viagem ${originCity} → ${destinationCity}`,
+          description: justification,
+          justification,
+          urgency: urgency as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
+          desiredDate: departureDate?.toISOString().slice(0, 10) ?? null,
+          moduleData,
+          editorName: profile?.full_name || user?.email || "Usuário VP",
+        });
+        const ordinals = ["1ª", "2ª", "3ª", "4ª", "5ª", "6ª", "7ª", "8ª", "9ª", "10ª"];
+        const ordinal = ordinals[(result.edition ?? 2) - 1] ?? `${result.edition}ª`;
+        toast.success(`Requisição editada — ${ordinal} Edição`, { description: editTicketNumber ?? "" });
+        setDialogOpen(false);
+        resetForm();
+        setEditMode(false); setEditReqId(null); setEditEdition(1);
+        void router.navigate({ to: "/logs" });
+        return;
+      }
+
       const { error } = await supabaseBrowser.from("requisitions").insert({
         module: "M2",
         title: `Viagem ${originCity} → ${destinationCity}`,
@@ -370,21 +457,7 @@ function TripsPage() {
         requester_email: profile?.email || user?.email || "",
         requester_department: profile?.department || "Não informado",
         requester_profile_id: user?.id ?? null,
-        module_data: {
-          traveler_name: travelersWithPaths[0]?.full_name ?? "",
-          travelers: travelersWithPaths,
-          origin_city: originCity,
-          destination_city: destinationCity,
-          departure_date: departureDate?.toISOString().slice(0, 10),
-          return_date: returnDate?.toISOString().slice(0, 10),
-          duration_days: durationDays,
-          transport_mode: transportMode,
-          needs_hotel: needsHotel,
-          hotel_nights: hotelNights ? parseInt(hotelNights) : null,
-          needs_local_car: needsLocalCar,
-          purposes,
-          short_notice_justification: shortNoticeJustification || null,
-        },
+        module_data: moduleData,
       });
 
       if (error) throw error;
@@ -455,8 +528,12 @@ function TripsPage() {
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button]:hidden">
           <DialogHeader>
-            <DialogTitle>Nova Requisição de Viagem</DialogTitle>
-            <DialogDescription>Preencha os dados da viagem corporativa.</DialogDescription>
+            <DialogTitle>
+              {editMode ? `Editando ${editTicketNumber} — ${editEdition + 1}ª Edição` : "Nova Requisição de Viagem"}
+            </DialogTitle>
+            <DialogDescription>
+              {editMode ? "Altere os campos desejados e salve para registrar nova versão." : "Preencha os dados da viagem corporativa."}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="flex items-center justify-between mb-2">

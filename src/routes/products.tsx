@@ -19,7 +19,7 @@ import {
 import { TicketsTable } from "@/components/tickets-table";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import { toast } from "sonner";
-import { createProductRequisitionClient, listProductRequisitionsClient } from "@/features/requisitions/client";
+import { createProductRequisitionClient, listProductRequisitionsClient, updateRequisitionClient } from "@/features/requisitions/client";
 import { friendlySupabaseError } from "@/lib/supabase-error";
 import { useAuth } from "@/features/auth/auth-context";
 import { notifyVpClickClient } from "@/features/vpclick/client";
@@ -39,6 +39,9 @@ const STEPS = [
 ];
 
 export const Route = createFileRoute("/products")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    edit: typeof search.edit === "string" ? search.edit : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "M1 Produtos — VPRequisições" },
@@ -52,11 +55,16 @@ const DIALOG_KEY = 'vpreq_m1';
 
 function ProductsPage() {
   const router = useRouter();
+  const { edit: editTicketNumber } = Route.useSearch();
   const { session, profile, user } = useAuth();
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editReqId, setEditReqId] = useState<string | null>(null);
+  const [editEdition, setEditEdition] = useState(1);
+  const [editPhotoPath, setEditPhotoPath] = useState<string | null>(null);
 
   // Step 1 — Product
   const [productName, setProductName] = useState("");
@@ -107,6 +115,37 @@ function ProductsPage() {
     if (!session) return;
     void listProductRequisitionsClient().then(setTickets);
   }, [session]);
+
+  useEffect(() => {
+    if (!editTicketNumber || !session) return;
+    void (async () => {
+      const { data } = await supabaseBrowser
+        .from("requisitions")
+        .select("id,title,description,justification,urgency,desired_date,module_data,edition")
+        .eq("ticket_number", editTicketNumber)
+        .maybeSingle();
+      if (!data) { toast.error("Requisição não encontrada."); return; }
+      const md = (data.module_data ?? {}) as Record<string, unknown>;
+      setEditMode(true);
+      setEditReqId(data.id as string);
+      setEditEdition((data.edition as number | undefined) ?? 1);
+      setEditPhotoPath((md.photo_path as string | null) ?? null);
+      setProductName((md.product_name as string | undefined) ?? (data.title as string) ?? "");
+      setDescription((data.description as string) ?? "");
+      setQuantity(String((md.quantity as number | undefined) ?? 1));
+      setTechnicalSpecs((md.technical_specs as string | undefined) ?? "");
+      setBrandPreference((md.brand_preference as string | undefined) ?? "");
+      setModelReference((md.model_reference as string | undefined) ?? "");
+      setReferenceLinks((md.reference_links as string[] | undefined) ?? [""]);
+      setOnlinePurchaseSuggestion((md.online_purchase_suggestion as string | undefined) ?? "");
+      setDeliveryLocation((md.delivery_location as string | undefined) ?? "");
+      setUrgencyLevel((data.urgency as string) ?? "");
+      setJustification((data.justification as string) ?? "");
+      if (data.desired_date) setDeliveryDeadline(new Date(data.desired_date as string));
+      setStep(0);
+      setDialogOpen(true);
+    })();
+  }, [editTicketNumber, session]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -166,7 +205,7 @@ function ProductsPage() {
     setIsSubmitting(true);
 
     try {
-      let photoPath: string | undefined;
+      let photoPath: string | undefined = editPhotoPath ?? undefined;
       if (productPhotoFile) {
         const ext = productPhotoFile.name.split(".").pop()?.toLowerCase() || "jpg";
         const path = `m1/${user?.id ?? "anon"}/${Date.now()}.${ext}`;
@@ -175,6 +214,37 @@ function ProductsPage() {
           .upload(path, productPhotoFile, { upsert: true });
         if (uploadError) console.warn("[photo upload]", uploadError.message);
         else photoPath = uploadData.path;
+      }
+
+      if (editMode && editReqId) {
+        const result = await updateRequisitionClient({
+          requisitionId: editReqId,
+          title: productName,
+          description,
+          justification,
+          urgency: urgencyLevel as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
+          desiredDate: deliveryDeadline.toISOString().slice(0, 10),
+          moduleData: {
+            product_name: productName,
+            quantity: parseFloat(quantity),
+            technical_specs: technicalSpecs,
+            brand_preference: brandPreference,
+            model_reference: modelReference,
+            reference_links: cleanedReferenceLinks,
+            online_purchase_suggestion: onlinePurchaseSuggestion,
+            photo_path: photoPath ?? null,
+            delivery_location: deliveryLocation,
+          },
+          editorName: profile?.full_name || user?.email || "Usuário VP",
+        });
+        const ordinals = ["1ª", "2ª", "3ª", "4ª", "5ª", "6ª", "7ª", "8ª", "9ª", "10ª"];
+        const ordinal = ordinals[(result.edition ?? 2) - 1] ?? `${result.edition}ª`;
+        toast.success(`Requisição editada — ${ordinal} Edição`, { description: editTicketNumber ?? "" });
+        setDialogOpen(false);
+        resetForm();
+        setEditMode(false); setEditReqId(null); setEditEdition(1); setEditPhotoPath(null);
+        void router.navigate({ to: "/logs" });
+        return;
       }
 
       const result = await createProductRequisitionClient({
@@ -267,8 +337,12 @@ function ProductsPage() {
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button]:hidden">
           <DialogHeader>
-            <DialogTitle>Nova Requisição de Produto</DialogTitle>
-            <DialogDescription>Preencha os dados para abrir a requisição.</DialogDescription>
+            <DialogTitle>
+              {editMode ? `Editando ${editTicketNumber} — ${editEdition + 1}ª Edição` : "Nova Requisição de Produto"}
+            </DialogTitle>
+            <DialogDescription>
+              {editMode ? "Altere os campos desejados e salve para registrar nova versão." : "Preencha os dados para abrir a requisição."}
+            </DialogDescription>
           </DialogHeader>
 
           {/* Stepper */}
@@ -485,7 +559,7 @@ function ProductsPage() {
               </Button>
             ) : (
               <Button variant="vp" onClick={handleSubmit} disabled={isSubmitting}>
-                <Package className="h-4 w-4 mr-1" /> Enviar Requisição
+                <Package className="h-4 w-4 mr-1" />{editMode ? "Salvar Edição" : "Enviar Requisição"}
               </Button>
             )}
           </DialogFooter>

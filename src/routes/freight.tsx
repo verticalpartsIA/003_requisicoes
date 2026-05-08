@@ -25,6 +25,8 @@ import { friendlySupabaseError } from "@/lib/supabase-error";
 import { useAuth } from "@/features/auth/auth-context";
 import { toast } from "sonner";
 import { notifyVpClickClient } from "@/features/vpclick/client";
+import { updateRequisitionClient } from "@/features/requisitions/client";
+import { useRouter } from "@tanstack/react-router";
 
 const VEHICLE_TYPES = [
   { value: "TRUCK", label: "Caminhão" },
@@ -56,6 +58,9 @@ function formatBRL(value: number) {
 const DIALOG_KEY = 'vpreq_m5';
 
 export const Route = createFileRoute("/freight")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    edit: typeof search.edit === "string" ? search.edit : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "M5 Frete — VPRequisições" },
@@ -66,11 +71,17 @@ export const Route = createFileRoute("/freight")({
 });
 
 function FreightPage() {
+  const { edit: editTicketNumber } = Route.useSearch();
+  const router = useRouter();
   const { session, profile, user } = useAuth();
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editReqId, setEditReqId] = useState<string | null>(null);
+  const [editEdition, setEditEdition] = useState(1);
+  const [editCargoPhotoPath, setEditCargoPhotoPath] = useState<string | null>(null);
 
   const [originAddress, setOriginAddress] = useState("");
   const [destinationAddress, setDestinationAddress] = useState("");
@@ -140,6 +151,38 @@ function FreightPage() {
   useEffect(() => { void loadTickets(); }, [session]);
 
   useEffect(() => {
+    if (!editTicketNumber || !session) return;
+    void (async () => {
+      const { data } = await supabaseBrowser
+        .from("requisitions")
+        .select("id,description,justification,urgency,desired_date,module_data,edition")
+        .eq("ticket_number", editTicketNumber)
+        .maybeSingle();
+      if (!data) { toast.error("Requisição não encontrada."); return; }
+      const md = (data.module_data ?? {}) as Record<string, unknown>;
+      setEditMode(true);
+      setEditReqId(data.id as string);
+      setEditEdition((data.edition as number | undefined) ?? 1);
+      setEditCargoPhotoPath((md.cargo_photo_path as string | null) ?? null);
+      setOriginAddress((md.origin_address as string | undefined) ?? "");
+      setDestinationAddress((md.destination_address as string | undefined) ?? "");
+      setVehicleType((md.vehicle_type as string | undefined) ?? "");
+      setCargoDescription((data.description as string) ?? "");
+      setUnloadingLocation((md.unloading_location as string | undefined) ?? "");
+      setCargoPhotoDescription((md.cargo_photo_description as string | undefined) ?? "");
+      setWeight(String((md.weight_kg as number | undefined) ?? ""));
+      setDimensions((md.dimensions as string | undefined) ?? "");
+      setFragile((md.fragile as boolean | undefined) ?? false);
+      setDeclaredValue(String((md.declared_value as number | undefined) ?? ""));
+      setUrgencyLevel((data.urgency as string) ?? "");
+      setJustification((data.justification as string) ?? "");
+      if (data.desired_date) setPickupDate(new Date(data.desired_date as string));
+      setStep(0);
+      setDialogOpen(true);
+    })();
+  }, [editTicketNumber, session]);
+
+  useEffect(() => {
     if (!dialogOpen) return;
     try {
       sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
@@ -187,7 +230,7 @@ function FreightPage() {
     if (!validateStep()) return;
     setIsSubmitting(true);
     try {
-      let cargoPhotoPath: string | null = null;
+      let cargoPhotoPath: string | null = editCargoPhotoPath;
       if (cargoPhotoFile) {
         const ext = cargoPhotoFile.name.split(".").pop()?.toLowerCase() || "jpg";
         const path = `m5/${user?.id ?? "anon"}/${Date.now()}.${ext}`;
@@ -196,6 +239,41 @@ function FreightPage() {
           .upload(path, cargoPhotoFile, { upsert: true });
         if (uploadError) console.warn("[photo upload]", uploadError.message);
         else cargoPhotoPath = uploadData.path;
+      }
+
+      const moduleData = {
+        origin_address: originAddress,
+        destination_address: destinationAddress,
+        vehicle_type: vehicleType,
+        unloading_location: unloadingLocation || null,
+        cargo_photo_path: cargoPhotoPath,
+        cargo_photo_description: cargoPhotoDescription || null,
+        weight_kg: weight ? parseFloat(weight) : null,
+        dimensions,
+        fragile,
+        declared_value: declaredValue ? parseFloat(declaredValue.replace(",", ".")) : null,
+        insurance_cost: insuranceCost || null,
+      };
+
+      if (editMode && editReqId) {
+        const result = await updateRequisitionClient({
+          requisitionId: editReqId,
+          title: `Frete ${originAddress} → ${destinationAddress}`,
+          description: cargoDescription,
+          justification,
+          urgency: urgencyLevel as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
+          desiredDate: pickupDate?.toISOString().slice(0, 10) ?? null,
+          moduleData,
+          editorName: profile?.full_name || user?.email || "Usuário VP",
+        });
+        const ordinals = ["1ª", "2ª", "3ª", "4ª", "5ª", "6ª", "7ª", "8ª", "9ª", "10ª"];
+        const ordinal = ordinals[(result.edition ?? 2) - 1] ?? `${result.edition}ª`;
+        toast.success(`Requisição editada — ${ordinal} Edição`, { description: editTicketNumber ?? "" });
+        setDialogOpen(false);
+        resetForm();
+        setEditMode(false); setEditReqId(null); setEditEdition(1); setEditCargoPhotoPath(null);
+        void router.navigate({ to: "/logs" });
+        return;
       }
 
       const { error } = await supabaseBrowser
@@ -211,19 +289,7 @@ function FreightPage() {
           requester_email: profile?.email || user?.email || "",
           requester_department: profile?.department || "Não informado",
           requester_profile_id: user?.id ?? null,
-          module_data: {
-            origin_address: originAddress,
-            destination_address: destinationAddress,
-            vehicle_type: vehicleType,
-            unloading_location: unloadingLocation || null,
-            cargo_photo_path: cargoPhotoPath,
-            cargo_photo_description: cargoPhotoDescription || null,
-            weight_kg: weight ? parseFloat(weight) : null,
-            dimensions,
-            fragile,
-            declared_value: declaredValue ? parseFloat(declaredValue.replace(",", ".")) : null,
-            insurance_cost: insuranceCost || null,
-          },
+          module_data: moduleData,
         });
 
       if (error) throw error;
@@ -283,7 +349,7 @@ function FreightPage() {
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button]:hidden">
           <DialogHeader>
-            <DialogTitle>Nova Requisição de Frete</DialogTitle>
+            <DialogTitle>{editMode ? `Editando ${editTicketNumber} — ${editEdition + 1}ª Edição` : "Nova Requisição de Frete"}</DialogTitle>
             <DialogDescription>Informe os dados do transporte.</DialogDescription>
           </DialogHeader>
 

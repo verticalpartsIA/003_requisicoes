@@ -23,6 +23,8 @@ import { friendlySupabaseError } from "@/lib/supabase-error";
 import { useAuth } from "@/features/auth/auth-context";
 import { toast } from "sonner";
 import { notifyVpClickClient } from "@/features/vpclick/client";
+import { updateRequisitionClient } from "@/features/requisitions/client";
+import { useRouter } from "@tanstack/react-router";
 
 const SERVICE_TYPES = [
   { value: "CONSULTORIA", label: "Consultoria" },
@@ -56,6 +58,9 @@ interface Milestone {
 const DIALOG_KEY = 'vpreq_m3';
 
 export const Route = createFileRoute("/services")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    edit: typeof search.edit === "string" ? search.edit : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "M3 Serviços — VPRequisições" },
@@ -66,11 +71,16 @@ export const Route = createFileRoute("/services")({
 });
 
 function ServicesPage() {
+  const { edit: editTicketNumber } = Route.useSearch();
+  const router = useRouter();
   const { session, profile, user } = useAuth();
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editReqId, setEditReqId] = useState<string | null>(null);
+  const [editEdition, setEditEdition] = useState(1);
 
   // Step 0 — Serviço
   const [serviceName, setServiceName] = useState("");
@@ -132,6 +142,38 @@ function ServicesPage() {
   }, []);
 
   useEffect(() => { void loadTickets(); }, [session]);
+
+  useEffect(() => {
+    if (!editTicketNumber || !session) return;
+    void (async () => {
+      const { data } = await supabaseBrowser
+        .from("requisitions")
+        .select("id,title,description,justification,urgency,desired_date,module_data,edition")
+        .eq("ticket_number", editTicketNumber)
+        .maybeSingle();
+      if (!data) { toast.error("Requisição não encontrada."); return; }
+      const md = (data.module_data ?? {}) as Record<string, unknown>;
+      setEditMode(true);
+      setEditReqId(data.id as string);
+      setEditEdition((data.edition as number | undefined) ?? 1);
+      const rawTitle = data.title as string ?? "";
+      const parenIdx = rawTitle.lastIndexOf(" (");
+      setServiceName(parenIdx > 0 ? rawTitle.slice(0, parenIdx) : rawTitle);
+      setServiceType((md.service_type as string | undefined) ?? "");
+      setDescription((data.description as string) ?? "");
+      setPreNegotiatedPrice(String((md.pre_negotiated_price as number | undefined) ?? ""));
+      setScopeOfWork((md.scope_of_work as string | undefined) ?? "");
+      setDeliverables((md.deliverables as string | undefined) ?? "");
+      setExecutionLocation((md.execution_location as string | undefined) ?? "");
+      setMeasurementCriteria((md.measurement_criteria as string | undefined) ?? "");
+      if (Array.isArray(md.milestones)) setMilestones(md.milestones as Milestone[]);
+      setUrgencyLevel((data.urgency as string) ?? "");
+      setJustification((data.justification as string) ?? "");
+      if (data.desired_date) setDeadline(new Date(data.desired_date as string));
+      setStep(0);
+      setDialogOpen(true);
+    })();
+  }, [editTicketNumber, session]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -198,12 +240,42 @@ function ServicesPage() {
   const handleSubmit = async () => {
     if (!validateStep()) return;
     setIsSubmitting(true);
+    const computedTitle = `${serviceName} (${SERVICE_TYPES.find((t) => t.value === serviceType)?.label ?? serviceType})`;
+    const moduleData = {
+      service_type: serviceType,
+      scope_of_work: scopeOfWork,
+      deliverables,
+      execution_location: executionLocation,
+      measurement_criteria: measurementCriteria,
+      pre_negotiated_price: preNegotiatedPrice ? parseFloat(preNegotiatedPrice.replace(",", ".")) : null,
+      milestones: milestones.length > 0 ? milestones : null,
+    };
     try {
+      if (editMode && editReqId) {
+        const result = await updateRequisitionClient({
+          requisitionId: editReqId,
+          title: computedTitle,
+          description,
+          justification,
+          urgency: urgencyLevel as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
+          desiredDate: deadline?.toISOString().slice(0, 10) ?? null,
+          moduleData,
+          editorName: profile?.full_name || user?.email || "Usuário VP",
+        });
+        const ordinals = ["1ª", "2ª", "3ª", "4ª", "5ª", "6ª", "7ª", "8ª", "9ª", "10ª"];
+        const ordinal = ordinals[(result.edition ?? 2) - 1] ?? `${result.edition}ª`;
+        toast.success(`Requisição editada — ${ordinal} Edição`, { description: editTicketNumber ?? "" });
+        setDialogOpen(false);
+        resetForm();
+        setEditMode(false); setEditReqId(null); setEditEdition(1);
+        void router.navigate({ to: "/logs" });
+        return;
+      }
       const { error } = await supabaseBrowser
         .from("requisitions")
         .insert({
           module: "M3",
-          title: `${serviceName} (${SERVICE_TYPES.find((t) => t.value === serviceType)?.label ?? serviceType})`,
+          title: computedTitle,
           description,
           justification,
           urgency: urgencyLevel,
@@ -212,15 +284,7 @@ function ServicesPage() {
           requester_email: profile?.email || user?.email || "",
           requester_department: profile?.department || "Não informado",
           requester_profile_id: user?.id ?? null,
-          module_data: {
-            service_type: serviceType,
-            scope_of_work: scopeOfWork,
-            deliverables,
-            execution_location: executionLocation,
-            measurement_criteria: measurementCriteria,
-            pre_negotiated_price: preNegotiatedPrice ? parseFloat(preNegotiatedPrice.replace(",", ".")) : null,
-            milestones: milestones.length > 0 ? milestones : null,
-          },
+          module_data: moduleData,
         });
 
       if (error) throw error;
@@ -282,8 +346,12 @@ function ServicesPage() {
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button]:hidden">
           <DialogHeader>
-            <DialogTitle>Nova Requisição de Serviço</DialogTitle>
-            <DialogDescription>Descreva o serviço necessário.</DialogDescription>
+            <DialogTitle>
+              {editMode ? `Editando ${editTicketNumber} — ${editEdition + 1}ª Edição` : "Nova Requisição de Serviço"}
+            </DialogTitle>
+            <DialogDescription>
+              {editMode ? "Altere os campos desejados e salve para registrar nova versão." : "Descreva o serviço necessário."}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="flex items-center justify-between mb-2">

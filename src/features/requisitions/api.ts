@@ -7,6 +7,85 @@ import type { TicketRow } from "@/components/tickets-table";
 import type { ProductModuleData, RequisitionRecord } from "@/lib/requisitions";
 import { supabaseRest } from "@/lib/supabase-rest";
 
+// ─── Atualizar requisição (qualquer usuário, service_role bypassa RLS) ────────
+
+export const updateRequisition = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      requisitionId: z.string(),
+      title: z.string(),
+      description: z.string(),
+      justification: z.string(),
+      urgency: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
+      desiredDate: z.string().nullable().optional(),
+      moduleData: z.record(z.unknown()),
+      editorName: z.string(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const current = await supabaseRest<Array<{ edition: number; ticket_number: string }>>(
+      `requisitions?select=edition,ticket_number&id=eq.${data.requisitionId}`,
+    );
+    const rec = current.data?.[0];
+    const newEdition = (rec?.edition ?? 1) + 1;
+    const ticketNumber = rec?.ticket_number ?? "";
+
+    await supabaseRest(`requisitions?id=eq.${data.requisitionId}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: {
+        title: data.title,
+        description: data.description,
+        justification: data.justification,
+        urgency: data.urgency,
+        desired_date: data.desiredDate ?? null,
+        module_data: data.moduleData,
+        edition: newEdition,
+        updated_at: new Date().toISOString(),
+      },
+    });
+
+    await supabaseRest("audit_logs", {
+      method: "POST",
+      body: [
+        {
+          requisition_id: data.requisitionId,
+          ticket_number: ticketNumber,
+          action: "REQUISITION_EDITED",
+          details: { edition: newEdition },
+          actor_name: data.editorName,
+        },
+      ],
+    });
+
+    return { ok: true, edition: newEdition, ticketNumber };
+  });
+
+// ─── Excluir requisição (somente admin) ───────────────────────────────────────
+
+export const deleteRequisition = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      requisitionId: z.string(),
+      actorId: z.string(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const roleCheck = await supabaseRest<Array<{ role: string }>>(
+      `user_roles?select=role&user_id=eq.${data.actorId}&role=eq.admin`,
+    );
+    if (!roleCheck.data?.length) {
+      throw new Error("Acesso negado: apenas administradores podem excluir requisições.");
+    }
+
+    await supabaseRest(`requisitions?id=eq.${data.requisitionId}`, {
+      method: "DELETE",
+      headers: { Prefer: "return=minimal" },
+    });
+
+    return { ok: true };
+  });
+
 const productRequisitionSchema = z.object({
   productName: z.string().min(5).max(200),
   description: z.string().min(20).max(1000),

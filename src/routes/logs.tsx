@@ -19,7 +19,7 @@ import {
   Building2,
   Hourglass,
 } from "lucide-react";
-import { OctagonAlert, Bell, Lightbulb, FileDown, FileJson, FileSpreadsheet, Loader2, ExternalLink, Check } from "lucide-react";
+import { OctagonAlert, Bell, Lightbulb, FileDown, FileJson, FileSpreadsheet, Loader2, ExternalLink, Check, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +49,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { generateRequisitionPdf } from "@/features/pdf/server";
+import { deleteRequisitionClient } from "@/features/requisitions/client";
+import { useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 
 /* ── Export types ── */
@@ -295,6 +297,8 @@ interface BottleneckAnalysis {
 /* ── Live Ticket Detail (fetched from DB) ── */
 interface LiveTicketDetail {
   ticket_id: string;
+  requisition_id: string;
+  edition: number;
   module: string;
   status: string;
   title: string;
@@ -865,7 +869,9 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
 }
 
 function LogsPage() {
-  const { session } = useAuth();
+  const { session, user, hasRole } = useAuth();
+  const router = useRouter();
+  const isAdmin = hasRole("admin");
   const [search, setSearch] = useState("");
   const [moduleFilter, setModuleFilter] = useState("Todos");
   const [stageFilter, setStageFilter] = useState("Todos");
@@ -926,7 +932,7 @@ function LogsPage() {
       try {
         const { data: req } = await supabaseBrowser
           .from("requisitions")
-          .select("id,ticket_number,module,status,title,description,justification,requester_name,requester_department,created_at,completed_at,module_data")
+          .select("id,ticket_number,module,status,title,description,justification,requester_name,requester_department,created_at,completed_at,module_data,edition")
           .eq("ticket_number", selectedTicket)
           .maybeSingle();
 
@@ -968,6 +974,8 @@ function LogsPage() {
 
         setLiveDetail({
           ticket_id: req.ticket_number,
+          requisition_id: req.id,
+          edition: (req.edition as number | undefined) ?? 1,
           module: req.module,
           status: req.status,
           title: req.title,
@@ -1014,6 +1022,8 @@ function LogsPage() {
 
   // Usa dados reais quando disponíveis, fallback para mock durante carregamento
   const auditEntries = logsLoading ? [] : auditEntriesLive;
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportTicketId, setExportTicketId] = useState<string | null>(null);
   const [exportFormat, setExportFormat] = useState<ExportFormat>("PDF");
@@ -1027,6 +1037,34 @@ function LogsPage() {
     setExportIncludeMetadata(true);
     setExportResult(null);
     setExportDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!liveDetail || !user) return;
+    setDeleteLoading(true);
+    try {
+      await deleteRequisitionClient(liveDetail.requisition_id, user.id);
+      toast.success(`Requisição ${liveDetail.ticket_id} excluída.`);
+      setDeleteConfirmOpen(false);
+      setSelectedTicket(null);
+      setAuditEntriesLive((prev) => prev.filter((e) => e.ticket_id !== liveDetail.ticket_id));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao excluir requisição.");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleNavigateEdit = () => {
+    if (!liveDetail) return;
+    const moduleRoutes: Record<string, string> = {
+      M1: "/products", M2: "/trips", M3: "/services",
+      M4: "/maintenance", M5: "/freight", M6: "/rental",
+    };
+    const route = moduleRoutes[liveDetail.module];
+    if (!route) return;
+    setSelectedTicket(null);
+    void router.navigate({ to: route, search: { edit: liveDetail.ticket_id } });
   };
 
   const handleExport = async () => {
@@ -1793,16 +1831,35 @@ function LogsPage() {
                   }`}>
                     {liveDetail.status}
                   </Badge>
+                  {liveDetail.edition > 1 && (
+                    <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200">
+                      {liveDetail.edition}ª Edição
+                    </Badge>
+                  )}
                 </SheetTitle>
               </SheetHeader>
 
               <div className="space-y-5 mt-6">
-                {/* Export Button */}
-                <Button variant="outline" size="sm" className="w-full gap-2"
-                  onClick={() => handleOpenExport(liveDetail.ticket_id)}>
-                  <FileDown className="h-4 w-4" />
-                  Exportar Histórico Completo
-                </Button>
+                {/* Action Buttons */}
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="flex-1 gap-2"
+                    onClick={() => handleOpenExport(liveDetail.ticket_id)}>
+                    <FileDown className="h-4 w-4" />
+                    Exportar
+                  </Button>
+                  <Button variant="outline" size="sm" className="flex-1 gap-2"
+                    onClick={handleNavigateEdit}>
+                    <Pencil className="h-4 w-4" />
+                    Editar
+                  </Button>
+                  {isAdmin && (
+                    <Button variant="outline" size="sm" className="gap-2 text-destructive hover:text-destructive"
+                      onClick={() => setDeleteConfirmOpen(true)}>
+                      <Trash2 className="h-4 w-4" />
+                      Excluir
+                    </Button>
+                  )}
+                </div>
 
                 {/* V1 — Requisição */}
                 <div className="space-y-2">
@@ -2012,6 +2069,33 @@ function LogsPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Excluir Requisição
+            </DialogTitle>
+            <DialogDescription>
+              Esta ação é irreversível. A requisição{" "}
+              <span className="font-mono font-semibold">{liveDetail?.ticket_id}</span> e todos
+              os dados associados (cotações, aprovações, compras, recebimentos) serão permanentemente
+              excluídos.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 mt-2">
+            <Button variant="outline" className="flex-1" onClick={() => setDeleteConfirmOpen(false)} disabled={deleteLoading}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" className="flex-1 gap-2" onClick={handleDelete} disabled={deleteLoading}>
+              {deleteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Excluir Definitivamente
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Export Dialog */}
       <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
