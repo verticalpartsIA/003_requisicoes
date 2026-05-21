@@ -457,6 +457,8 @@ export const generateRequisitionPdf = createServerFn({ method: "POST" })
     if (!report_id)
       throw new Error(`reportgen.io não retornou report_id. Resposta: ${JSON.stringify(genJson)}`);
 
+    console.log(`[pdf] report_id=${report_id} gerado. Iniciando polling...`);
+
     // 10. Polling do PDF gerado
     for (let i = 0; i < 20; i++) {
       await new Promise((r) => setTimeout(r, 1500));
@@ -474,8 +476,10 @@ export const generateRequisitionPdf = createServerFn({ method: "POST" })
           return { base64: Buffer.from(await (await fetch(pdfData)).arrayBuffer()).toString("base64") };
         return { base64: pdfData };
       }
-      if (dlResp.status !== 404 && dlResp.status !== 202)
-        throw new Error(`reportgen.io download error ${dlResp.status}`);
+      if (dlResp.status !== 404 && dlResp.status !== 202) {
+        const body = await dlResp.text().catch(() => "");
+        throw new Error(`reportgen.io download error ${dlResp.status}: ${body}`);
+      }
     }
 
     throw new Error("PDF generation timed out. Tente novamente.");
