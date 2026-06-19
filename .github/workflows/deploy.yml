@@ -1,0 +1,24 @@
+name: Deploy — Hostinger
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOSTINGER_SSH_HOST }}
+          username: ${{ secrets.HOSTINGER_SSH_USER }}
+          password: ${{ secrets.HOSTINGER_SSH_PASS }}
+          port: 65002
+          script: |
+            cd /home/u969661049/domains/vprequisicoes.vpsistema.com/nodejs
+            export PATH=/opt/alt/alt-nodejs22/root/usr/bin:$PATH
+            git pull origin main
+            npm run build
+            touch tmp/restart.txt
+            echo "Deploy concluído: $(git log --oneline -1)"
