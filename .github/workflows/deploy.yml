@@ -24,6 +24,7 @@ jobs:
             git reset --hard origin/main
             set -a && . /home/u969661049/domains/vprequisicoes.vpsistema.com/public_html/.builds/config/.env && set +a
             npm install
+            chmod +x node_modules/.bin/* node_modules/vite/bin/*.js 2>/dev/null || true
             NODE_OPTIONS=--max-old-space-size=2048 npm run build
             touch tmp/restart.txt
             echo "Deploy concluído: $(git log --oneline -1)"
