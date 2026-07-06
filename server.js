@@ -93,15 +93,18 @@ loadEnvFile(".env.local");
 loadEnvFile(".env");
 
 console.log("[server] Carregando dist/server/index.js...");
-let app;
-try {
-  const mod = await import(join(__dirname, "dist", "server", "index.js"));
-  app = mod.default;
-  console.log("[server] dist/server/index.js carregado com sucesso.");
-} catch (err) {
-  console.error("[server] FALHA ao carregar dist/server/index.js:", err);
-  process.exit(1);
-}
+// Sem top-level await: o Passenger/LiteSpeed da Hostinger carrega este arquivo
+// via require(), que nao suporta modulo ESM com await no nivel superior
+// (ERR_REQUIRE_ASYNC_MODULE) — o processo morreria antes de qualquer log.
+const appPromise = import(join(__dirname, "dist", "server", "index.js"))
+  .then((mod) => {
+    console.log("[server] dist/server/index.js carregado com sucesso.");
+    return mod.default;
+  })
+  .catch((err) => {
+    console.error("[server] FALHA ao carregar dist/server/index.js:", err);
+    process.exit(1);
+  });
 
 function toNodeHeaders(headers) {
   const nodeHeaders = {};
@@ -225,6 +228,7 @@ const server = createServer(async (req, res) => {
     }
 
     const request = toWebRequest(req);
+    const app = await appPromise;
     const response = await app.fetch(request);
     await sendWebResponse(res, response);
   } catch (error) {
