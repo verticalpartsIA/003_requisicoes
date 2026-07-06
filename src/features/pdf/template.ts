@@ -1,66 +1,3 @@
-import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
-
-// ─── Ambiente ─────────────────────────────────────────────────────────────────
-
-const SUPA_URL  = () => process.env.VITE_SUPABASE_URL ?? "";
-const SUPA_KEY  = () => process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-const RG_KEY    = () => process.env.REPORTGEN_API_KEY ?? "";
-const RG_URL    = "https://reportgen.io/api/v1";
-
-// ─── Supabase REST (service_role — bypassa RLS) ───────────────────────────────
-
-async function db<T>(path: string): Promise<T | null> {
-  const key = SUPA_KEY();
-  if (!key) return null;
-  try {
-    const resp = await fetch(`${SUPA_URL()}/rest/v1/${path}`, {
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        Accept: "application/json",
-      },
-    });
-    if (!resp.ok) return null;
-    const text = await resp.text();
-    return text ? (JSON.parse(text) as T) : null;
-  } catch { return null; }
-}
-
-// ─── Supabase Storage → Base64 data URI (para embutir no HTML do PDF) ───────
-
-const MAX_IMAGE_BYTES = 1_500_000; // 1.5MB — limite de segurança para o fallback raw
-
-async function fetchImageAsDataUri(bucket: string, path: string): Promise<string | null> {
-  const key = SUPA_KEY();
-  if (!key || !path) return null;
-  try {
-    // Tenta via Supabase Image Transform (reduz para 800px — plano Pro)
-    // Garante payload pequeno independente do tamanho original do upload
-    const transformUrl = `${SUPA_URL()}/storage/v1/render/image/authenticated/${bucket}/${path}?width=800&quality=80&resize=contain`;
-    const tr = await fetch(transformUrl, {
-      headers: { apikey: key, Authorization: `Bearer ${key}` },
-    });
-    if (tr.ok) {
-      const ct = tr.headers.get("content-type") ?? "image/jpeg";
-      const buf = await tr.arrayBuffer();
-      const b64 = Buffer.from(buf).toString("base64");
-      return `data:${ct};base64,${b64}`;
-    }
-
-    // Fallback: download original (plano Free ou transform indisponível)
-    const resp = await fetch(`${SUPA_URL()}/storage/v1/object/${bucket}/${path}`, {
-      headers: { apikey: key, Authorization: `Bearer ${key}` },
-    });
-    if (!resp.ok) return null;
-    const ct = resp.headers.get("content-type") ?? "image/jpeg";
-    const buf = await resp.arrayBuffer();
-    if (buf.byteLength > MAX_IMAGE_BYTES) return null;
-    const b64 = Buffer.from(buf).toString("base64");
-    return `data:${ct};base64,${b64}`;
-  } catch { return null; }
-}
-
 // ─── Tradução de ações de auditoria ──────────────────────────────────────────
 
 const ACTION_LABELS: Record<string, string> = {
@@ -92,7 +29,7 @@ function actionLabel(action: string, details?: Record<string, unknown>): string 
 
 // ─── Builder HTML ─────────────────────────────────────────────────────────────
 
-interface BuildInput {
+export interface BuildInput {
   req: Record<string, unknown>;
   suppliers: Array<Record<string, unknown>>;
   winCriteria: string | null;
@@ -103,7 +40,7 @@ interface BuildInput {
   imageUrls: Record<string, string>;
 }
 
-function buildHtml(d: BuildInput): string {
+export function buildHtml(d: BuildInput): string {
   const f  = (v: unknown) => (v != null && v !== "" ? String(v) : "—");
   const fP = (v: unknown) =>
     v != null ? `R$&nbsp;${Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—";
@@ -145,7 +82,7 @@ function buildHtml(d: BuildInput): string {
     `<div style="background:${bgColor};border:1px solid ${borderColor};border-radius:7px;padding:12px;margin-bottom:8px;">${content}</div>`;
 
   const imgBox = (url: string, alt: string) =>
-    `<div style="margin-top:8px;"><div style="font-size:9px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px;">${alt}</div><img src="${url}" alt="${alt}" style="max-width:200px;max-height:150px;border-radius:6px;border:1px solid #e5e7eb;object-fit:cover;"/></div>`;
+    `<div style="margin-top:8px;"><div style="font-size:9px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px;">${alt}</div><img src="${url}" alt="${alt}" crossorigin="anonymous" style="max-width:200px;max-height:150px;border-radius:6px;border:1px solid #e5e7eb;object-fit:cover;"/></div>`;
 
   // ─ V1 Requisição ───────────────────────────────────────────────────────────
 
@@ -326,7 +263,7 @@ function buildHtml(d: BuildInput): string {
 <meta charset="UTF-8">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:Arial,Helvetica,sans-serif; font-size:12px; color:#111827; padding:32px 40px 24px; }
+  body { font-family:Arial,Helvetica,sans-serif; font-size:12px; color:#111827; padding:32px 40px 24px; background:#fff; }
 </style>
 </head>
 <body>
@@ -358,129 +295,3 @@ ${histSection}
 </body>
 </html>`;
 }
-
-// ─── Server function principal ────────────────────────────────────────────────
-
-export const generateRequisitionPdf = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ ticketNumber: z.string() }))
-  .handler(async ({ data }) => {
-    const apiKey = RG_KEY();
-    if (!apiKey) throw new Error("REPORTGEN_API_KEY não configurada no servidor.");
-
-    // 1. Requisição
-    const reqs = await db<Array<Record<string, unknown>>>(
-      `requisitions?ticket_number=eq.${encodeURIComponent(data.ticketNumber)}&select=*&limit=1`,
-    );
-    const req = reqs?.[0];
-    if (!req) throw new Error(`Requisição ${data.ticketNumber} não encontrada.`);
-    const reqId = req.id as string;
-
-    // 2. Cotação + todos os fornecedores (incluindo quem perdeu)
-    const quots = await db<Array<Record<string, unknown>>>(
-      `quotations?requisition_id=eq.${reqId}&select=*,quotation_suppliers(*)&limit=1`,
-    );
-    const quot = quots?.[0] ?? null;
-    const suppliersRaw = ((quot?.quotation_suppliers ?? []) as Array<Record<string, unknown>>)
-      .sort((a, b) => (a.is_winner ? -1 : 1) - (b.is_winner ? -1 : 1)); // vencedor primeiro
-    const winCriteria = (quot?.win_criteria ?? null) as string | null;
-
-    // 3. Aprovação
-    const apprs = await db<Array<Record<string, unknown>>>(
-      `approvals?requisition_id=eq.${reqId}&select=*&order=created_at.desc&limit=1`,
-    );
-    const approval = apprs?.[0] ?? null;
-
-    // 4. Compra
-    const purchs = await db<Array<Record<string, unknown>>>(
-      `purchases?requisition_id=eq.${reqId}&select=*&limit=1`,
-    );
-    const purchase = purchs?.[0] ?? null;
-
-    // 5. Recebimento
-    const recs = await db<Array<Record<string, unknown>>>(
-      `receipts?requisition_id=eq.${reqId}&select=*&limit=1`,
-    );
-    const receipt = recs?.[0] ?? null;
-
-    // 6. Logs de auditoria (ordem cronológica)
-    const auditLogs = (await db<Array<Record<string, unknown>>>(
-      `audit_logs?ticket_number=eq.${encodeURIComponent(data.ticketNumber)}&select=*&order=created_at.asc`,
-    )) ?? [];
-
-    // 7. URLs assinadas para imagens
-    const moduleData = (req.module_data ?? {}) as Record<string, unknown>;
-    const imageUrls: Record<string, string> = {};
-
-    if (req.module === "M1" && moduleData.photo_path) {
-      const uri = await fetchImageAsDataUri("travel-docs", String(moduleData.photo_path));
-      if (uri) imageUrls.photo = uri;
-    }
-    if (req.module === "M5" && moduleData.cargo_photo_path) {
-      const uri = await fetchImageAsDataUri("travel-docs", String(moduleData.cargo_photo_path));
-      if (uri) imageUrls.cargo = uri;
-    }
-    if (req.module === "M2") {
-      const travelers = (moduleData.travelers ?? []) as Array<Record<string, unknown>>;
-      for (let i = 0; i < travelers.length; i++) {
-        const photoPath = travelers[i].docPhotoPath ?? travelers[i].doc_photo_path;
-        if (photoPath) {
-          const uri = await fetchImageAsDataUri("travel-docs", String(photoPath));
-          if (uri) imageUrls[`traveler_${i}`] = uri;
-        }
-      }
-    }
-
-    // 8. Gerar HTML
-    const html = buildHtml({
-      req, suppliers: suppliersRaw, winCriteria,
-      approval, purchase, receipt,
-      auditLogs, imageUrls,
-    });
-
-    // 9. Enviar para reportgen.io
-    const genResp = await fetch(`${RG_URL}/generate-pdf-async`, {
-      method: "POST",
-      headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ html_template: html, engine: "raw" }),
-    });
-
-    if (!genResp.ok) {
-      const text = await genResp.text().catch(() => "");
-      if (genResp.status === 401)
-        throw new Error("reportgen.io: chave de API inválida. Verifique REPORTGEN_API_KEY.");
-      throw new Error(`reportgen.io error ${genResp.status}: ${text}`);
-    }
-
-    const genJson = (await genResp.json()) as Record<string, unknown>;
-    const inner = (genJson.data ?? genJson) as Record<string, unknown>;
-    const report_id = (inner.report_id ?? inner.id ?? genJson.report_id ?? genJson.id ?? "") as string;
-    if (!report_id)
-      throw new Error(`reportgen.io não retornou report_id. Resposta: ${JSON.stringify(genJson)}`);
-
-    console.log(`[pdf] report_id=${report_id} gerado. Iniciando polling...`);
-
-    // 10. Polling do PDF gerado
-    for (let i = 0; i < 20; i++) {
-      await new Promise((r) => setTimeout(r, 1500));
-      const dlResp = await fetch(`${RG_URL}/reports/${report_id}/download`, {
-        headers: { "X-API-Key": apiKey },
-      });
-      if (dlResp.ok) {
-        const ct = dlResp.headers.get("content-type") ?? "";
-        if (ct.includes("application/pdf"))
-          return { base64: Buffer.from(await dlResp.arrayBuffer()).toString("base64") };
-        const dlJson = (await dlResp.json()) as Record<string, unknown>;
-        const pdfData = (dlJson.data ?? dlJson.url ?? "") as string;
-        if (!pdfData) throw new Error(`reportgen.io sem dados. ${JSON.stringify(dlJson)}`);
-        if (pdfData.startsWith("http"))
-          return { base64: Buffer.from(await (await fetch(pdfData)).arrayBuffer()).toString("base64") };
-        return { base64: pdfData };
-      }
-      if (dlResp.status !== 404 && dlResp.status !== 202) {
-        const body = await dlResp.text().catch(() => "");
-        throw new Error(`reportgen.io download error ${dlResp.status}: ${body}`);
-      }
-    }
-
-    throw new Error("PDF generation timed out. Tente novamente.");
-  });
