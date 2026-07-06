@@ -143,7 +143,7 @@ mindmap
       TanStack Router
       TanStack Start
       shadcn/ui e Radix
-      ReportGen PDF
+      PDF no navegador + Storage
       Integração VPClick
 ```
 
@@ -202,7 +202,8 @@ flowchart TB
   REST --> DB
   DB --> AUDIT[Audit Logs]
   DB --> STORAGE[Storage travel-docs]
-  SSR --> PDF[ReportGen PDF]
+  UI --> PDF[jsPDF/html2canvas no navegador]
+  PDF --> PDFSTORE[Storage requisition-pdfs]
   SSR --> VP[VPClick]
   UI --> HOST[Node server.js / Hostinger]
 ```
@@ -267,7 +268,6 @@ SUPABASE_SERVICE_ROLE_KEY=
 PORT=3000
 HOST=0.0.0.0
 APP_ORIGIN=http://localhost:3000
-REPORTGEN_API_KEY=
 VPCLICK_URL=
 VPCLICK_SERVICE_KEY=
 VPCLICK_LIST_ID=

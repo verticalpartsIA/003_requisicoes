@@ -48,7 +48,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { generateRequisitionPdf } from "@/features/pdf/server";
+import { generateAndSaveRequisitionPdf } from "@/features/pdf/client";
 import { deleteRequisitionClient } from "@/features/requisitions/client";
 import { useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -1266,15 +1266,9 @@ function LogsPage() {
         content = header + rows;
       }
     } else {
-      // PDF real via reportgen.io
+      // PDF gerado no navegador e salvo no Supabase Storage
       try {
-        const result = await generateRequisitionPdf({
-          data: { ticketNumber: exportTicketId },
-        });
-        const binary = atob(result.base64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const blob = new Blob([bytes], { type: "application/pdf" });
+        const { blob, signedUrl } = await generateAndSaveRequisitionPdf(exportTicketId);
         const blobUrl = URL.createObjectURL(blob);
         const filename = `vpreq-${exportTicketId}-${now.toISOString().slice(0, 10)}.pdf`;
         const anchor = document.createElement("a");
@@ -1283,8 +1277,8 @@ function LogsPage() {
         anchor.click();
         setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000);
         setExportResult({
-          download_url: blobUrl,
-          expires_at: new Date(now.getTime() + 30 * 60 * 1000).toISOString(),
+          download_url: signedUrl,
+          expires_at: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
           file_size_bytes: blob.size,
           generated_at: now.toISOString(),
         });
