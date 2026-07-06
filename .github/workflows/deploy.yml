@@ -9,22 +9,32 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH
+      - name: Diagnóstico via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HOSTINGER_SSH_HOST }}
           username: ${{ secrets.HOSTINGER_SSH_USER }}
           password: ${{ secrets.HOSTINGER_SSH_PASS }}
           port: 65002
+          command_timeout: 5m
           script: |
-            set -e
-            cd /home/u969661049/domains/vprequisicoes.vpsistema.com/nodejs
-            export PATH=/opt/alt/alt-nodejs22/root/usr/bin:$PATH
-            git fetch origin main
-            git reset --hard origin/main
-            set -a && . /home/u969661049/domains/vprequisicoes.vpsistema.com/public_html/.builds/config/.env && set +a
-            rm -rf node_modules
-            npm install
-            NODE_OPTIONS=--max-old-space-size=2048 npm run build
-            touch tmp/restart.txt
-            echo "Deploy concluído: $(git log --oneline -1)"
+            echo "=== 1. processos node/passenger/pm2 ==="
+            ps aux | grep -Ei 'node|passenger|pm2' | grep -v grep || echo "(nenhum processo)"
+            echo "=== 2. portas escutando ==="
+            ss -tln 2>/dev/null | head -20 || netstat -tln 2>/dev/null | head -20 || echo "(indisponivel)"
+            echo "=== 3. estrutura do dominio ==="
+            ls -la $HOME/domains/vprequisicoes.vpsistema.com/ 2>/dev/null || echo "(nao existe)"
+            echo "=== 4. nodejs dir ==="
+            ls -la $HOME/domains/vprequisicoes.vpsistema.com/nodejs 2>/dev/null | head -25 || echo "(nao existe)"
+            echo "=== 5. public_html ==="
+            ls -la $HOME/domains/vprequisicoes.vpsistema.com/public_html 2>/dev/null | head -25 || echo "(nao existe)"
+            echo "=== 6. htaccess ==="
+            cat $HOME/domains/vprequisicoes.vpsistema.com/public_html/.htaccess 2>/dev/null || echo "(sem .htaccess)"
+            echo "=== 7. builds do painel ==="
+            ls -la $HOME/domains/vprequisicoes.vpsistema.com/public_html/.builds 2>/dev/null || echo "(sem .builds)"
+            echo "=== 8. logs disponiveis ==="
+            ls -la $HOME/logs 2>/dev/null || true
+            find $HOME -maxdepth 2 -name "*.log" 2>/dev/null | head -10 || true
+            echo "=== 9. teste interno na porta 3000 ==="
+            curl -s -o /dev/null -w "porta 3000 respondeu: %{http_code}\n" --max-time 5 http://127.0.0.1:3000/ || echo "(nada escutando na 3000)"
+            echo "=== FIM DIAGNOSTICO ==="
