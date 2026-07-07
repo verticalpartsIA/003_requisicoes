@@ -23,7 +23,7 @@ import { TicketsTable } from "@/components/tickets-table";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import { toast } from "sonner";
 import { createProductRequisitionClient, listProductRequisitionsClient, updateRequisitionClient } from "@/features/requisitions/client";
-import { validateOmieOrderClient } from "@/features/omie/client";
+import { validateOmieOrderClient, validateOmieProductClient } from "@/features/omie/client";
 import { useAuth } from "@/features/auth/auth-context";
 import { notifyVpClickClient } from "@/features/vpclick/client";
 import type { TicketRow } from "@/components/tickets-table";
@@ -41,6 +41,7 @@ const STEPS = [
 ];
 
 interface ItemDraft {
+  product_code: string;
   product_name: string;
   description: string;
   quantity: string;
@@ -71,6 +72,7 @@ const DIALOG_KEY = "vpreq_m1_v2";
 
 function emptyDraft(): ItemDraft {
   return {
+    product_code: "",
     product_name: "",
     description: "",
     quantity: "",
@@ -103,6 +105,9 @@ function ProductsPage() {
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
 
   // Draft do formulário de item
+  const [draftCode, setDraftCode] = useState("");
+  const [draftCodeValidated, setDraftCodeValidated] = useState(false);
+  const [isValidatingCode, setIsValidatingCode] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [draftDesc, setDraftDesc] = useState("");
   const [draftQty, setDraftQty] = useState("");
@@ -173,6 +178,7 @@ function ProductsPage() {
 
       if (Array.isArray(md.items)) {
         const legacyItems = (md.items as Array<Record<string, unknown>>).map((i) => ({
+          product_code: String(i.product_code ?? ""),
           product_name: String(i.product_name ?? ""),
           description: String(i.description ?? ""),
           quantity: String(i.quantity ?? "1"),
@@ -189,6 +195,7 @@ function ProductsPage() {
       } else if (md.product_name) {
         toast.info("Requisição no formato antigo — convertida para o novo formato de itens.");
         setItems([{
+          product_code: String(md.product_code ?? ""),
           product_name: String(md.product_name ?? ""),
           description: String(data.description ?? ""),
           quantity: String(md.quantity ?? "1"),
@@ -250,6 +257,7 @@ function ProductsPage() {
   };
 
   const clearDraft = () => {
+    setDraftCode(""); setDraftCodeValidated(false); setIsValidatingCode(false);
     setDraftName(""); setDraftDesc(""); setDraftQty("");
     setDraftSpecs(""); setDraftBrand(""); setDraftModel("");
     setDraftLinks([""]); setDraftSuggestion("");
@@ -266,6 +274,8 @@ function ProductsPage() {
 
   const openEditItem = (idx: number) => {
     const item = items[idx];
+    setDraftCode(item.product_code || "");
+    setDraftCodeValidated(isRevenda === false ? !!item.product_code : false);
     setDraftName(item.product_name);
     setDraftDesc(item.description);
     setDraftQty(item.quantity);
@@ -281,12 +291,34 @@ function ProductsPage() {
     setEditingIdx(idx);
   };
 
+  const handleValidateProductCode = async () => {
+    if (!draftCode.trim()) { toast.error("Informe o código do produto."); return; }
+    setIsValidatingCode(true);
+    try {
+      const result = await validateOmieProductClient(draftCode.trim());
+      setDraftName(result.descricao);
+      setDraftCodeValidated(true);
+      toast.success(`Código ${result.codigo} confirmado — ${result.descricao}`);
+    } catch (err) {
+      setDraftCodeValidated(false);
+      setDraftName("");
+      toast.error(err instanceof Error ? err.message : "Erro ao consultar o código no Omie.");
+    } finally {
+      setIsValidatingCode(false);
+    }
+  };
+
   const saveDraft = () => {
+    if (isRevenda === false && !draftCodeValidated) {
+      toast.error("Verifique o código do produto (VPCON) antes de adicionar.");
+      return;
+    }
     if (!draftName.trim()) { toast.error("Informe o nome do produto."); return; }
     if (!draftQty || parseFloat(draftQty) <= 0) { toast.error("Informe uma quantidade válida."); return; }
     if (draftDesc.trim().length < 5) { toast.error("Descrição deve ter pelo menos 5 caracteres."); return; }
 
     const draft: ItemDraft = {
+      product_code: isRevenda === false ? draftCode.trim() : "",
       product_name: draftName.trim(),
       description: draftDesc.trim(),
       quantity: draftQty,
@@ -376,6 +408,7 @@ function ProductsPage() {
             else photoPath = uploadData.path;
           }
           return {
+            productCode: item.product_code || null,
             productName: item.product_name,
             description: item.description,
             quantity: parseFloat(item.quantity),
@@ -404,6 +437,7 @@ function ProductsPage() {
           desiredDate: deliveryDeadline.toISOString().slice(0, 10),
           moduleData: {
             items: itemsWithPaths.map((i) => ({
+              product_code: i.productCode,
               product_name: i.productName,
               quantity: i.quantity,
               description: i.description,
@@ -636,6 +670,7 @@ function ProductsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-semibold text-foreground">{item.product_name}</span>
+                      {item.product_code && <Badge variant="outline">{item.product_code}</Badge>}
                       <Badge variant="secondary">Qtd: {item.quantity}</Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
@@ -659,9 +694,47 @@ function ProductsPage() {
                   <p className="text-xs font-semibold text-vp-yellow-dark uppercase tracking-wide">
                     {editingIdx !== null ? `Editando item ${editingIdx + 1}` : "Novo produto"}
                   </p>
+                  {isRevenda === false && (
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium">Código do Produto (VPCON) *</label>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Ex.: VPCON-677"
+                          value={draftCode}
+                          onChange={(e) => { setDraftCode(e.target.value); setDraftCodeValidated(false); setDraftName(""); }}
+                          className="max-w-[200px]"
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleValidateProductCode(); } }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleValidateProductCode}
+                          disabled={isValidatingCode || !draftCode.trim()}
+                        >
+                          {isValidatingCode ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verificar"}
+                        </Button>
+                      </div>
+                      {draftCodeValidated && draftName && (
+                        <div className="flex items-center gap-2 rounded-md bg-green-50 border border-green-200 px-3 py-2">
+                          <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                          <p className="text-sm text-green-800">
+                            Código <span className="font-semibold">{draftCode}</span> confirmado — <span className="font-semibold">{draftName}</span>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">Nome do Produto *</label>
-                    <Input placeholder="Ex.: Rolamento SKF 6205 ZZ" value={draftName} onChange={(e) => setDraftName(e.target.value)} maxLength={200} />
+                    <Input
+                      placeholder={isRevenda === false ? "Verifique o código acima" : "Ex.: Rolamento SKF 6205 ZZ"}
+                      value={draftName}
+                      onChange={(e) => setDraftName(e.target.value)}
+                      maxLength={200}
+                      disabled={isRevenda === false}
+                      readOnly={isRevenda === false}
+                    />
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1.5 col-span-2">

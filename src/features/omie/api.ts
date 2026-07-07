@@ -11,7 +11,7 @@ async function omiePost<T>(endpoint: string, call: string, param: unknown[]): Pr
     body: JSON.stringify({ call, app_key: omieKey(), app_secret: omieSecret(), param }),
   });
   const data = await resp.json() as { faultstring?: string } & T;
-  if (data.faultstring) throw new Error(`Pedido não encontrado no Omie: ${data.faultstring}`);
+  if (data.faultstring) throw new Error(`Omie: ${data.faultstring}`);
   return data as T;
 }
 
@@ -43,5 +43,26 @@ export const validateOmieOrder = createServerFn({ method: "POST" })
       numeroPedido: data.numeroPedido,
       vendedor: vendedor.nome,
       quantidadeItens: pedido.pedido_venda_produto?.cabecalho?.quantidade_itens ?? 0,
+    };
+  });
+
+export const validateOmieProduct = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ codigoProduto: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    type ProdutoResp = {
+      codigo_produto: number;
+      codigo: string;
+      descricao: string;
+    };
+
+    const produto = await omiePost<ProdutoResp>("geral/produtos", "ConsultarProduto", [
+      { codigo: data.codigoProduto },
+    ]);
+
+    if (!produto.descricao) throw new Error("Produto não encontrado no Omie.");
+
+    return {
+      codigo: produto.codigo || data.codigoProduto,
+      descricao: produto.descricao,
     };
   });

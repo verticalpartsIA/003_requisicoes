@@ -24,6 +24,7 @@ export async function deleteRequisitionClient(requisitionId: string, actorId: st
 }
 
 export interface ProductItemInput {
+  productCode?: string | null;
   productName: string;
   description: string;
   quantity: number;
@@ -98,6 +99,7 @@ export async function createProductRequisitionClient(input: ProductRequisitionIn
       estimated_cost: null,
       module_data: {
         items: input.items.map((item) => ({
+          product_code: item.productCode ?? null,
           product_name: item.productName,
           quantity: item.quantity,
           description: item.description,

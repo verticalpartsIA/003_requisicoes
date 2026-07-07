@@ -87,6 +87,7 @@ export const deleteRequisition = createServerFn({ method: "POST" })
   });
 
 const productItemSchema = z.object({
+  productCode: z.string().max(50).optional().nullable(),
   productName: z.string().min(1).max(200),
   description: z.string().min(5).max(1000),
   quantity: z.number().positive(),
@@ -142,6 +143,7 @@ export const createProductRequisition = createServerFn({ method: "POST" })
 
     const moduleData = {
       items: data.items.map((item) => ({
+        product_code: item.productCode ?? null,
         product_name: item.productName,
         quantity: item.quantity,
         description: item.description,
