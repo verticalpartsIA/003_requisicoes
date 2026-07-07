@@ -49,3 +49,81 @@ export async function listOmieStockFromCacheClient(): Promise<OmieStockCacheResu
 
   return { items, lastSyncedAt };
 }
+
+export interface OmiePurchaseSuggestionItem {
+  codigo: string;
+  descricao: string;
+  estoqueFisico: number;
+  estoqueReservado: number;
+  estoqueDisponivel: number;
+  estoqueMinimo: number;
+  curva: "A" | "B" | "C" | "D";
+  qtdPendente: number;
+  comprado: number;
+  sugestaoCompra: number;
+  estoqueAtualizadoEm: string | null;
+  giroCalculadoEm: string | null;
+}
+
+export interface OmiePurchaseSuggestionsResult {
+  items: OmiePurchaseSuggestionItem[];
+  lastSyncedAt: string | null;
+  lastVelocitySyncedAt: string | null;
+}
+
+export async function listOmiePurchaseSuggestionsClient(): Promise<OmiePurchaseSuggestionsResult> {
+  const { data, error } = await supabaseBrowser
+    .from("omie_purchase_suggestions")
+    .select(
+      "codigo,descricao,estoque_fisico,estoque_reservado,estoque_disponivel,estoque_minimo,curva,qtd_pendente,comprado,sugestao_compra,estoque_atualizado_em,giro_calculado_em",
+    )
+    .order("descricao", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  const rows = data ?? [];
+  const items: OmiePurchaseSuggestionItem[] = rows.map((row) => ({
+    codigo: row.codigo,
+    descricao: row.descricao,
+    estoqueFisico: row.estoque_fisico,
+    estoqueReservado: row.estoque_reservado,
+    estoqueDisponivel: row.estoque_disponivel,
+    estoqueMinimo: row.estoque_minimo,
+    curva: row.curva as "A" | "B" | "C" | "D",
+    qtdPendente: row.qtd_pendente,
+    comprado: row.comprado,
+    sugestaoCompra: row.sugestao_compra,
+    estoqueAtualizadoEm: row.estoque_atualizado_em,
+    giroCalculadoEm: row.giro_calculado_em,
+  }));
+
+  const latestOf = (key: "estoqueAtualizadoEm" | "giroCalculadoEm") =>
+    items.reduce<string | null>((latest, row) => {
+      const value = row[key];
+      if (!value) return latest;
+      if (!latest || value > latest) return value;
+      return latest;
+    }, null);
+
+  return { items, lastSyncedAt: latestOf("estoqueAtualizadoEm"), lastVelocitySyncedAt: latestOf("giroCalculadoEm") };
+}
+
+export interface RegistrarComprasInput {
+  codigo: string;
+  quantidade: number;
+  previsaoChegada: string;
+  createdBy?: string;
+  createdByName?: string;
+}
+
+export async function registrarCompraClient(input: RegistrarComprasInput) {
+  const { error } = await supabaseBrowser.from("omie_purchase_orders").insert({
+    codigo: input.codigo,
+    quantidade: input.quantidade,
+    previsao_chegada: input.previsaoChegada,
+    created_by: input.createdBy ?? null,
+    created_by_name: input.createdByName ?? null,
+  });
+
+  if (error) throw new Error(error.message);
+}

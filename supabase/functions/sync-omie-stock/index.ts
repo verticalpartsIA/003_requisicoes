@@ -67,7 +67,7 @@ async function getOrResetCursor(supabase: SupabaseClient, isContinuation: boolea
 }
 
 async function processarProdutos(supabase: SupabaseClient, cursor: Cursor): Promise<Cursor> {
-  type ProdutoItem = { codigo: string; descricao: string; inativo: string }
+  type ProdutoItem = { codigo: string; descricao: string; inativo: string; lead_time?: number }
   type ListarProdutosResp = { total_de_paginas: number; produto_servico_cadastro: ProdutoItem[] }
 
   const resp = await omiePost<ListarProdutosResp>('geral/produtos', 'ListarProdutos', [
@@ -78,7 +78,10 @@ async function processarProdutos(supabase: SupabaseClient, cursor: Cursor): Prom
   if (ativos.length > 0) {
     await supabase
       .from('omie_products_staging')
-      .upsert(ativos.map((p) => ({ codigo: p.codigo, descricao: p.descricao })), { onConflict: 'codigo' })
+      .upsert(
+        ativos.map((p) => ({ codigo: p.codigo, descricao: p.descricao, lead_time_dias: p.lead_time ?? 0 })),
+        { onConflict: 'codigo' },
+      )
   }
 
   const totalPaginas = resp.total_de_paginas ?? 1
@@ -89,7 +92,14 @@ async function processarProdutos(supabase: SupabaseClient, cursor: Cursor): Prom
 }
 
 async function processarPosEstoque(supabase: SupabaseClient, cursor: Cursor): Promise<Cursor> {
-  type PosEstoqueItem = { cCodigo: string; cDescricao: string; fisico: number; reservado: number; estoque_minimo: number }
+  type PosEstoqueItem = {
+    cCodigo: string
+    cDescricao: string
+    fisico: number
+    reservado: number
+    estoque_minimo: number
+    nCMC?: number
+  }
   type ListarPosEstoqueResp = { nTotPaginas: number; produtos: PosEstoqueItem[] }
 
   const resp = await omiePost<ListarPosEstoqueResp>('estoque/consulta', 'ListarPosEstoque', [
@@ -100,22 +110,27 @@ async function processarPosEstoque(supabase: SupabaseClient, cursor: Cursor): Pr
   if (posicoes.length > 0) {
     const { data: ativos } = await supabase
       .from('omie_products_staging')
-      .select('codigo,descricao')
+      .select('codigo,descricao,lead_time_dias')
       .in('codigo', posicoes.map((p) => p.cCodigo))
-    const ativosMap = new Map((ativos ?? []).map((a) => [a.codigo as string, a.descricao as string]))
+    const ativosMap = new Map(
+      (ativos ?? []).map((a) => [a.codigo as string, { descricao: a.descricao as string, leadTime: (a.lead_time_dias as number) ?? 0 }]),
+    )
 
     const rows = posicoes
       .filter((p) => ativosMap.has(p.cCodigo))
       .map((p) => {
         const fisico = p.fisico ?? 0
         const reservado = p.reservado ?? 0
+        const ativo = ativosMap.get(p.cCodigo)!
         return {
           codigo: p.cCodigo,
-          descricao: p.cDescricao || ativosMap.get(p.cCodigo),
+          descricao: p.cDescricao || ativo.descricao,
           estoque_fisico: fisico,
           estoque_reservado: reservado,
           estoque_disponivel: fisico - reservado,
           estoque_minimo: p.estoque_minimo ?? 0,
+          cmc: p.nCMC ?? 0,
+          lead_time_dias: ativo.leadTime,
           updated_at: new Date().toISOString(),
         }
       })
