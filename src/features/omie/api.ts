@@ -4,14 +4,26 @@ import { z } from "zod";
 function omieKey() { return process.env.OMIE_APP_KEY ?? "8463170967"; }
 function omieSecret() { return process.env.OMIE_APP_SECRET ?? "69e22b773842044fdb218178521cac59"; }
 
-async function omiePost<T>(endpoint: string, call: string, param: unknown[]): Promise<T> {
+function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
+
+// A API do Omie bloqueia rajadas de chamadas com "Consumo redundante
+// detectado" (rate limit), inclusive entre páginas de uma mesma listagem
+// se disparadas rápido demais. Faz retry com espera crescente nesse caso.
+async function omiePost<T>(endpoint: string, call: string, param: unknown[], attempt = 1): Promise<T> {
   const resp = await fetch(`https://app.omie.com.br/api/v1/${endpoint}/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ call, app_key: omieKey(), app_secret: omieSecret(), param }),
   });
   const data = await resp.json() as { faultstring?: string } & T;
-  if (data.faultstring) throw new Error(`Omie: ${data.faultstring}`);
+  if (data.faultstring) {
+    const isRateLimit = /redundante|redundant/i.test(data.faultstring);
+    if (isRateLimit && attempt < 4) {
+      await sleep(attempt * 1500);
+      return omiePost<T>(endpoint, call, param, attempt + 1);
+    }
+    throw new Error(`Omie: ${data.faultstring}`);
+  }
   return data as T;
 }
 
@@ -123,52 +135,78 @@ export const getOmieStockPosition = createServerFn({ method: "POST" })
 export interface OmieStockItem {
   codigo: string;
   descricao: string;
+  estoqueFisico: number;
+  estoqueReservado: number;
+  estoqueDisponivel: number;
   estoqueMinimo: number;
-  estoqueMaximo: number | null;
 }
 
-export const listOmieActiveStock = createServerFn({ method: "GET" }).handler(async () => {
-  type ProdutoItem = {
-    codigo: string;
-    descricao: string;
-    inativo: string; // "S" | "N"
-    estoque_minimo?: number;
-    // Omie não expõe "estoque máximo" nesta conta — nem em ListarProdutos
-    // nem em estoque/consulta ListarPosEstoque (confirmado manualmente).
-  };
-  type ListarProdutosResp = {
-    total_de_paginas: number;
-    produto_servico_cadastro: ProdutoItem[];
-  };
+const REGISTROS_POR_PAGINA = 200;
+const MAX_PAGINAS = 100; // trava de segurança (~20k produtos)
+const PAUSA_ENTRE_PAGINAS_MS = 400; // evita "consumo redundante" do Omie
 
-  const REGISTROS_POR_PAGINA = 500;
-  const MAX_PAGINAS = 60; // trava de segurança (~30k produtos)
+export const listOmieActiveStock = createServerFn({ method: "GET" }).handler(async () => {
+  // 1. geral/produtos → tem codigo, descricao e inativo (S/N) — decide quem é ativo.
+  type ProdutoItem = { codigo: string; descricao: string; inativo: string };
+  type ListarProdutosResp = { total_de_paginas: number; produto_servico_cadastro: ProdutoItem[] };
 
   const produtos: ProdutoItem[] = [];
   let pagina = 1;
   let totalPaginas = 1;
-
   do {
     const resp = await omiePost<ListarProdutosResp>("geral/produtos", "ListarProdutos", [
-      {
-        pagina,
-        registros_por_pagina: REGISTROS_POR_PAGINA,
-        apenas_importado_api: "N",
-        filtrar_apenas_omiepdv: "N",
-      },
+      { pagina, registros_por_pagina: REGISTROS_POR_PAGINA, apenas_importado_api: "N", filtrar_apenas_omiepdv: "N" },
     ]);
     produtos.push(...(resp.produto_servico_cadastro ?? []));
     totalPaginas = resp.total_de_paginas ?? 1;
     pagina += 1;
+    if (pagina <= totalPaginas) await sleep(PAUSA_ENTRE_PAGINAS_MS);
   } while (pagina <= totalPaginas && pagina <= MAX_PAGINAS);
 
-  return produtos
-    .filter((p) => p.inativo !== "S")
-    .map((p): OmieStockItem => ({
-      codigo: p.codigo,
-      descricao: p.descricao,
-      estoqueMinimo: p.estoque_minimo ?? 0,
-      estoqueMaximo: null,
-    }))
-    .sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR"));
+  const ativos = new Map<string, string>(); // codigo -> descricao
+  for (const p of produtos) {
+    if (p.inativo !== "S") ativos.set(p.codigo, p.descricao);
+  }
+
+  // 2. estoque/consulta ListarPosEstoque → tem fisico, reservado e estoque_minimo
+  //    já prontos por produto, sem precisar consultar um por um.
+  type PosEstoqueItem = {
+    cCodigo: string;
+    cDescricao: string;
+    fisico: number;
+    reservado: number;
+    estoque_minimo: number;
+  };
+  type ListarPosEstoqueResp = { nTotPaginas: number; produtos: PosEstoqueItem[] };
+
+  const posicoes: PosEstoqueItem[] = [];
+  let nPagina = 1;
+  let totPaginas = 1;
+  do {
+    const resp = await omiePost<ListarPosEstoqueResp>("estoque/consulta", "ListarPosEstoque", [
+      { nPagina, nRegPorPagina: REGISTROS_POR_PAGINA, dDataPosicao: "" },
+    ]);
+    posicoes.push(...(resp.produtos ?? []));
+    totPaginas = resp.nTotPaginas ?? 1;
+    nPagina += 1;
+    if (nPagina <= totPaginas) await sleep(PAUSA_ENTRE_PAGINAS_MS);
+  } while (nPagina <= totPaginas && nPagina <= MAX_PAGINAS);
+
+  const items: OmieStockItem[] = [];
+  for (const pos of posicoes) {
+    const descricaoAtiva = ativos.get(pos.cCodigo);
+    if (descricaoAtiva === undefined) continue; // inativo ou não encontrado no cadastro
+    const fisico = pos.fisico ?? 0;
+    const reservado = pos.reservado ?? 0;
+    items.push({
+      codigo: pos.cCodigo,
+      descricao: pos.cDescricao || descricaoAtiva,
+      estoqueFisico: fisico,
+      estoqueReservado: reservado,
+      estoqueDisponivel: fisico - reservado,
+      estoqueMinimo: pos.estoque_minimo ?? 0,
+    });
+  }
+
+  return items.sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR"));
 });

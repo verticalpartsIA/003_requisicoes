@@ -11,7 +11,7 @@ export const Route = createFileRoute("/estoque-omie")({
   head: () => ({
     meta: [
       { title: "Estoque Omie — VPRequisições" },
-      { name: "description", content: "Produtos ativos e estoque mínimo, direto do Omie" },
+      { name: "description", content: "Produtos ativos e posição de estoque, direto do Omie" },
     ],
   }),
   component: EstoqueOmiePage,
@@ -58,7 +58,7 @@ function EstoqueOmiePage() {
           <div>
             <h1 className="text-xl font-bold text-foreground">Estoque Omie</h1>
             <p className="text-sm text-muted-foreground">
-              Produtos ativos e estoque mínimo, direto da API do Omie
+              Produtos ativos e posição de estoque, direto da API do Omie
             </p>
           </div>
         </div>
@@ -95,21 +95,23 @@ function EstoqueOmiePage() {
                 <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   <th className="px-4 py-3">Código do Produto</th>
                   <th className="px-4 py-3">Descrição do Produto</th>
+                  <th className="px-4 py-3 text-right">Estoque Físico</th>
+                  <th className="px-4 py-3 text-right">Reservado</th>
+                  <th className="px-4 py-3 text-right">Estoque Disponível</th>
                   <th className="px-4 py-3 text-right">Estoque Mínimo</th>
-                  <th className="px-4 py-3 text-right">Estoque Máximo</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
                       <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
                       Carregando produtos do Omie...
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
                       Nenhum produto encontrado.
                     </td>
                   </tr>
@@ -118,10 +120,10 @@ function EstoqueOmiePage() {
                     <tr key={item.codigo} className="border-b border-border last:border-0 hover:bg-muted/40">
                       <td className="px-4 py-2.5 font-mono text-xs">{item.codigo}</td>
                       <td className="px-4 py-2.5">{item.descricao}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueMinimo}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">
-                        {item.estoqueMaximo ?? "—"}
-                      </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueFisico}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueReservado}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{item.estoqueDisponivel}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{item.estoqueMinimo}</td>
                     </tr>
                   ))
                 )}
@@ -134,7 +136,6 @@ function EstoqueOmiePage() {
       {!loading && (
         <p className="text-xs text-muted-foreground">
           {filtered.length} de {items.length} produtos ativos.
-          {" "}O Omie não disponibiliza "Estoque Máximo" via API para esta conta — só Estoque Mínimo.
         </p>
       )}
     </div>
