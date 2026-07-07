@@ -4,7 +4,7 @@ import { Boxes, Loader2, RefreshCw, Search, TriangleAlert } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { listOmieActiveStockClient } from "@/features/omie/client";
+import { listOmieStockFromCacheClient } from "@/features/omie/client";
 import type { OmieStockItem } from "@/features/omie/api";
 
 export const Route = createFileRoute("/estoque-omie")({
@@ -19,6 +19,7 @@ export const Route = createFileRoute("/estoque-omie")({
 
 function EstoqueOmiePage() {
   const [items, setItems] = useState<OmieStockItem[]>([]);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -27,10 +28,11 @@ function EstoqueOmiePage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await listOmieActiveStockClient();
+      const { items: data, lastSyncedAt: syncedAt } = await listOmieStockFromCacheClient();
       setItems(data);
+      setLastSyncedAt(syncedAt);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao consultar o Omie.");
+      setError(err instanceof Error ? err.message : "Erro ao consultar o estoque.");
     } finally {
       setLoading(false);
     }
@@ -58,14 +60,21 @@ function EstoqueOmiePage() {
           <div>
             <h1 className="text-xl font-bold text-foreground">Estoque Omie</h1>
             <p className="text-sm text-muted-foreground">
-              Produtos ativos e posição de estoque, direto da API do Omie
+              Produtos ativos e posição de estoque, sincronizados a cada hora comercial com o Omie
             </p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-          Atualizar
-        </Button>
+        <div className="flex flex-col items-end gap-1">
+          <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            Atualizar
+          </Button>
+          {lastSyncedAt && (
+            <span className="text-xs text-muted-foreground">
+              Última sincronização: {new Date(lastSyncedAt).toLocaleString("pt-BR")}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="relative max-w-sm">
