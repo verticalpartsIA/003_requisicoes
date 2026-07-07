@@ -4,7 +4,7 @@ import { useRouter } from "@tanstack/react-router";
 import {
   Package, Plus, ChevronRight, ChevronLeft, Truck,
   Link2, X, CalendarIcon, ImageIcon, Upload, Pencil, Trash2,
-  CheckCircle2, ChevronDown, ChevronUp, Loader2, Tag,
+  CheckCircle2, ChevronDown, ChevronUp, Loader2, Tag, Boxes,
 } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -23,7 +23,7 @@ import { TicketsTable } from "@/components/tickets-table";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import { toast } from "sonner";
 import { createProductRequisitionClient, listProductRequisitionsClient, updateRequisitionClient } from "@/features/requisitions/client";
-import { validateOmieOrderClient, validateOmieProductClient } from "@/features/omie/client";
+import { validateOmieOrderClient, validateOmieProductClient, getOmieStockPositionClient } from "@/features/omie/client";
 import { useAuth } from "@/features/auth/auth-context";
 import { notifyVpClickClient } from "@/features/vpclick/client";
 import type { TicketRow } from "@/components/tickets-table";
@@ -40,6 +40,16 @@ const STEPS = [
   { label: "Logística", icon: Truck },
 ];
 
+type RequestKind = "consumo" | "revenda" | "estoque";
+
+interface StockSnapshot {
+  estoque_fisico: number;
+  estoque_reservado: number;
+  estoque_disponivel: number;
+  estoque_minimo: number;
+  quantidade_maxima: number;
+}
+
 interface ItemDraft {
   product_code: string;
   product_name: string;
@@ -53,6 +63,7 @@ interface ItemDraft {
   photo_file: File | null;
   photo_preview: string | null;
   photo_path: string | null;
+  stock_snapshot: StockSnapshot | null;
 }
 
 export const Route = createFileRoute("/products")({
@@ -84,6 +95,7 @@ function emptyDraft(): ItemDraft {
     photo_file: null,
     photo_preview: null,
     photo_path: null,
+    stock_snapshot: null,
   };
 }
 
@@ -123,11 +135,19 @@ function ProductsPage() {
   // Triagem (tela inicial antes do stepper)
   const [triageCompleted, setTriageCompleted] = useState(false);
 
+  // Tipo de requisição (triagem)
+  const [requestKind, setRequestKind] = useState<RequestKind | null>(null);
+  const isRevenda = requestKind === "revenda";
+  const requiresCodeValidation = requestKind === "consumo" || requestKind === "estoque";
+
   // Revenda
-  const [isRevenda, setIsRevenda] = useState<boolean | null>(null);
   const [pedidoNum, setPedidoNum] = useState("");
   const [omieResult, setOmieResult] = useState<{ vendedor: string; numero: string } | null>(null);
   const [isValidatingOmie, setIsValidatingOmie] = useState(false);
+
+  // Estoque
+  const [stockInfo, setStockInfo] = useState<StockSnapshot | null>(null);
+  const [isValidatingStock, setIsValidatingStock] = useState(false);
 
   // Logística
   const [deliveryDeadline, setDeliveryDeadline] = useState<Date | undefined>();
@@ -147,8 +167,7 @@ function ProductsPage() {
         setItems((s.items as ItemDraft[]).map((i) => ({ ...i, photo_file: null, photo_preview: null })));
       }
       if (typeof s.triageCompleted === "boolean") setTriageCompleted(s.triageCompleted);
-      if (typeof s.isRevenda === "boolean") setIsRevenda(s.isRevenda);
-      if (s.isRevenda === null) setIsRevenda(null);
+      if (typeof s.requestKind === "string") setRequestKind(s.requestKind as RequestKind);
       if (typeof s.pedidoNum === "string") setPedidoNum(s.pedidoNum);
       if (typeof s.deliveryDeadline === "string") setDeliveryDeadline(new Date(s.deliveryDeadline));
       if (typeof s.deliveryLocation === "string") setDeliveryLocation(s.deliveryLocation);
@@ -190,6 +209,7 @@ function ProductsPage() {
           photo_file: null,
           photo_preview: null,
           photo_path: (i.photo_path as string | null) ?? null,
+          stock_snapshot: (i.stock_snapshot as StockSnapshot | null) ?? null,
         }));
         setItems(legacyItems);
       } else if (md.product_name) {
@@ -207,10 +227,12 @@ function ProductsPage() {
           photo_file: null,
           photo_preview: null,
           photo_path: (md.photo_path as string | null) ?? null,
+          stock_snapshot: null,
         }]);
       }
 
-      if (typeof md.revenda === "boolean") setIsRevenda(md.revenda);
+      if (typeof md.request_kind === "string") setRequestKind(md.request_kind as RequestKind);
+      else if (typeof md.revenda === "boolean") setRequestKind(md.revenda ? "revenda" : "consumo");
       if (md.pedido_venda_numero) {
         setPedidoNum(String(md.pedido_venda_numero));
         if (md.pedido_venda_vendedor) {
@@ -232,12 +254,12 @@ function ProductsPage() {
     try {
       const serializableItems = items.map((i) => ({ ...i, photo_file: null, photo_preview: null }));
       sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
-        open: true, step, triageCompleted, items: serializableItems, isRevenda, pedidoNum,
+        open: true, step, triageCompleted, items: serializableItems, requestKind, pedidoNum,
         deliveryDeadline: deliveryDeadline?.toISOString(),
         deliveryLocation, urgencyLevel, justification,
       }));
     } catch { /* ignore */ }
-  }, [dialogOpen, step, items, isRevenda, pedidoNum, deliveryDeadline, deliveryLocation, urgencyLevel, justification]);
+  }, [dialogOpen, step, items, requestKind, pedidoNum, deliveryDeadline, deliveryLocation, urgencyLevel, justification]);
 
   const resetForm = () => {
     sessionStorage.removeItem(DIALOG_KEY);
@@ -247,7 +269,7 @@ function ProductsPage() {
     setShowAddForm(false);
     setEditingIdx(null);
     clearDraft();
-    setIsRevenda(null);
+    setRequestKind(null);
     setPedidoNum("");
     setOmieResult(null);
     setDeliveryDeadline(undefined);
@@ -258,6 +280,7 @@ function ProductsPage() {
 
   const clearDraft = () => {
     setDraftCode(""); setDraftCodeValidated(false); setIsValidatingCode(false);
+    setStockInfo(null); setIsValidatingStock(false);
     setDraftName(""); setDraftDesc(""); setDraftQty("");
     setDraftSpecs(""); setDraftBrand(""); setDraftModel("");
     setDraftLinks([""]); setDraftSuggestion("");
@@ -275,7 +298,8 @@ function ProductsPage() {
   const openEditItem = (idx: number) => {
     const item = items[idx];
     setDraftCode(item.product_code || "");
-    setDraftCodeValidated(isRevenda === false ? !!item.product_code : false);
+    setDraftCodeValidated(requiresCodeValidation ? !!item.product_code : false);
+    setStockInfo(item.stock_snapshot);
     setDraftName(item.product_name);
     setDraftDesc(item.description);
     setDraftQty(item.quantity);
@@ -294,11 +318,32 @@ function ProductsPage() {
   const handleValidateProductCode = async () => {
     if (!draftCode.trim()) { toast.error("Informe o código do produto."); return; }
     setIsValidatingCode(true);
+    setStockInfo(null);
     try {
       const result = await validateOmieProductClient(draftCode.trim());
       setDraftName(result.descricao);
       setDraftCodeValidated(true);
       toast.success(`Código ${result.codigo} confirmado — ${result.descricao}`);
+
+      if (requestKind === "estoque") {
+        setIsValidatingStock(true);
+        try {
+          const stock = await getOmieStockPositionClient(draftCode.trim());
+          setStockInfo({
+            estoque_fisico: stock.estoqueFisico,
+            estoque_reservado: stock.estoqueReservado,
+            estoque_disponivel: stock.estoqueDisponivel,
+            estoque_minimo: stock.estoqueMinimo,
+            quantidade_maxima: stock.quantidadeMaxima,
+          });
+        } catch (stockErr) {
+          toast.error(stockErr instanceof Error ? stockErr.message : "Erro ao consultar estoque no Omie.");
+          setDraftCodeValidated(false);
+          setDraftName("");
+        } finally {
+          setIsValidatingStock(false);
+        }
+      }
     } catch (err) {
       setDraftCodeValidated(false);
       setDraftName("");
@@ -309,18 +354,33 @@ function ProductsPage() {
   };
 
   const saveDraft = () => {
-    if (isRevenda === false && !draftCodeValidated) {
-      toast.error("Verifique o código do produto (VPCON) antes de adicionar.");
+    if (requiresCodeValidation && !draftCodeValidated) {
+      toast.error("Verifique o código do produto antes de adicionar.");
       return;
     }
     if (!draftName.trim()) { toast.error("Informe o nome do produto."); return; }
     if (!draftQty || parseFloat(draftQty) <= 0) { toast.error("Informe uma quantidade válida."); return; }
-    if (draftDesc.trim().length < 5) { toast.error("Descrição deve ter pelo menos 5 caracteres."); return; }
+    if (requestKind === "estoque") {
+      if (!stockInfo) { toast.error("Verifique o código do produto antes de adicionar."); return; }
+      if (stockInfo.quantidade_maxima <= 0) {
+        toast.error("Este produto já está no estoque mínimo ou acima — não é possível pedir reposição agora.");
+        return;
+      }
+      if (parseFloat(draftQty) > stockInfo.quantidade_maxima) {
+        toast.error(`Quantidade máxima que pode ser pedida agora: ${stockInfo.quantidade_maxima} (para não passar do estoque mínimo).`);
+        return;
+      }
+    } else if (draftDesc.trim().length < 5) {
+      toast.error("Descrição deve ter pelo menos 5 caracteres.");
+      return;
+    }
 
     const draft: ItemDraft = {
-      product_code: isRevenda === false ? draftCode.trim() : "",
+      product_code: requiresCodeValidation ? draftCode.trim() : "",
       product_name: draftName.trim(),
-      description: draftDesc.trim(),
+      description: requestKind === "estoque"
+        ? (draftDesc.trim() || `Reposição de estoque — ${draftName.trim()}`)
+        : draftDesc.trim(),
       quantity: draftQty,
       technical_specs: draftSpecs,
       brand_preference: draftBrand,
@@ -330,6 +390,7 @@ function ProductsPage() {
       photo_file: draftPhotoFile,
       photo_preview: draftPhotoPreview,
       photo_path: editingIdx !== null ? items[editingIdx].photo_path : null,
+      stock_snapshot: requestKind === "estoque" ? stockInfo : null,
     };
 
     if (editingIdx !== null) {
@@ -418,6 +479,7 @@ function ProductsPage() {
             referenceLinks: item.reference_links.filter(Boolean),
             onlinePurchaseSuggestion: item.online_purchase_suggestion,
             photoPath: photoPath ?? null,
+            stockSnapshot: item.stock_snapshot,
           };
         }),
       );
@@ -447,9 +509,11 @@ function ProductsPage() {
               reference_links: i.referenceLinks,
               online_purchase_suggestion: i.onlinePurchaseSuggestion,
               photo_path: i.photoPath ?? null,
+              stock_snapshot: i.stockSnapshot,
             })),
             delivery_location: deliveryLocation,
-            revenda: isRevenda ?? false,
+            request_kind: requestKind ?? "consumo",
+            revenda: isRevenda,
             pedido_venda_numero: omieResult?.numero ?? null,
             pedido_venda_vendedor: omieResult?.vendedor ?? null,
           },
@@ -471,7 +535,8 @@ function ProductsPage() {
         deliveryLocation,
         urgencyLevel: urgencyLevel as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
         justification,
-        revenda: isRevenda ?? false,
+        requestKind: requestKind ?? "consumo",
+        revenda: isRevenda,
         pedidoVendaNumero: omieResult?.numero ?? null,
         pedidoVendaVendedor: omieResult?.vendedor ?? null,
         requesterName: profile?.full_name || user?.email || "Usuário VerticalParts",
@@ -544,13 +609,13 @@ function ProductsPage() {
             <>
               <div className="space-y-5 py-2">
                 <p className="text-sm text-muted-foreground text-center">Selecione o tipo de requisição para começar:</p>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <button
                     type="button"
-                    onClick={() => { setIsRevenda(false); setOmieResult(null); setPedidoNum(""); setTriageCompleted(true); }}
+                    onClick={() => { setRequestKind("consumo"); setOmieResult(null); setPedidoNum(""); setTriageCompleted(true); }}
                     className={cn(
                       "flex flex-col items-center gap-3 rounded-xl border-2 p-6 transition-all text-center",
-                      isRevenda === false ? "border-vp-yellow bg-amber-50/60" : "border-border hover:border-vp-yellow/50 hover:bg-amber-50/20",
+                      requestKind === "consumo" ? "border-vp-yellow bg-amber-50/60" : "border-border hover:border-vp-yellow/50 hover:bg-amber-50/20",
                     )}
                   >
                     <Package className="h-10 w-10 text-vp-yellow-dark" />
@@ -561,10 +626,10 @@ function ProductsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setIsRevenda(true); setOmieResult(null); }}
+                    onClick={() => { setRequestKind("revenda"); setOmieResult(null); }}
                     className={cn(
                       "flex flex-col items-center gap-3 rounded-xl border-2 p-6 transition-all text-center",
-                      isRevenda === true ? "border-vp-yellow bg-amber-50/60" : "border-border hover:border-vp-yellow/50 hover:bg-amber-50/20",
+                      requestKind === "revenda" ? "border-vp-yellow bg-amber-50/60" : "border-border hover:border-vp-yellow/50 hover:bg-amber-50/20",
                     )}
                   >
                     <Tag className="h-10 w-10 text-vp-yellow-dark" />
@@ -573,9 +638,23 @@ function ProductsPage() {
                       <p className="text-xs text-muted-foreground mt-1">Produtos vinculados a um pedido de venda</p>
                     </div>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => { setRequestKind("estoque"); setOmieResult(null); setPedidoNum(""); setTriageCompleted(true); }}
+                    className={cn(
+                      "flex flex-col items-center gap-3 rounded-xl border-2 p-6 transition-all text-center",
+                      requestKind === "estoque" ? "border-vp-yellow bg-amber-50/60" : "border-border hover:border-vp-yellow/50 hover:bg-amber-50/20",
+                    )}
+                  >
+                    <Boxes className="h-10 w-10 text-vp-yellow-dark" />
+                    <div>
+                      <p className="font-semibold text-foreground">Estoque</p>
+                      <p className="text-xs text-muted-foreground mt-1">Reposição até o estoque mínimo</p>
+                    </div>
+                  </button>
                 </div>
 
-                {isRevenda === true && (
+                {requestKind === "revenda" && (
                   <div className="space-y-3 pt-1">
                     <Separator />
                     <div className="space-y-2">
@@ -672,6 +751,11 @@ function ProductsPage() {
                       <span className="text-sm font-semibold text-foreground">{item.product_name}</span>
                       {item.product_code && <Badge variant="outline">{item.product_code}</Badge>}
                       <Badge variant="secondary">Qtd: {item.quantity}</Badge>
+                      {item.stock_snapshot && (
+                        <Badge variant="outline" className="text-muted-foreground">
+                          Disponível: {item.stock_snapshot.estoque_disponivel} · Mínimo: {item.stock_snapshot.estoque_minimo}
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                       {item.description.length > 80 ? `${item.description.slice(0, 80)}…` : item.description}
@@ -694,14 +778,16 @@ function ProductsPage() {
                   <p className="text-xs font-semibold text-vp-yellow-dark uppercase tracking-wide">
                     {editingIdx !== null ? `Editando item ${editingIdx + 1}` : "Novo produto"}
                   </p>
-                  {isRevenda === false && (
+                  {requiresCodeValidation && (
                     <div className="space-y-1.5">
-                      <label className="text-sm font-medium">Código do Produto (VPCON) *</label>
+                      <label className="text-sm font-medium">
+                        {requestKind === "estoque" ? "Código do Produto *" : "Código do Produto (VPCON) *"}
+                      </label>
                       <div className="flex gap-2">
                         <Input
                           placeholder="Ex.: VPCON-677"
                           value={draftCode}
-                          onChange={(e) => { setDraftCode(e.target.value); setDraftCodeValidated(false); setDraftName(""); }}
+                          onChange={(e) => { setDraftCode(e.target.value); setDraftCodeValidated(false); setDraftName(""); setStockInfo(null); }}
                           className="max-w-[200px]"
                           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleValidateProductCode(); } }}
                         />
@@ -710,9 +796,9 @@ function ProductsPage() {
                           variant="outline"
                           size="sm"
                           onClick={handleValidateProductCode}
-                          disabled={isValidatingCode || !draftCode.trim()}
+                          disabled={isValidatingCode || isValidatingStock || !draftCode.trim()}
                         >
-                          {isValidatingCode ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verificar"}
+                          {isValidatingCode || isValidatingStock ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verificar"}
                         </Button>
                       </div>
                       {draftCodeValidated && draftName && (
@@ -723,19 +809,65 @@ function ProductsPage() {
                           </p>
                         </div>
                       )}
+                      {requestKind === "estoque" && stockInfo && (
+                        <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                          <div className="grid grid-cols-4 gap-2 text-center">
+                            <div>
+                              <p className="text-[10px] uppercase text-muted-foreground">Físico</p>
+                              <p className="text-sm font-semibold">{stockInfo.estoque_fisico}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase text-muted-foreground">Reservado</p>
+                              <p className="text-sm font-semibold">{stockInfo.estoque_reservado}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase text-muted-foreground">Disponível</p>
+                              <p className="text-sm font-semibold">{stockInfo.estoque_disponivel}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase text-muted-foreground">Mínimo</p>
+                              <p className="text-sm font-semibold">{stockInfo.estoque_minimo}</p>
+                            </div>
+                          </div>
+                          {stockInfo.quantidade_maxima > 0 ? (
+                            <p className="text-xs text-center text-vp-yellow-dark font-medium">
+                              Você pode pedir até <span className="font-bold">{stockInfo.quantidade_maxima}</span> unidades para atingir o estoque mínimo.
+                            </p>
+                          ) : (
+                            <p className="text-xs text-center text-muted-foreground">
+                              Estoque disponível já está no mínimo ou acima — não é necessário repor agora.
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">Nome do Produto *</label>
                     <Input
-                      placeholder={isRevenda === false ? "Verifique o código acima" : "Ex.: Rolamento SKF 6205 ZZ"}
+                      placeholder={requiresCodeValidation ? "Verifique o código acima" : "Ex.: Rolamento SKF 6205 ZZ"}
                       value={draftName}
                       onChange={(e) => setDraftName(e.target.value)}
                       maxLength={200}
-                      disabled={isRevenda === false}
-                      readOnly={isRevenda === false}
+                      disabled={requiresCodeValidation}
+                      readOnly={requiresCodeValidation}
                     />
                   </div>
+                  {requestKind === "estoque" ? (
+                    <div className="space-y-1.5 max-w-[160px]">
+                      <label className="text-sm font-medium">Quantidade *</label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        max={stockInfo?.quantidade_maxima ?? undefined}
+                        placeholder="0"
+                        value={draftQty}
+                        onChange={(e) => setDraftQty(e.target.value)}
+                        disabled={!stockInfo || stockInfo.quantidade_maxima <= 0}
+                      />
+                    </div>
+                  ) : (
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1.5 col-span-2">
                       <label className="text-sm font-medium">Descrição *</label>
@@ -746,8 +878,11 @@ function ProductsPage() {
                       <Input type="number" min="0" step="0.01" placeholder="0" value={draftQty} onChange={(e) => setDraftQty(e.target.value)} />
                     </div>
                   </div>
+                  )}
 
                   {/* Detalhes técnicos expansíveis */}
+                  {requestKind !== "estoque" && (
+                  <>
                   <button
                     type="button"
                     onClick={() => setShowDraftTechnical((v) => !v)}
@@ -850,6 +985,8 @@ function ProductsPage() {
                         </label>
                       </div>
                     </div>
+                  )}
+                  </>
                   )}
 
                   <div className="flex justify-end gap-2 pt-1">

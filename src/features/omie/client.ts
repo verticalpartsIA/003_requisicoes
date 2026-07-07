@@ -1,4 +1,4 @@
-import { validateOmieOrder, validateOmieProduct, listOmieActiveStock } from "@/features/omie/api";
+import { validateOmieOrder, validateOmieProduct, listOmieActiveStock, getOmieStockPosition } from "@/features/omie/api";
 
 export async function validateOmieOrderClient(numeroPedido: string) {
   return validateOmieOrder({ data: { numeroPedido } });
@@ -10,4 +10,8 @@ export async function validateOmieProductClient(codigoProduto: string) {
 
 export async function listOmieActiveStockClient() {
   return listOmieActiveStock();
+}
+
+export async function getOmieStockPositionClient(codigoProduto: string) {
+  return getOmieStockPosition({ data: { codigoProduto } });
 }

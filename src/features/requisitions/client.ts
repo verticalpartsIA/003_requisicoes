@@ -23,6 +23,14 @@ export async function deleteRequisitionClient(requisitionId: string, actorId: st
   await deleteRequisition({ data: { requisitionId, actorId } });
 }
 
+export interface ProductStockSnapshot {
+  estoque_fisico: number;
+  estoque_reservado: number;
+  estoque_disponivel: number;
+  estoque_minimo: number;
+  quantidade_maxima: number;
+}
+
 export interface ProductItemInput {
   productCode?: string | null;
   productName: string;
@@ -34,6 +42,7 @@ export interface ProductItemInput {
   referenceLinks: string[];
   onlinePurchaseSuggestion: string;
   photoPath?: string | null;
+  stockSnapshot?: ProductStockSnapshot | null;
 }
 
 export interface ProductRequisitionInput {
@@ -42,6 +51,7 @@ export interface ProductRequisitionInput {
   deliveryLocation: string;
   urgencyLevel: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   justification: string;
+  requestKind?: "consumo" | "revenda" | "estoque";
   revenda: boolean;
   pedidoVendaNumero?: string | null;
   pedidoVendaVendedor?: string | null;
@@ -110,8 +120,10 @@ export async function createProductRequisitionClient(input: ProductRequisitionIn
           reference_links: item.referenceLinks,
           online_purchase_suggestion: item.onlinePurchaseSuggestion,
           photo_path: item.photoPath ?? null,
+          stock_snapshot: item.stockSnapshot ?? null,
         })),
         delivery_location: input.deliveryLocation,
+        request_kind: input.requestKind ?? "consumo",
         revenda: input.revenda,
         pedido_venda_numero: input.pedidoVendaNumero ?? null,
         pedido_venda_vendedor: input.pedidoVendaVendedor ?? null,

@@ -67,6 +67,59 @@ export const validateOmieProduct = createServerFn({ method: "POST" })
     };
   });
 
+export interface OmieStockPosition {
+  codigo: string;
+  descricao: string;
+  estoqueFisico: number;
+  estoqueReservado: number;
+  estoqueDisponivel: number;
+  estoqueMinimo: number;
+  /** Quanto ainda pode ser pedido sem passar do mínimo: max(0, mínimo - disponível). */
+  quantidadeMaxima: number;
+}
+
+export const getOmieStockPosition = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ codigoProduto: z.string().min(1) }))
+  .handler(async ({ data }): Promise<OmieStockPosition> => {
+    type ProdutoResp = {
+      codigo_produto: number;
+      codigo: string;
+      descricao: string;
+      inativo: string;
+    };
+    const produto = await omiePost<ProdutoResp>("geral/produtos", "ConsultarProduto", [
+      { codigo: data.codigoProduto },
+    ]);
+    if (!produto.descricao) throw new Error("Produto não encontrado no Omie.");
+    if (produto.inativo === "S") throw new Error("Este produto está inativo no Omie.");
+
+    type PosicaoResp = {
+      fisico: number;
+      reservado: number;
+      estoque_minimo: number;
+    };
+    const hoje = new Date();
+    const dataConsulta = `${String(hoje.getDate()).padStart(2, "0")}/${String(hoje.getMonth() + 1).padStart(2, "0")}/${hoje.getFullYear()}`;
+    const posicao = await omiePost<PosicaoResp>("estoque/consulta", "PosicaoEstoque", [
+      { id_prod: produto.codigo_produto, data: dataConsulta, apenas_saldo: "N" },
+    ]);
+
+    const fisico = posicao.fisico ?? 0;
+    const reservado = posicao.reservado ?? 0;
+    const disponivel = fisico - reservado;
+    const minimo = posicao.estoque_minimo ?? 0;
+
+    return {
+      codigo: produto.codigo || data.codigoProduto,
+      descricao: produto.descricao,
+      estoqueFisico: fisico,
+      estoqueReservado: reservado,
+      estoqueDisponivel: disponivel,
+      estoqueMinimo: minimo,
+      quantidadeMaxima: Math.max(0, minimo - disponivel),
+    };
+  });
+
 export interface OmieStockItem {
   codigo: string;
   descricao: string;
