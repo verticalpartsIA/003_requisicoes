@@ -97,6 +97,7 @@ export async function createProductRequisitionClient(input: ProductRequisitionIn
       requester_department: input.requesterDepartment,
       requester_profile_id: input.requesterProfileId ?? null,
       estimated_cost: null,
+      status: "GESTOR",
       module_data: {
         items: input.items.map((item) => ({
           product_code: item.productCode ?? null,
