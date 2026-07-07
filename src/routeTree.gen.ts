@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TripsRouteImport } from './routes/trips'
+import { Route as EstoqueOmieRouteImport } from './routes/estoque-omie'
 import { Route as ServicesRouteImport } from './routes/services'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RentalRouteImport } from './routes/rental'
@@ -30,6 +31,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const TripsRoute = TripsRouteImport.update({
   id: '/trips',
   path: '/trips',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EstoqueOmieRoute = EstoqueOmieRouteImport.update({
+  id: '/estoque-omie',
+  path: '/estoque-omie',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ServicesRoute = ServicesRouteImport.update({
@@ -118,6 +124,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/approval': typeof ApprovalRoute
+  '/estoque-omie': typeof EstoqueOmieRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/freight': typeof FreightRoute
   '/login': typeof LoginRoute
@@ -137,6 +144,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/approval': typeof ApprovalRoute
+  '/estoque-omie': typeof EstoqueOmieRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/freight': typeof FreightRoute
   '/login': typeof LoginRoute
@@ -157,6 +165,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/approval': typeof ApprovalRoute
+  '/estoque-omie': typeof EstoqueOmieRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/freight': typeof FreightRoute
   '/login': typeof LoginRoute
@@ -178,6 +187,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/analytics'
     | '/approval'
+    | '/estoque-omie'
     | '/forgot-password'
     | '/freight'
     | '/login'
@@ -197,6 +207,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/analytics'
     | '/approval'
+    | '/estoque-omie'
     | '/forgot-password'
     | '/freight'
     | '/login'
@@ -216,6 +227,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/analytics'
     | '/approval'
+    | '/estoque-omie'
     | '/forgot-password'
     | '/freight'
     | '/login'
@@ -236,6 +248,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   AnalyticsRoute: typeof AnalyticsRoute
   ApprovalRoute: typeof ApprovalRoute
+  EstoqueOmieRoute: typeof EstoqueOmieRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   FreightRoute: typeof FreightRoute
   LoginRoute: typeof LoginRoute
@@ -351,6 +364,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApprovalRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/estoque-omie': {
+      id: '/estoque-omie'
+      path: '/estoque-omie'
+      fullPath: '/estoque-omie'
+      preLoaderRoute: typeof EstoqueOmieRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/analytics': {
       id: '/analytics'
       path: '/analytics'
@@ -380,6 +400,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   AnalyticsRoute: AnalyticsRoute,
   ApprovalRoute: ApprovalRoute,
+  EstoqueOmieRoute: EstoqueOmieRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   FreightRoute: FreightRoute,
   LoginRoute: LoginRoute,

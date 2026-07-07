@@ -14,6 +14,7 @@ import {
   ScrollText,
   LayoutDashboard,
   Shield,
+  Boxes,
 } from "lucide-react";
 import {
   Sidebar,
@@ -55,6 +56,10 @@ const system = [
   { title: "Admin", url: "/admin", icon: Shield },
 ];
 
+const integrations = [
+  { title: "Estoque Omie", url: "/estoque-omie", icon: Boxes },
+];
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
@@ -80,6 +85,9 @@ export function AppSidebar() {
     if (item.url === "/admin") return hasRole("admin");
     return false;
   });
+  const visibleIntegrations = integrations.filter(() => (
+    hasRole("admin") || hasRole("comprador") || hasRole("almoxarife")
+  ));
 
   const handleSignOut = async () => {
     try {
@@ -142,6 +150,7 @@ export function AppSidebar() {
         {visibleSystem.length > 0 && renderGroup("Sistema", visibleSystem)}
         {visibleModules.length > 0 && renderGroup("Requisições", visibleModules)}
         {visibleWorkflows.length > 0 && renderGroup("Fluxos", visibleWorkflows)}
+        {visibleIntegrations.length > 0 && renderGroup("Integrações", visibleIntegrations)}
       </SidebarContent>
 
       <SidebarFooter className="p-4">

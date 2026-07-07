@@ -66,3 +66,56 @@ export const validateOmieProduct = createServerFn({ method: "POST" })
       descricao: produto.descricao,
     };
   });
+
+export interface OmieStockItem {
+  codigo: string;
+  descricao: string;
+  estoqueMinimo: number;
+  estoqueMaximo: number | null;
+}
+
+export const listOmieActiveStock = createServerFn({ method: "GET" }).handler(async () => {
+  type ProdutoItem = {
+    codigo: string;
+    descricao: string;
+    inativo: string; // "S" | "N"
+    estoque_minimo?: number;
+    // Omie não expõe "estoque máximo" nesta conta — nem em ListarProdutos
+    // nem em estoque/consulta ListarPosEstoque (confirmado manualmente).
+  };
+  type ListarProdutosResp = {
+    total_de_paginas: number;
+    produto_servico_cadastro: ProdutoItem[];
+  };
+
+  const REGISTROS_POR_PAGINA = 500;
+  const MAX_PAGINAS = 60; // trava de segurança (~30k produtos)
+
+  const produtos: ProdutoItem[] = [];
+  let pagina = 1;
+  let totalPaginas = 1;
+
+  do {
+    const resp = await omiePost<ListarProdutosResp>("geral/produtos", "ListarProdutos", [
+      {
+        pagina,
+        registros_por_pagina: REGISTROS_POR_PAGINA,
+        apenas_importado_api: "N",
+        filtrar_apenas_omiepdv: "N",
+      },
+    ]);
+    produtos.push(...(resp.produto_servico_cadastro ?? []));
+    totalPaginas = resp.total_de_paginas ?? 1;
+    pagina += 1;
+  } while (pagina <= totalPaginas && pagina <= MAX_PAGINAS);
+
+  return produtos
+    .filter((p) => p.inativo !== "S")
+    .map((p): OmieStockItem => ({
+      codigo: p.codigo,
+      descricao: p.descricao,
+      estoqueMinimo: p.estoque_minimo ?? 0,
+      estoqueMaximo: null,
+    }))
+    .sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR"));
+});
