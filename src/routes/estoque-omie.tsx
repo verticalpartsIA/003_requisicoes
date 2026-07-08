@@ -25,6 +25,20 @@ function hojeISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+type StatusCor = "vermelha" | "amarela" | "branca";
+
+function statusDoItem(item: OmiePurchaseSuggestionItem): StatusCor {
+  if (item.sugestaoCompra > 0) return "vermelha";
+  if (item.estoqueDisponivel <= item.estoqueMinimo) return "amarela";
+  return "branca";
+}
+
+const LINHA_CLASSES: Record<StatusCor, string> = {
+  vermelha: "bg-red-300 text-black hover:bg-red-400/80",
+  amarela: "bg-yellow-300 text-black hover:bg-yellow-400/80",
+  branca: "bg-white text-black hover:bg-neutral-100",
+};
+
 function CurvaBadge({ curva }: { curva: OmiePurchaseSuggestionItem["curva"] }) {
   const cores: Record<string, string> = {
     A: "bg-emerald-100 text-emerald-800",
@@ -140,6 +154,7 @@ function EstoqueOmiePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [corFiltro, setCorFiltro] = useState<"todas" | StatusCor>("todas");
 
   const load = async () => {
     setLoading(true);
@@ -163,14 +178,15 @@ function EstoqueOmiePage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (i) => i.codigo.toLowerCase().includes(q) || i.descricao.toLowerCase().includes(q),
-    );
-  }, [items, search]);
+    return items.filter((i) => {
+      const combinaTexto = !q || i.codigo.toLowerCase().includes(q) || i.descricao.toLowerCase().includes(q);
+      const combinaCor = corFiltro === "todas" || statusDoItem(i) === corFiltro;
+      return combinaTexto && combinaCor;
+    });
+  }, [items, search, corFiltro]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
@@ -201,14 +217,41 @@ function EstoqueOmiePage() {
         </div>
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por código ou descrição..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative max-w-sm flex-1 min-w-[240px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por código ou descrição..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          {(
+            [
+              { value: "todas", label: "Todas", dot: "bg-transparent border border-border" },
+              { value: "vermelha", label: "Vermelha — precisa comprar", dot: "bg-red-400" },
+              { value: "amarela", label: "Amarela — alerta", dot: "bg-yellow-400" },
+              { value: "branca", label: "Branca — ok", dot: "bg-white border border-border" },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setCorFiltro(opt.value)}
+              title={opt.label}
+              className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                corFiltro === opt.value
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border bg-background text-foreground hover:bg-muted"
+              }`}
+            >
+              <span className={`h-2.5 w-2.5 rounded-full ${opt.dot}`} />
+              {opt.value === "todas" ? "Todas" : opt.label.split(" — ")[0]}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error && (
@@ -252,29 +295,26 @@ function EstoqueOmiePage() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((item) => (
-                    <tr key={item.codigo} className="border-b border-border last:border-0 hover:bg-muted/40">
-                      <td className="px-4 py-2.5 font-mono text-xs">{item.codigo}</td>
-                      <td className="px-4 py-2.5">{item.descricao}</td>
-                      <td className="px-3 py-2.5 text-center">
-                        <CurvaBadge curva={item.curva} />
-                      </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueFisico}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueReservado}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{item.estoqueDisponivel}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{item.estoqueMinimo}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums font-semibold">
-                        {item.sugestaoCompra > 0 ? (
-                          <span className="text-vp-yellow-dark">{item.sugestaoCompra}</span>
-                        ) : (
-                          <span className="text-muted-foreground">0</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
-                        <ComprarPopover item={item} onSalvo={() => void load()} />
-                      </td>
-                    </tr>
-                  ))
+                  filtered.map((item) => {
+                    const status = statusDoItem(item);
+                    return (
+                      <tr key={item.codigo} className={`border-b border-border last:border-0 ${LINHA_CLASSES[status]}`}>
+                        <td className="px-4 py-2.5 font-mono text-xs">{item.codigo}</td>
+                        <td className="px-4 py-2.5">{item.descricao}</td>
+                        <td className="px-3 py-2.5 text-center">
+                          <CurvaBadge curva={item.curva} />
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueFisico}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueReservado}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{item.estoqueDisponivel}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueMinimo}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{item.sugestaoCompra || 0}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <ComprarPopover item={item} onSalvo={() => void load()} />
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
