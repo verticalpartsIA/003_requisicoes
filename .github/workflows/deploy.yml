@@ -16,7 +16,7 @@ jobs:
           username: ${{ secrets.HOSTINGER_SSH_USER }}
           password: ${{ secrets.HOSTINGER_SSH_PASS }}
           port: 65002
-          command_timeout: 8m
+          command_timeout: 15m
           script: |
             D=$HOME/domains/vprequisicoes.vpsistema.com
             NODE=/opt/alt/alt-nodejs22/root/bin/node
@@ -26,6 +26,10 @@ jobs:
             git fetch origin main && git reset --hard origin/main
             echo "=== symlink .env de runtime (vars do painel) ==="
             ln -sfn $D/public_html/.builds/config/.env $D/nodejs/.env && ls -la .env || true
+            echo "=== instala dependencias ==="
+            npm ci || npm install
+            echo "=== builda o front (dist/ nao vai pro git, precisa gerar aqui) ==="
+            npm run build
             echo "=== valida require(server.js) como o Passenger faz ==="
             if PORT=3199 timeout 15 $NODE -e "require('./server.js'); setTimeout(() => process.exit(0), 3000);" > /tmp/vpreq-req.log 2>&1; then
               echo "REQUIRE OK — server.js compativel com Passenger"
