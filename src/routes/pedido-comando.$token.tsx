@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Loader2,
   AlertTriangle,
@@ -370,7 +370,7 @@ function RadioPills({
           type="button"
           onClick={() => onChange(opt.value)}
           className={cn(
-            "rounded-md border-2 px-3.5 py-2 text-sm font-medium transition-all",
+            "min-h-[44px] rounded-md border-2 px-3.5 py-2 text-sm font-medium transition-all sm:min-h-0",
             value === opt.value
               ? "border-vp-yellow bg-amber-50 text-vp-yellow-dark"
               : "border-border bg-muted/20 hover:border-muted-foreground/40",
@@ -684,6 +684,14 @@ function PedidoComandoPage() {
 
   const handleBack = () => setStep((s) => Math.max(s - 1, 0));
 
+  // Mobile: ao trocar de etapa, volta ao topo e centraliza o ícone da etapa
+  // ativa na faixa de navegação (que rola horizontalmente em telas pequenas).
+  const stepBtnRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    stepBtnRefs.current[step]?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [step]);
+
   const handleSubmit = async () => {
     if (!validateStep(step)) return;
     setSubmitting(true);
@@ -784,10 +792,10 @@ function PedidoComandoPage() {
   return (
     <PublicShell wide>
       <Card className="w-full max-w-3xl border-vp-yellow/40 shadow-xl shadow-amber-100/70">
-        <CardHeader className="space-y-4">
+        <CardHeader className="space-y-4 px-4 sm:px-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <CardTitle className="text-xl">Formulário de Pedido — Sistema de Comando</CardTitle>
+              <CardTitle className="text-lg sm:text-xl">Formulário de Pedido — Sistema de Comando</CardTitle>
               <CardDescription>
                 {pedido?.numero_documento ? `Documento ${pedido.numero_documento}` : "Elevadores VerticalParts"}
                 {pedido?.cliente_nome ? ` · ${pedido.cliente_nome}` : ""}
@@ -807,6 +815,9 @@ function PedidoComandoPage() {
                 <button
                   key={meta.key}
                   type="button"
+                  ref={(el) => {
+                    stepBtnRefs.current[idx] = el;
+                  }}
                   onClick={() => {
                     if (idx < step) setStep(idx);
                   }}
@@ -830,7 +841,7 @@ function PedidoComandoPage() {
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-5">
+        <CardContent className="space-y-5 px-4 sm:px-6">
           {currentMeta.key === "comerciais" && (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-1.5">
@@ -1388,16 +1399,26 @@ function PedidoComandoPage() {
           )}
         </CardContent>
 
-        <div className="flex items-center justify-between gap-3 border-t p-6 pt-4">
-          <Button variant="outline" onClick={handleBack} disabled={step === 0 || submitting}>
+        <div className="sticky bottom-0 z-10 flex items-center justify-between gap-3 rounded-b-xl border-t bg-card/95 p-4 backdrop-blur sm:static sm:bg-card sm:p-6 sm:pt-4">
+          <Button
+            variant="outline"
+            onClick={handleBack}
+            disabled={step === 0 || submitting}
+            className="h-11 flex-1 sm:h-10 sm:flex-none"
+          >
             <ChevronLeft className="mr-1 h-4 w-4" /> Voltar
           </Button>
           {step < STEP_META.length - 1 ? (
-            <Button variant="vp" onClick={handleNext}>
+            <Button variant="vp" onClick={handleNext} className="h-11 flex-1 sm:h-10 sm:flex-none">
               Próximo <ChevronRight className="ml-1 h-4 w-4" />
             </Button>
           ) : (
-            <Button variant="vp" onClick={() => void handleSubmit()} disabled={submitting}>
+            <Button
+              variant="vp"
+              onClick={() => void handleSubmit()}
+              disabled={submitting}
+              className="h-11 flex-1 sm:h-10 sm:flex-none"
+            >
               <Send className="mr-1 h-4 w-4" /> {submitting ? "Enviando..." : "Enviar Respostas"}
             </Button>
           )}
@@ -1544,7 +1565,7 @@ function PublicShell({ children, wide }: { children: React.ReactNode; wide?: boo
   return (
     <div
       className={cn(
-        "min-h-screen bg-[radial-gradient(circle_at_top,#fce588_0%,#fff8dc_18%,#faf8f2_45%,#f4f1e8_100%)] px-4 py-8",
+        "min-h-screen bg-[radial-gradient(circle_at_top,#fce588_0%,#fff8dc_18%,#faf8f2_45%,#f4f1e8_100%)] px-3 py-5 sm:px-4 sm:py-8",
         "flex flex-col items-center",
         wide ? "justify-start" : "justify-center",
       )}
