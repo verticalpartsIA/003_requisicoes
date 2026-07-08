@@ -37,7 +37,9 @@ import {
   reabrirComandoPedido,
   comandoPublicUrl,
   comandoWhatsAppLink,
+  comandoWhatsAppMessage,
 } from "@/features/comando/client";
+import { enviarWhatsAppComando } from "@/features/comando/api";
 import {
   COMANDO_SECOES,
   COMANDO_STATUS_LABELS,
@@ -310,8 +312,22 @@ function ComandoPage() {
         await refreshDetail(pedido.id);
       }
       const url = comandoPublicUrl(pedido.token);
-      const link = comandoWhatsAppLink(pedido.cliente_telefone, url, pedido.numero_documento);
-      window.open(link, "_blank", "noopener,noreferrer");
+      // Envio direto pelo gateway interno de WhatsApp; se o gateway estiver
+      // fora do ar, cai no wa.me (mensagem pré-preenchida no WhatsApp Web).
+      try {
+        await enviarWhatsAppComando({
+          data: {
+            telefone: pedido.cliente_telefone,
+            texto: comandoWhatsAppMessage(url, pedido.numero_documento),
+          },
+        });
+        toast.success(`Mensagem enviada no WhatsApp de ${pedido.cliente_nome}. ✅`);
+      } catch (sendErr) {
+        console.warn("[comando] envio direto falhou, abrindo wa.me:", sendErr);
+        toast.info("Gateway indisponível — abrindo WhatsApp Web com a mensagem pronta.");
+        const link = comandoWhatsAppLink(pedido.cliente_telefone, url, pedido.numero_documento);
+        window.open(link, "_blank", "noopener,noreferrer");
+      }
     } catch (err) {
       toast.error(friendlySupabaseError(err));
     } finally {

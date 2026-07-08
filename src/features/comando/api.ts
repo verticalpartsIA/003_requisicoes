@@ -40,6 +40,44 @@ function isExpired(pedido: Pick<ComandoPedido, "expires_at">) {
   return !!pedido.expires_at && new Date(pedido.expires_at).getTime() < Date.now();
 }
 
+// ─── Envio direto de WhatsApp (gateway interno VerticalParts) ─────────────────
+// Envia a mensagem de verdade para o número do cliente, sem depender do
+// WhatsApp Web aberto no navegador do vendedor.
+
+function evolutionConfig() {
+  return {
+    url: process.env.EVOLUTION_URL ?? "http://72.61.48.156:8080",
+    apikey: process.env.EVOLUTION_APIKEY ?? "suporte123",
+    instance: process.env.EVOLUTION_INSTANCE ?? "pv360",
+  };
+}
+
+export const enviarWhatsAppComando = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      telefone: z.string().min(8),
+      texto: z.string().min(1).max(4000),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const digits = data.telefone.replace(/\D/g, "");
+    const number = digits.length <= 11 ? `55${digits}` : digits;
+
+    const evo = evolutionConfig();
+    const resp = await fetch(`${evo.url}/message/sendText/${evo.instance}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: evo.apikey },
+      body: JSON.stringify({ number, text: data.texto }),
+    });
+    const result = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!resp.ok) {
+      const detail = (result?.message as string) ?? (result?.error as string) ?? `HTTP ${resp.status}`;
+      throw new Error(`Gateway WhatsApp: ${JSON.stringify(detail)}`);
+    }
+
+    return { ok: true };
+  });
+
 // ─── Buscar pedido pelo token (e marcar como visualizado) ────────────────────
 
 export const getPedidoPublico = createServerFn({ method: "GET" })

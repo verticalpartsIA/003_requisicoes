@@ -131,12 +131,16 @@ export function comandoPublicUrl(token: string) {
   return `${base}/pedido-comando/${token}`;
 }
 
+export function comandoWhatsAppMessage(url: string, numeroDocumento: string) {
+  return (
+    `Olá! Segue o formulário técnico ${numeroDocumento} para levantamento do seu Quadro de Comando de Elevador. ` +
+    `Por favor, preencha pelo link abaixo:\n${url}\n\n` +
+    `O link é válido por ${COMANDO_LINK_EXPIRATION_DAYS} dias. Qualquer dúvida, estamos à disposição!`
+  );
+}
+
 export function comandoWhatsAppLink(telefone: string, url: string, numeroDocumento: string) {
   const digits = telefone.replace(/\D/g, "");
   const phone = digits.length <= 11 ? `55${digits}` : digits;
-  const message =
-    `Olá! Segue o formulário técnico ${numeroDocumento} para levantamento do seu Quadro de Comando de Elevador. ` +
-    `Por favor, preencha pelo link abaixo:\n${url}\n\n` +
-    `O link é válido por ${COMANDO_LINK_EXPIRATION_DAYS} dias. Qualquer dúvida, estamos à disposição!`;
-  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+  return `https://wa.me/${phone}?text=${encodeURIComponent(comandoWhatsAppMessage(url, numeroDocumento))}`;
 }
