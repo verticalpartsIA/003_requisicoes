@@ -41,7 +41,7 @@ const modules = [
   { title: "M4 - Manutenção", url: "/maintenance", icon: HardHat },
   { title: "M5 - Frete", url: "/freight", icon: Truck },
   { title: "M6 - Locação", url: "/rental", icon: Key },
-  { title: "M7 - Quadro de Comando", url: "/comando", icon: Settings2 },
+  { title: "M7 - Quadro Comando", url: "/comando", icon: Settings2 },
 ];
 
 const workflows = [
@@ -61,6 +61,19 @@ const system = [
 const integrations = [
   { title: "Estoque Omie", url: "/estoque-omie", icon: Boxes },
 ];
+
+/** Nome de exibição: usa o nome do perfil; sem ele, monta a partir do e-mail
+ *  ("gelson.simoes@..." → "Gelson Simoes"), nunca exibindo o e-mail cru. */
+function displayName(fullName?: string | null, email?: string | null) {
+  if (fullName?.trim()) return fullName.trim();
+  const local = email?.split("@")[0];
+  if (!local) return "Usuário autenticado";
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(" ");
+}
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -160,13 +173,18 @@ export function AppSidebar() {
           <div className="rounded-lg bg-sidebar-accent p-3 space-y-3">
             <div>
               <p className="text-sm font-semibold text-sidebar-foreground">
-                {profile?.full_name || profile?.email || "Usuário autenticado"}
+                {displayName(profile?.full_name, profile?.email)}
               </p>
               <p className="text-[11px] text-sidebar-foreground/60">
                 {(roles.length > 0 ? roles.join(" • ") : "Sem papel definido").replaceAll("_", " ")}
               </p>
             </div>
-            <Button variant="outline" size="sm" className="w-full" onClick={handleSignOut}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full border-sidebar-foreground/30 bg-transparent font-semibold text-sidebar-foreground hover:border-vp-yellow hover:bg-vp-yellow/10 hover:text-vp-yellow"
+              onClick={handleSignOut}
+            >
               Sair
             </Button>
           </div>
