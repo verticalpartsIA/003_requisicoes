@@ -82,16 +82,22 @@ function FreightPage() {
   const [editReqId, setEditReqId] = useState<string | null>(null);
   const [editEdition, setEditEdition] = useState(1);
   const [editCargoPhotoPath, setEditCargoPhotoPath] = useState<string | null>(null);
+  const [editCargoPicPaths, setEditCargoPicPaths] = useState<string[]>([]);
 
   const [originAddress, setOriginAddress] = useState("");
   const [destinationAddress, setDestinationAddress] = useState("");
   const [vehicleType, setVehicleType] = useState("");
+  const [projectNumber, setProjectNumber] = useState("");
 
   const [cargoDescription, setCargoDescription] = useState("");
+  const [receiverName, setReceiverName] = useState("");
+  const [receiverPhone, setReceiverPhone] = useState("");
   const [unloadingLocation, setUnloadingLocation] = useState("");
   const [cargoPhotoFile, setCargoPhotoFile] = useState<File | null>(null);
   const [cargoPhotoPreview, setCargoPhotoPreview] = useState<string | null>(null);
   const [cargoPhotoDescription, setCargoPhotoDescription] = useState("");
+  const [cargoPicFiles, setCargoPicFiles] = useState<File[]>([]);
+  const [cargoPicPreviews, setCargoPicPreviews] = useState<string[]>([]);
   const [weight, setWeight] = useState("");
   const [dimensions, setDimensions] = useState("");
   const [fragile, setFragile] = useState(false);
@@ -99,8 +105,28 @@ function FreightPage() {
 
   const [pickupDate, setPickupDate] = useState<Date | undefined>();
   const [pickupDateOpen, setPickupDateOpen] = useState(false);
+  const [unloadingDate, setUnloadingDate] = useState<Date | undefined>();
+  const [unloadingDateOpen, setUnloadingDateOpen] = useState(false);
+  const [allowedSchedule, setAllowedSchedule] = useState("");
+  const [accessRestriction, setAccessRestriction] = useState("");
+  const [needsCityHallAuthorization, setNeedsCityHallAuthorization] = useState(false);
   const [urgencyLevel, setUrgencyLevel] = useState("");
   const [justification, setJustification] = useState("");
+
+  const handleCargoPics = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const newFiles = Array.from(files);
+    setCargoPicFiles((prev) => [...prev, ...newFiles]);
+    setCargoPicPreviews((prev) => [...prev, ...newFiles.map((f) => URL.createObjectURL(f))]);
+  };
+
+  const removeCargoPic = (idx: number) => {
+    setCargoPicPreviews((prev) => {
+      URL.revokeObjectURL(prev[idx]);
+      return prev.filter((_, i) => i !== idx);
+    });
+    setCargoPicFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
 
   const insuranceCost = useMemo(() => {
     const val = parseFloat(declaredValue.replace(",", "."));
@@ -136,7 +162,10 @@ function FreightPage() {
       if (typeof s.originAddress === 'string') setOriginAddress(s.originAddress);
       if (typeof s.destinationAddress === 'string') setDestinationAddress(s.destinationAddress);
       if (typeof s.vehicleType === 'string') setVehicleType(s.vehicleType);
+      if (typeof s.projectNumber === 'string') setProjectNumber(s.projectNumber);
       if (typeof s.cargoDescription === 'string') setCargoDescription(s.cargoDescription);
+      if (typeof s.receiverName === 'string') setReceiverName(s.receiverName);
+      if (typeof s.receiverPhone === 'string') setReceiverPhone(s.receiverPhone);
       if (typeof s.unloadingLocation === 'string') setUnloadingLocation(s.unloadingLocation);
       if (typeof s.cargoPhotoDescription === 'string') setCargoPhotoDescription(s.cargoPhotoDescription);
       if (typeof s.weight === 'string') setWeight(s.weight);
@@ -144,6 +173,10 @@ function FreightPage() {
       if (typeof s.fragile === 'boolean') setFragile(s.fragile);
       if (typeof s.declaredValue === 'string') setDeclaredValue(s.declaredValue);
       if (typeof s.pickupDate === 'string') setPickupDate(new Date(s.pickupDate));
+      if (typeof s.unloadingDate === 'string') setUnloadingDate(new Date(s.unloadingDate));
+      if (typeof s.allowedSchedule === 'string') setAllowedSchedule(s.allowedSchedule);
+      if (typeof s.accessRestriction === 'string') setAccessRestriction(s.accessRestriction);
+      if (typeof s.needsCityHallAuthorization === 'boolean') setNeedsCityHallAuthorization(s.needsCityHallAuthorization);
       if (typeof s.urgencyLevel === 'string') setUrgencyLevel(s.urgencyLevel);
       if (typeof s.justification === 'string') setJustification(s.justification);
     } catch { /* ignore */ }
@@ -165,19 +198,27 @@ function FreightPage() {
       setEditReqId(data.id as string);
       setEditEdition((data.edition as number | undefined) ?? 1);
       setEditCargoPhotoPath((md.cargo_photo_path as string | null) ?? null);
+      setEditCargoPicPaths((md.cargo_photos_paths as string[] | undefined) ?? []);
       setOriginAddress((md.origin_address as string | undefined) ?? "");
       setDestinationAddress((md.destination_address as string | undefined) ?? "");
       setVehicleType((md.vehicle_type as string | undefined) ?? "");
+      setProjectNumber((md.project_number as string | undefined) ?? "");
       setCargoDescription((data.description as string) ?? "");
+      setReceiverName((md.receiver_name as string | undefined) ?? "");
+      setReceiverPhone((md.receiver_phone as string | undefined) ?? "");
       setUnloadingLocation((md.unloading_location as string | undefined) ?? "");
       setCargoPhotoDescription((md.cargo_photo_description as string | undefined) ?? "");
       setWeight(String((md.weight_kg as number | undefined) ?? ""));
       setDimensions((md.dimensions as string | undefined) ?? "");
       setFragile((md.fragile as boolean | undefined) ?? false);
       setDeclaredValue(String((md.declared_value as number | undefined) ?? ""));
+      setAllowedSchedule((md.allowed_schedule as string | undefined) ?? "");
+      setAccessRestriction((md.access_restriction as string | undefined) ?? "");
+      setNeedsCityHallAuthorization((md.needs_city_hall_authorization as boolean | undefined) ?? false);
       setUrgencyLevel((data.urgency as string) ?? "");
       setJustification((data.justification as string) ?? "");
       if (data.desired_date) setPickupDate(new Date(data.desired_date as string));
+      if (md.unloading_date) setUnloadingDate(new Date(md.unloading_date as string));
       setStep(0);
       setDialogOpen(true);
     })();
@@ -187,25 +228,34 @@ function FreightPage() {
     if (!dialogOpen) return;
     try {
       sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
-        open: true, step, originAddress, destinationAddress, vehicleType,
-        cargoDescription, unloadingLocation, cargoPhotoDescription, weight, dimensions, fragile, declaredValue,
+        open: true, step, originAddress, destinationAddress, vehicleType, projectNumber,
+        cargoDescription, receiverName, receiverPhone, unloadingLocation, cargoPhotoDescription,
+        weight, dimensions, fragile, declaredValue,
         pickupDate: pickupDate?.toISOString(),
+        unloadingDate: unloadingDate?.toISOString(),
+        allowedSchedule, accessRestriction, needsCityHallAuthorization,
         urgencyLevel, justification,
       }));
     } catch { /* ignore */ }
-  }, [dialogOpen, step, originAddress, destinationAddress, vehicleType,
-      cargoDescription, unloadingLocation, cargoPhotoDescription, weight, dimensions, fragile, declaredValue,
-      pickupDate, urgencyLevel, justification]);
+  }, [dialogOpen, step, originAddress, destinationAddress, vehicleType, projectNumber,
+      cargoDescription, receiverName, receiverPhone, unloadingLocation, cargoPhotoDescription,
+      weight, dimensions, fragile, declaredValue,
+      pickupDate, unloadingDate, allowedSchedule, accessRestriction, needsCityHallAuthorization,
+      urgencyLevel, justification]);
 
   const resetForm = () => {
     sessionStorage.removeItem(DIALOG_KEY);
     setStep(0);
-    setOriginAddress(""); setDestinationAddress(""); setVehicleType("");
-    setCargoDescription(""); setUnloadingLocation("");
+    setOriginAddress(""); setDestinationAddress(""); setVehicleType(""); setProjectNumber("");
+    setCargoDescription(""); setReceiverName(""); setReceiverPhone(""); setUnloadingLocation("");
     if (cargoPhotoPreview) URL.revokeObjectURL(cargoPhotoPreview);
     setCargoPhotoFile(null); setCargoPhotoPreview(null); setCargoPhotoDescription("");
+    cargoPicPreviews.forEach((p) => URL.revokeObjectURL(p));
+    setCargoPicFiles([]); setCargoPicPreviews([]); setEditCargoPicPaths([]);
     setWeight(""); setDimensions(""); setFragile(false); setDeclaredValue("");
-    setPickupDate(undefined); setUrgencyLevel(""); setJustification("");
+    setPickupDate(undefined); setUnloadingDate(undefined);
+    setAllowedSchedule(""); setAccessRestriction(""); setNeedsCityHallAuthorization(false);
+    setUrgencyLevel(""); setJustification("");
   };
 
   const validateStep = (): boolean => {
@@ -216,9 +266,12 @@ function FreightPage() {
     }
     if (step === 1) {
       if (cargoDescription.length < 10) { toast.error("Descrição da carga deve ter pelo menos 10 caracteres."); return false; }
+      if (!receiverName.trim()) { toast.error("Informe o nome de quem vai receber a carga."); return false; }
+      if (!receiverPhone.trim()) { toast.error("Informe o telefone de quem vai receber a carga."); return false; }
     }
     if (step === 2) {
       if (!pickupDate) { toast.error("Informe a data de coleta."); return false; }
+      if (!unloadingDate) { toast.error("Informe a data da descarga."); return false; }
       if (!urgencyLevel) { toast.error("Selecione o nível de urgência."); return false; }
       if (justification.length < 10) { toast.error("Justificativa deve ter pelo menos 10 caracteres."); return false; }
     }
@@ -242,13 +295,34 @@ function FreightPage() {
         else cargoPhotoPath = uploadData.path;
       }
 
+      const newCargoPicPaths = await Promise.all(
+        cargoPicFiles.map(async (file, i) => {
+          const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+          const path = `m5/${user?.id ?? "anon"}/${Date.now()}_${i}.${ext}`;
+          const { data: uploadData, error: uploadError } = await supabaseBrowser.storage
+            .from("travel-docs")
+            .upload(path, file, { upsert: true });
+          if (uploadError) { console.warn("[cargo pic upload]", uploadError.message); return null; }
+          return uploadData.path;
+        }),
+      );
+      const cargoPicsPaths = [...editCargoPicPaths, ...newCargoPicPaths.filter((p): p is string => !!p)];
+
       const moduleData = {
         origin_address: originAddress,
         destination_address: destinationAddress,
         vehicle_type: vehicleType,
+        project_number: projectNumber || null,
+        receiver_name: receiverName,
+        receiver_phone: receiverPhone,
         unloading_location: unloadingLocation || null,
+        unloading_date: unloadingDate?.toISOString().slice(0, 10) ?? null,
+        allowed_schedule: allowedSchedule || null,
+        access_restriction: accessRestriction || null,
+        needs_city_hall_authorization: needsCityHallAuthorization,
         cargo_photo_path: cargoPhotoPath,
         cargo_photo_description: cargoPhotoDescription || null,
+        cargo_photos_paths: cargoPicsPaths.length > 0 ? cargoPicsPaths : null,
         weight_kg: weight ? parseFloat(weight) : null,
         dimensions,
         fragile,
@@ -377,6 +451,14 @@ function FreightPage() {
           {step === 0 && (
             <div className="space-y-4">
               <div className="space-y-1.5">
+                <label className="text-sm font-medium">Nº Projeto</label>
+                <Input
+                  placeholder="Ex.: 28978"
+                  value={projectNumber}
+                  onChange={(e) => setProjectNumber(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
                 <label className="text-sm font-medium">Endereço de Origem *</label>
                 <Input
                   placeholder="Ex.: São Paulo, SP — Rua das Indústrias, 100"
@@ -410,6 +492,19 @@ function FreightPage() {
                 <label className="text-sm font-medium">Descrição da Carga *</label>
                 <Textarea placeholder="O que será transportado? Quantidade, tipo..." value={cargoDescription} onChange={(e) => setCargoDescription(e.target.value)} rows={3} maxLength={500} />
                 <p className="text-[11px] text-muted-foreground">{cargoDescription.length}/500</p>
+              </div>
+              <div className="space-y-2 rounded-lg border p-3">
+                <label className="text-sm font-medium">Quem vai receber a carga? *</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground">Nome</label>
+                    <Input placeholder="Nome do responsável" value={receiverName} onChange={(e) => setReceiverName(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground">Telefone</label>
+                    <Input placeholder="(00) 00000-0000" value={receiverPhone} onChange={(e) => setReceiverPhone(e.target.value)} />
+                  </div>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
@@ -512,6 +607,49 @@ function FreightPage() {
                   />
                 )}
               </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium flex items-center gap-1">
+                  📸 Tem fotos da carga?
+                  <span className="text-muted-foreground font-normal text-[11px]">(ajuda na cotação)</span>
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  id="cargo-pics"
+                  onChange={(e) => { handleCargoPics(e.target.files); e.target.value = ""; }}
+                />
+                <label
+                  htmlFor="cargo-pics"
+                  className="flex items-center gap-2 rounded-lg border-2 border-dashed p-3 cursor-pointer transition-colors border-border hover:border-muted-foreground/50 w-fit"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  <span className="text-xs font-medium">📎 Adicionar fotos</span>
+                </label>
+                {(cargoPicPreviews.length > 0 || editCargoPicPaths.length > 0) && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {cargoPicPreviews.map((preview, idx) => (
+                      <div key={preview} className="relative">
+                        <img src={preview} alt={`Foto da carga ${idx + 1}`} className="h-16 w-16 rounded object-cover border" />
+                        <button
+                          type="button"
+                          onClick={() => removeCargoPic(idx)}
+                          className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground text-xs leading-none"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    {editCargoPicPaths.map((path) => (
+                      <div key={path} className="flex h-16 w-16 items-center justify-center rounded border bg-green-50">
+                        <ImageIcon className="h-5 w-5 text-green-600" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -532,6 +670,50 @@ function FreightPage() {
                   </PopoverContent>
                 </Popover>
               </div>
+
+              <div className="space-y-3 rounded-lg border p-3">
+                <label className="text-sm font-medium">Quando precisa? *</label>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">Data da descarga</label>
+                  <Popover open={unloadingDateOpen} onOpenChange={setUnloadingDateOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !unloadingDate && "text-muted-foreground")}>
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {unloadingDate ? format(unloadingDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecione a data"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar mode="single" selected={unloadingDate} onSelect={(d) => { setUnloadingDate(d); setUnloadingDateOpen(false); }}
+                        disabled={(d) => d < (pickupDate ?? addDays(new Date(), 1))} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">Horário permitido</label>
+                  <Input
+                    placeholder="Ex.: Seg-Sex, 8h-17h"
+                    value={allowedSchedule}
+                    onChange={(e) => setAllowedSchedule(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">Tem alguma restrição de acesso?</label>
+                  <Textarea
+                    placeholder="Ex.: Rua estreita, horário limitado..."
+                    value={accessRestriction}
+                    onChange={(e) => setAccessRestriction(e.target.value)}
+                    rows={2}
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div>
+                    <label className="text-sm font-medium">Precisa avisar a Prefeitura?</label>
+                    <p className="text-xs text-muted-foreground">Ex.: pegar autorização de acesso/carga e descarga</p>
+                  </div>
+                  <Switch checked={needsCityHallAuthorization} onCheckedChange={setNeedsCityHallAuthorization} />
+                </div>
+              </div>
+
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Nível de Urgência *</label>
                 <div className="grid grid-cols-4 gap-2">

@@ -822,6 +822,11 @@ function StoragePhoto({ path, bucket = "travel-docs", alt }: { path: string; buc
 
 function ModuleDataSection({ module, data }: { module: string; data: Record<string, unknown> }) {
   const f = (v: unknown) => (v != null && v !== "" ? String(v) : "—");
+  const fDate = (v: unknown) => {
+    if (typeof v !== "string" || !v) return "—";
+    const [y, m, d] = v.slice(0, 10).split("-");
+    return y && m && d ? `${d}/${m}/${y}` : v;
+  };
 
   const rows: Array<{ label: string; value: string; full?: boolean }> = [];
 
@@ -856,11 +861,6 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
       </div>
     );
   } else if (module === "M2") {
-    const fDate = (v: unknown) => {
-      if (typeof v !== "string" || !v) return "—";
-      const [y, m, d] = v.slice(0, 10).split("-");
-      return y && m && d ? `${d}/${m}/${y}` : v;
-    };
     const TRANSPORT_LABELS: Record<string, string> = {
       AVIAO: "Avião", CARRO_EMPRESA: "Carro da Empresa", CARRO_PROPRIO: "Carro Próprio", ONIBUS: "Ônibus",
     };
@@ -950,9 +950,18 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
     if (tripDetails) return tripDetails;
     if (data.traveler_name) rows.push({ label: "Viajante", value: f(data.traveler_name) });
   } else if (module === "M5") {
+    if (data.project_number) rows.push({ label: "Nº Projeto", value: f(data.project_number) });
     if (data.cargo_description) rows.push({ label: "Descrição da Carga", value: f(data.cargo_description), full: true });
+    if (data.receiver_name || data.receiver_phone) {
+      rows.push({ label: "Recebedor da Carga", value: `${f(data.receiver_name)} — ${f(data.receiver_phone)}`, full: true });
+    }
     if (data.unloading_location) rows.push({ label: "Local de Descarregamento", value: f(data.unloading_location), full: true });
+    if (data.unloading_date) rows.push({ label: "Data da Descarga", value: fDate(data.unloading_date) });
+    if (data.allowed_schedule) rows.push({ label: "Horário Permitido", value: f(data.allowed_schedule) });
+    if (data.access_restriction) rows.push({ label: "Restrição de Acesso", value: f(data.access_restriction), full: true });
+    if (data.needs_city_hall_authorization) rows.push({ label: "Autorização da Prefeitura", value: "Necessária" });
     if (data.cargo_photo_description) rows.push({ label: "Obs. da Foto", value: f(data.cargo_photo_description), full: true });
+    const cargoPics = data.cargo_photos_paths as string[] | undefined;
     return (
       <div className="space-y-2">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
@@ -969,8 +978,11 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
                 </div>
               ))}
               {typeof data.cargo_photo_path === "string" && data.cargo_photo_path && (
-                <StoragePhoto path={data.cargo_photo_path} alt="Foto da Carga" />
+                <StoragePhoto path={data.cargo_photo_path} alt="Foto do Local de Descarga" />
               )}
+              {cargoPics?.map((path, i) => (
+                <StoragePhoto key={path} path={path} alt={`Foto da Carga ${i + 1}`} />
+              ))}
             </div>
           </CardContent>
         </Card>
