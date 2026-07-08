@@ -25,6 +25,10 @@ function hojeISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function formatarNumero(valor: number) {
+  return Number(valor.toFixed(2)).toLocaleString("pt-BR");
+}
+
 type StatusCor = "vermelha" | "amarela" | "branca";
 
 function statusDoItem(item: OmiePurchaseSuggestionItem): StatusCor {
@@ -185,6 +189,22 @@ function EstoqueOmiePage() {
     });
   }, [items, search, corFiltro]);
 
+  const totais = useMemo(
+    () =>
+      filtered.reduce(
+        (acc, i) => ({
+          estoqueFisico: acc.estoqueFisico + i.estoqueFisico,
+          estoqueReservado: acc.estoqueReservado + i.estoqueReservado,
+          estoqueDisponivel: acc.estoqueDisponivel + i.estoqueDisponivel,
+          estoqueMinimo: acc.estoqueMinimo + i.estoqueMinimo,
+          sugestaoCompra: acc.sugestaoCompra + i.sugestaoCompra,
+          comprado: acc.comprado + i.comprado,
+        }),
+        { estoqueFisico: 0, estoqueReservado: 0, estoqueDisponivel: 0, estoqueMinimo: 0, sugestaoCompra: 0, comprado: 0 },
+      ),
+    [filtered],
+  );
+
   return (
     <div className="w-full space-y-6">
       <div className="flex items-center justify-between">
@@ -317,6 +337,21 @@ function EstoqueOmiePage() {
                   })
                 )}
               </tbody>
+              {!loading && filtered.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-border bg-muted/60 font-semibold">
+                    <td className="px-4 py-2.5" colSpan={3}>
+                      Total ({filtered.length} {filtered.length === 1 ? "produto" : "produtos"})
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{formatarNumero(totais.estoqueFisico)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{formatarNumero(totais.estoqueReservado)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{formatarNumero(totais.estoqueDisponivel)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{formatarNumero(totais.estoqueMinimo)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{formatarNumero(totais.sugestaoCompra)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{formatarNumero(totais.comprado)}</td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </CardContent>
