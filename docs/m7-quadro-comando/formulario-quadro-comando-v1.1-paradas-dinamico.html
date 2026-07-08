@@ -1,0 +1,1902 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Formulário de Pedido — Sistema de Comando para Elevador | VerticalParts</title>
+<style>
+  :root {
+    --orange:     #f5c800;
+    --orange-dk:  #c9a200;
+    --orange-lt:  #fffbe6;
+    --black:      #1a1a1a;
+    --dark:       #2d2d2d;
+    --gray:       #555;
+    --gray-lt:    #999;
+    --line:       #e0e0e0;
+    --bg:         #f5f5f5;
+    --white:      #ffffff;
+    --green:      #2e7d32;
+    --radius:     6px;
+    --shadow:     0 2px 8px rgba(0,0,0,0.09);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--dark);
+    font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  /* ─── BARRA SUPERIOR ──────────────────── */
+  .topbar {
+    background: var(--black);
+    padding: 7px 40px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 28px;
+    flex-wrap: wrap;
+  }
+  .topbar a, .topbar span {
+    font-size: 11.5px;
+    color: #bbb;
+    text-decoration: none;
+    font-family: 'Calibri', sans-serif;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: color .15s;
+  }
+  .topbar a:hover { color: var(--orange); }
+
+  /* ─── CABEÇALHO PRINCIPAL ─────────────── */
+  .main-header {
+    background: var(--white);
+    border-bottom: 3px solid var(--orange);
+    box-shadow: 0 2px 10px rgba(0,0,0,.07);
+  }
+  .header-inner {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .logo-block {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .logo-block img {
+    height: 50px;
+    object-fit: contain;
+  }
+  .logo-fallback {
+    display: none;
+    font-family: 'Calibri', sans-serif;
+    font-weight: 800;
+    font-size: 26px;
+    color: var(--black);
+    letter-spacing: -0.5px;
+  }
+  .logo-fallback span { color: var(--orange); }
+  .logo-divider {
+    width: 1.5px;
+    height: 42px;
+    background: var(--line);
+  }
+  .header-text h1 {
+    font-family: 'Calibri', sans-serif;
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--black);
+    line-height: 1.2;
+  }
+  .header-text p {
+    font-size: 11.5px;
+    color: var(--orange);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 3px;
+  }
+  .doc-badge {
+    text-align: right;
+  }
+  .doc-badge .ref {
+    display: inline-block;
+    background: var(--orange-lt);
+    border: 1px solid #f4792050;
+    color: var(--orange-dk);
+    font-size: 11.5px;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+    padding: 4px 13px;
+    border-radius: 20px;
+    letter-spacing: .5px;
+  }
+  .doc-badge .date {
+    font-size: 11px;
+    color: var(--gray-lt);
+    margin-top: 5px;
+  }
+
+  /* ─── FAIXA LARANJA ───────────────────── */
+  .stripe {
+    background: var(--orange);
+    padding: 8px 0;
+  }
+  .stripe-inner {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 0 32px;
+    display: flex;
+    justify-content: center;
+    gap: 36px;
+    flex-wrap: wrap;
+  }
+  .stripe-item {
+    font-family: 'Calibri', sans-serif;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--black);
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ─── CONTEÚDO ────────────────────────── */
+  .page-body {
+    max-width: 980px;
+    margin: 30px auto 80px;
+    padding: 0 24px;
+  }
+
+  /* ─── SEÇÃO ───────────────────────────── */
+  .sec {
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-top: 3px solid var(--orange);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    margin-bottom: 20px;
+    overflow: hidden;
+    animation: up .3s ease both;
+  }
+  @keyframes up {
+    from { opacity:0; transform:translateY(8px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+  .sec:nth-child(2){ animation-delay:.05s }
+  .sec:nth-child(3){ animation-delay:.10s }
+  .sec:nth-child(4){ animation-delay:.15s }
+  .sec:nth-child(5){ animation-delay:.20s }
+  .sec:nth-child(6){ animation-delay:.25s }
+
+  .sec-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 20px;
+    background: #fafafa;
+    border-bottom: 1px solid var(--line);
+  }
+  .sec-num {
+    width: 28px; height: 28px;
+    background: var(--orange);
+    color: var(--white);
+    font-family: 'Calibri', sans-serif;
+    font-weight: 800;
+    font-size: 13px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .sec-title {
+    font-family: 'Calibri', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--black);
+  }
+  .sec-tag {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--gray-lt);
+    font-family: 'Calibri', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    padding: 2px 9px;
+    border-radius: 20px;
+  }
+  .sec-body { padding: 20px; }
+
+  /* ─── GRID ────────────────────────────── */
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .s2 { grid-column: span 2; }
+  .s3 { grid-column: span 3; }
+
+  @media(max-width:600px){
+    .g2,.g3 { grid-template-columns:1fr; }
+    .s2,.s3 { grid-column:span 1; }
+  }
+
+  /* ─── CAMPO ───────────────────────────── */
+  .f { display: flex; flex-direction: column; gap: 5px; }
+  .f > label {
+    font-family: 'Calibri', sans-serif;
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .7px;
+    color: var(--gray);
+  }
+  .f > label .req { color: var(--orange); }
+
+  .f input,
+  .f select,
+  .f textarea {
+    font-family: 'Calibri', sans-serif;
+    font-size: 14px;
+    color: var(--black);
+    background: var(--white);
+    border: 1.5px solid var(--line);
+    border-radius: var(--radius);
+    padding: 9px 13px;
+    outline: none;
+    width: 100%;
+    appearance: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .f input:focus,
+  .f select:focus,
+  .f textarea:focus {
+    border-color: var(--orange);
+    box-shadow: 0 0 0 3px rgba(244,121,32,.13);
+  }
+  .f input::placeholder,
+  .f textarea::placeholder { color: #c0c0c0; font-style: italic; }
+  .f select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 13px center;
+    padding-right: 36px;
+    cursor: pointer;
+  }
+  .f textarea { resize: vertical; min-height: 82px; }
+
+  /* campo com unidade */
+  .fu { position: relative; }
+  .fu input { padding-right: 48px; }
+  .fu .un {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: 'Calibri', sans-serif;
+    font-weight: 700;
+    font-size: 11px;
+    color: var(--orange);
+    pointer-events: none;
+    letter-spacing: .3px;
+  }
+
+  /* ─── RÁDIO ───────────────────────────── */
+  .rg { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+  .rg label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Calibri', sans-serif;
+    font-size: 13.5px;
+    color: var(--dark);
+    background: var(--bg);
+    border: 1.5px solid var(--line);
+    border-radius: var(--radius);
+    padding: 8px 14px;
+    cursor: pointer;
+    user-select: none;
+    transition: all .15s;
+  }
+  .rg input[type=radio] { display: none; }
+  .rg label:has(input:checked) {
+    border-color: var(--orange);
+    background: var(--orange-lt);
+    color: var(--orange-dk);
+    font-weight: 700;
+  }
+  .rd {
+    width: 13px; height: 13px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    background: var(--white);
+    flex-shrink: 0;
+    transition: all .15s;
+  }
+  .rg label:has(input:checked) .rd {
+    border-color: var(--orange);
+    background: var(--orange);
+    box-shadow: 0 0 0 2px rgba(244,121,32,.2);
+  }
+
+  /* ─── DIVISOR ─────────────────────────── */
+  .hr { height: 1px; background: var(--line); margin: 16px 0; }
+
+  /* ─── CAIXAS ──────────────────────────── */
+  .box-ok {
+    background: #f1f8f1;
+    border-left: 4px solid var(--green);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 11px 15px;
+    font-size: 12.5px;
+    color: #1b5e20;
+    line-height: 1.7;
+    font-family: 'Calibri', sans-serif;
+  }
+  .box-al {
+    background: var(--orange-lt);
+    border-left: 4px solid var(--orange);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 11px 15px;
+    font-size: 12.5px;
+    color: var(--orange-dk);
+    line-height: 1.7;
+    font-family: 'Calibri', sans-serif;
+  }
+
+  /* ─── CARD OFERTA ─────────────────────── */
+  .offer {
+    margin-top: 14px;
+    border: 1.5px solid #f4792035;
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .offer-head {
+    background: var(--orange);
+    padding: 9px 16px;
+    font-family: 'Calibri', sans-serif;
+    font-weight: 700;
+    font-size: 11.5px;
+    color: var(--black);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .offer table { width: 100%; border-collapse: collapse; }
+  .offer td {
+    font-family: 'Calibri', sans-serif;
+    font-size: 13.5px;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--line);
+    color: var(--dark);
+    vertical-align: top;
+  }
+  .offer tr:last-child td { border-bottom: none; }
+  .offer td:first-child {
+    font-weight: 700;
+    color: var(--gray);
+    width: 36%;
+    background: #fafafa;
+  }
+
+  /* ─── UPLOAD ──────────────────────────── */
+  .upload {
+    position: relative;
+    border: 2px dashed var(--line);
+    border-radius: var(--radius);
+    padding: 26px 20px;
+    text-align: center;
+    background: var(--bg);
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .upload:hover { border-color: var(--orange); background: var(--orange-lt); }
+  .upload input[type=file] {
+    position: absolute; inset: 0;
+    opacity: 0; cursor: pointer;
+    width: 100%; height: 100%;
+  }
+  .upload .ico { font-size: 30px; margin-bottom: 7px; }
+  .upload p { font-family: 'Calibri',sans-serif; font-size: 12.5px; color: var(--gray-lt); line-height: 1.7; }
+  .upload p b { color: var(--orange); }
+  #prev { display:none; max-width:100%; max-height:200px; margin-top:12px; border-radius:var(--radius); border:1px solid var(--line); }
+
+  /* ─── CONDICIONAL ─────────────────────── */
+  .cond { display: none; }
+  .cond.on { display: block; }
+
+  /* ─── BOTÕES ──────────────────────────── */
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    font-family: 'Calibri', sans-serif;
+    font-weight: 700;
+    font-size: 13.5px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    padding: 11px 26px;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all .15s;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .btn:active { transform:scale(.98); }
+  .btn-ghost {
+    background: var(--white);
+    border: 1.5px solid var(--line);
+    color: var(--gray);
+  }
+  .btn-ghost:hover { border-color: var(--orange); color: var(--orange); }
+  .btn-main {
+    background: var(--orange);
+    color: var(--black);
+    box-shadow: 0 2px 8px rgba(245,200,0,.3);
+  }
+  .btn-main:hover { background: var(--orange-dk); }
+
+  /* ─── RODAPÉ ──────────────────────────── */
+  footer {
+    background: var(--white);
+    border-top: 4px solid var(--orange);
+    margin-top: 60px;
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
+  }
+  .foot { max-width: 980px; margin: 0 auto; padding: 0; }
+  .foot-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+    padding: 24px 32px;
+  }
+  .foot-bottom {
+    background: var(--bg);
+    border-top: 1px solid var(--line);
+    padding: 8px 32px;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .foot-bottom p {
+    font-family: 'Calibri', sans-serif;
+    font-size: 10px;
+    color: var(--gray-lt);
+    letter-spacing: .4px;
+  }
+  .foot-logo-text {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .foot-logo-text .sym {
+    font-size: 38px;
+    color: var(--orange);
+    line-height: 1;
+  }
+  .foot-logo-text .name {
+    font-family: 'Calibri', sans-serif;
+    font-weight: 800;
+    font-size: 24px;
+    line-height: 1;
+    letter-spacing: -0.5px;
+  }
+  .foot-logo-text .vert { color: var(--black); }
+  .foot-logo-text .parts { color: var(--orange); }
+  .foot-info {
+    font-family: 'Calibri', sans-serif;
+    font-size: 13px;
+    color: var(--gray);
+    line-height: 2;
+  }
+  .foot-info .info-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .foot-info .info-label { font-size: 13px; min-width: 20px; }
+  .foot-info a {
+    color: var(--dark);
+    text-decoration: none;
+    font-weight: 600;
+  }
+  .foot-info a:hover { color: var(--orange); text-decoration: underline; }
+  .foot-badge {
+    background: var(--orange-lt);
+    border: 1px solid rgba(245,200,0,0.35);
+    border-radius: var(--radius);
+    padding: 10px 18px;
+    font-family: 'Calibri', sans-serif;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--orange-dk);
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    text-align: center;
+    line-height: 2;
+  }
+
+  /* ─── PRINT ───────────────────────────── */
+  @media print {
+    @page { size: A4; margin: 10mm 14mm 12mm 14mm; }
+
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+    html, body {
+      width: 100% !important; background: #fff !important; color: #1a1a1a !important;
+      font-size: 9.5pt !important; font-family: 'Calibri', Arial, sans-serif !important;
+      margin: 0 !important; padding: 0 !important;
+    }
+
+    .actions, .btn, #btn-print, #btn-enviar,
+    .upload input[type="file"],
+    .upload-zone input[type="file"] { display: none !important; }
+
+    /* CABEÇALHO — junto com o conteúdo */
+    .main-header {
+      border-bottom: 3px solid #f5c800 !important; box-shadow: none !important;
+      break-inside: avoid !important; break-after: avoid !important;
+    }
+    .header-inner { padding: 8px 14px !important; }
+    .logo-block img { height: 36px !important; }
+    .header-text h1 { font-size: 13pt !important; }
+    .header-text p { font-size: 7.5pt !important; }
+    .ref-badge { font-size: 8.5pt !important; }
+    .date-txt { font-size: 7.5pt !important; }
+    .stripe {
+      background: #f5c800 !important; padding: 4px 0 !important;
+      break-inside: avoid !important; break-after: avoid !important;
+    }
+    .stripe-item { color: #1a1a1a !important; font-size: 7pt !important; }
+
+    .page-body { padding: 0 !important; margin: 6pt 0 0 0 !important; max-width: 100% !important; }
+
+    /* SEÇÕES — SEM page-break-inside: avoid globalmente (causa páginas em branco) */
+    .sec {
+      box-shadow: none !important; border: 1px solid #ddd !important;
+      border-top: 3px solid #f5c800 !important; border-radius: 3px !important;
+      margin-bottom: 6pt !important;
+      break-inside: auto !important; page-break-inside: auto !important;
+    }
+
+    /* Seções pequenas: podem ficar juntas */
+    .sec:nth-child(1), .sec:nth-child(2), .sec:nth-child(5),
+    .sec:nth-child(6), .sec:nth-child(8) {
+      break-inside: avoid !important; page-break-inside: avoid !important;
+    }
+
+    /* Cabeçalho de seção nunca fica orphan */
+    .sec-head {
+      background: #fafafa !important; border-bottom: 1px solid #e0e0e0 !important;
+      padding: 6px 12px !important;
+      break-after: avoid !important; page-break-after: avoid !important;
+    }
+    .sec-num { background: #f5c800 !important; color: #1a1a1a !important; width: 20px !important; height: 20px !important; font-size: 9pt !important; }
+    .sec-title { font-size: 10pt !important; font-weight: 700 !important; color: #1a1a1a !important; }
+    .sec-tag { font-size: 7pt !important; color: #888 !important; }
+    .sec-body { padding: 9px 12px !important; }
+
+    .g2 { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 7pt !important; }
+    .g3 { display: grid !important; grid-template-columns: 1fr 1fr 1fr !important; gap: 7pt !important; }
+    .s2 { grid-column: span 2 !important; }
+    .s3 { grid-column: span 3 !important; }
+
+    .f { display: flex !important; flex-direction: column !important; gap: 3px !important; }
+    .f > label { font-size: 7.5pt !important; color: #555 !important; font-weight: 700 !important; letter-spacing: .3px !important; }
+    .f input, .f select, .f textarea {
+      border: 1px solid #ccc !important; background: #fff !important; color: #1a1a1a !important;
+      font-size: 9pt !important; padding: 4px 7px !important; border-radius: 2px !important; min-height: 19px !important;
+    }
+    .f textarea { min-height: 34px !important; }
+    .fu .un { color: #c9a200 !important; font-size: 7.5pt !important; font-weight: 700 !important; }
+
+    .rg { display: flex !important; flex-wrap: wrap !important; gap: 4pt !important; }
+    .rg label { border: 1px solid #ddd !important; background: #fff !important; font-size: 8.5pt !important; padding: 3px 8px !important; color: #1a1a1a !important; border-radius: 3px !important; }
+    .rg label:has(input:checked) { border-color: #f5c800 !important; background: #fffbe6 !important; font-weight: 700 !important; }
+    .rd { width: 9px !important; height: 9px !important; border: 1.5px solid #bbb !important; }
+    .rg label:has(input:checked) .rd { background: #f5c800 !important; border-color: #c9a200 !important; }
+
+    .hr { border: none !important; border-top: 1px solid #eee !important; margin: 6pt 0 !important; }
+
+    .box-ok { background: #f1f8f1 !important; border-left: 3px solid #2e7d32 !important; font-size: 8pt !important; padding: 5px 9px !important; border-radius: 0 3px 3px 0 !important; }
+    .box-al { background: #fffbe6 !important; border-left: 3px solid #f5c800 !important; font-size: 8pt !important; padding: 5px 9px !important; border-radius: 0 3px 3px 0 !important; }
+
+    .offer { border: 1px solid #e0c85a !important; border-radius: 3px !important; break-inside: avoid !important; }
+    .offer-head { background: #f5c800 !important; color: #1a1a1a !important; font-size: 7.5pt !important; padding: 4px 9px !important; }
+    .offer td { font-size: 8.5pt !important; padding: 4px 9px !important; border-bottom: 1px solid #eee !important; }
+    .offer td:first-child { background: #fafafa !important; color: #555 !important; }
+
+    .upload, .upload-zone {
+      border: 1px dashed #ccc !important; background: #fafafa !important;
+      padding: 6px 8px !important; min-height: 28px !important; border-radius: 3px !important;
+    }
+    .upload .ico, .upload p, .upload-zone .ico, .upload-zone p { display: none !important; }
+    .upload img, .upload-zone img { max-width: 100% !important; max-height: 90px !important; border: 1px solid #ddd !important; border-radius: 3px !important; }
+
+    .cond:not(.on) { display: none !important; }
+
+    #d-cabo { background: #fffbe6 !important; border: 1px solid #e8c800 !important; font-weight: 700 !important; }
+    #cab-inox-extras { border: 1px solid #e0e0e0 !important; border-radius: 3px !important; padding: 7px !important; background: #fafafa !important; }
+
+    #andares-tbody table { font-size: 8pt !important; }
+    #andares-tbody td { padding: 3px 6px !important; }
+    #andares-tbody input { font-size: 8pt !important; padding: 2px 30px 2px 5px !important; border: 1px solid #ccc !important; }
+    #andares-tbody > tr > td > div { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 0 !important; }
+
+    footer { background: #ffffff !important; border-top: 3px solid #f5c800 !important; margin-top: 8pt !important; box-shadow: none !important; break-inside: avoid !important; }
+    .foot-top { background: #ffffff !important; padding: 10px 16px !important; }
+    .foot-bottom { background: #f5f5f5 !important; border-top: 1px solid #e0e0e0 !important; padding: 5px 16px !important; }
+    .foot-bottom p { color: #999 !important; font-size: 7pt !important; }
+    .foot-logo-text img { height: 32px !important; }
+    .foot-info { color: #555 !important; font-size: 8.5pt !important; }
+    .foot-info a { color: #1a1a1a !important; font-weight: 600 !important; }
+    .foot-badge { background: #fffbe6 !important; border: 1px solid rgba(245,200,0,.4) !important; color: #c9a200 !important; font-size: 7.5pt !important; padding: 6px 12px !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- CABEÇALHO -->
+<header class="main-header">
+  <div class="header-inner">
+    <div class="logo-block">
+      <img
+        src="data:image/png;base64,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QSnLcWptawBSg+D0A6UAF4CGFhAWAJJMIaAlJDR094LsNbFgDPzoo4/mz5/Pxosv5CzMDmCcueOOO0466STeUp7nNTU1zZ49e/ny5R999BFiL4lp06bdc889TCny+XxFRQWAuXPnXnnllUwpoijq37//rbfeetZZZ3V0dFx88cWvvPIKb27Eabs4DoVln2KxqLVuaGiYN2/emDFjzMnJaM9UgNEgDMO33377kksuMagyduzYl156qba2FrHPCHttJA/Stra2mTNnfvzxx+l0OgiCCRMmvPjii6+++uqll15aKpU4BwcAg2zGZsycFNOLf/u3f7v88sv//Oc///jHP/Y8LxmDY5j5VCpVX19fX18/ceLEc889d9KkSfzYww8/fO2117KCgF1dORdp0tkkKQdJKX3f/+Y3v/nnP/8ZwC9/+csnn3ySmYVMJvP0008feeSRLDgwSjOel8vl55577k9/+tP777+/Zs2aHh+6qalp4sSJZ5999jnnnMMiCVONVCrF0zdMyo033nj33Xcz4YiiaOjQoQsWLBgwYADTWSMAAshkMp9//vl3v/vdJUuWpNNpIcThhx/+8ssv71S2EoAIYQkf1OZvfjvXNs/RzRYVhQyUrYV0LMpa2nNCIYUQllZWNpUZkq7ZHzUHWtZgoE4pVytpu1ltW1ohZRFoQ2vLE6q0BKFQEVmplJMd3VBtSzlcI0WwbekICYFIKQI5oDL5y1tanoH41JE5q+g4sITUygnKdjGwEOmM1F6lW1G2+nregdm+h1ruKKCKIF3RsrZ5btZaZZNPiAINBdICFmAJJUlr2ARHk22R8CiCtHyktDeqwZ1hV4+BVIg+L255ubD1o6C8CbpLKl9CSO1EFJHjCzudkgNdb0S6eqKsHQ8MImQjsqRwJGxB3ewECyA7Hv57TCyY/Zs7dy6fovgSxhgWaxk9jj766FNPPZVfsW2bsbq+vv6cc8557733mO5MmzbtgQce6NevH7/OlOLFF1+8+uqr161bx7u2b9++N99884wZM7q6us4777z58+dv2zFCSCkLhQIfqkopzgPsOM769esfeOCBW265hZ80QgdijklK6XnecccdN3jwYKOOef/995966qmLL76Y5QvDkzOl4GPzySef5IgYDrQ9+eSTKyoqSqVSV1cXY6yJoNs9SCk7OzsBsLcbj9D8BKBcLm/dunXV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"
+        alt="VerticalParts"
+        style="height:52px; object-fit:contain;">
+      <div class="logo-fallback" style="color:var(--black);">VERTICAL<span style="color:var(--orange);">PARTS</span></div>
+      <div class="logo-divider"></div>
+      <div class="header-text">
+        <h1>Formulário de Pedido</h1>
+        <p>Sistema de Comando para Elevador</p>
+      </div>
+    </div>
+    <div class="doc-badge">
+      <div class="ref">CMD-<span id="ref"></span></div>
+      <div class="date" id="dt"></div>
+    </div>
+  </div>
+
+  <div class="stripe">
+    <div class="stripe-inner">
+      <div class="stripe-item">✔ Estoque a Pronta Entrega</div>
+      <div class="stripe-item">🚚 Entrega em Todo o Brasil</div>
+      <div class="stripe-item">🛡 Parceria Internacional</div>
+      <div class="stripe-item">⭐ Qualidade Garantida</div>
+    </div>
+  </div>
+</header>
+
+<!-- CORPO -->
+<div class="page-body">
+
+  <!-- 01 INFORMAÇÕES COMERCIAIS -->
+  <div class="sec">
+    <div class="sec-head">
+      <div class="sec-num">01</div>
+      <span class="sec-title">Informações Comerciais</span>
+      <span class="sec-tag">Dados do Pedido</span>
+    </div>
+    <div class="sec-body">
+      <div class="g2">
+        <div class="f">
+          <label>Nome do Vendedor <span class="req">*</span></label>
+          <input id="vendedor" type="text" placeholder="Nome completo do vendedor responsável">
+        </div>
+        <div class="f">
+          <label>Solicitante / Cliente <span class="req">*</span></label>
+          <input type="text" placeholder="Nome do cliente ou contato">
+        </div>
+        <div class="f">
+          <label>Nome da Empresa</label>
+          <input type="text" placeholder="Razão social ou nome fantasia da empresa">
+        </div>
+        <div class="f">
+          <label>Quantidade de Produto <span class="req">*</span></label>
+          <input type="number" min="1" placeholder="Ex: 1">
+        </div>
+        <div class="f">
+          <label>Quantidade de Paradas <span class="req">*</span></label>
+          <input type="number" id="paradas-global" min="1" placeholder="Ex: 4">
+        </div>
+        <div class="f">
+          <label>Data da Solicitação</label>
+          <input type="date" id="dt-input">
+        </div>
+        <div class="f s2">
+          <label>Observações Gerais</label>
+          <textarea placeholder="Prazo desejado, local de entrega, condições especiais..."></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 02 DADOS DO MOTOR -->
+  <div class="sec">
+    <div class="sec-head">
+      <div class="sec-num">02</div>
+      <span class="sec-title">Dados do Motor</span>
+      <span class="sec-tag">Especificações Técnicas</span>
+    </div>
+    <div class="sec-body">
+
+      <div class="f">
+        <label>Tipo de Motor <span class="req">*</span></label>
+        <div class="rg">
+          <label><input type="radio" name="motor" value="gearless"><div class="rd"></div>PM Gearless — Síncrono</label>
+          <label><input type="radio" name="motor" value="inducao"><div class="rd"></div>Indução — Assíncrono</label>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="g3">
+        <div class="f"><label>Potência Nominal <span class="req">*</span></label>
+          <div class="fu"><input type="number" step="0.1" placeholder="0,0"><span class="un">kW</span></div></div>
+        <div class="f"><label>Tensão Nominal <span class="req">*</span></label>
+          <div class="fu"><input type="number" placeholder="0"><span class="un">V</span></div></div>
+        <div class="f"><label>Corrente Nominal <span class="req">*</span></label>
+          <div class="fu"><input type="number" step="0.1" placeholder="0,0"><span class="un">A</span></div></div>
+        <div class="f"><label>Frequência Nominal <span class="req">*</span></label>
+          <div class="fu"><input type="number" placeholder="60"><span class="un">Hz</span></div></div>
+        <div class="f"><label>Rotação Nominal <span class="req">*</span></label>
+          <div class="fu"><input type="number" placeholder="0"><span class="un">RPM</span></div></div>
+        <div class="f"><label>Velocidade do Equipamento</label>
+          <div class="fu"><input type="number" step="0.01" placeholder="0,00"><span class="un">m/s</span></div></div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="g2">
+        <div class="f"><label>Tensão da Bobina do Freio <span class="req">*</span></label>
+          <div class="fu"><input type="number" placeholder="Ex: 110"><span class="un">V</span></div></div>
+        <div class="f">
+          <label>Tipo de Corrente do Freio <span class="req">*</span></label>
+          <div class="rg">
+            <label><input type="radio" name="freio" value="CA"><div class="rd"></div>CA — Alternada</label>
+            <label><input type="radio" name="freio" value="CC"><div class="rd"></div>CC — Contínua</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="g2">
+        <div class="f">
+          <label>Foto da Plaqueta do Motor <span style="color:var(--gray-lt);font-weight:400;text-transform:none;letter-spacing:0">(recomendado — confirma os dados técnicos)</span></label>
+          <div class="upload">
+            <input type="file" id="file-plaqueta1" accept="image/*">
+            <div class="ico">📷</div>
+            <p><b>Foto 1 — Plaqueta completa</b></p>
+            <p>PNG · JPG · WEBP &nbsp;|&nbsp; Máx. 10 MB</p>
+            <img id="prev-plaqueta1" alt="Foto plaqueta 1" style="display:none;max-width:100%;max-height:180px;margin-top:10px;border-radius:6px;border:1px solid var(--line);">
+          </div>
+        </div>
+        <div class="f">
+          <label>Foto Adicional da Plaqueta <span style="color:var(--gray-lt);font-weight:400;text-transform:none;letter-spacing:0">(opcional — detalhe ou ângulo complementar)</span></label>
+          <div class="upload">
+            <input type="file" id="file-plaqueta2" accept="image/*">
+            <div class="ico">🔍</div>
+            <p><b>Foto 2 — Detalhe ou ângulo complementar</b></p>
+            <p>PNG · JPG · WEBP &nbsp;|&nbsp; Máx. 10 MB</p>
+            <img id="prev-plaqueta2" alt="Foto plaqueta 2" style="display:none;max-width:100%;max-height:180px;margin-top:10px;border-radius:6px;border:1px solid var(--line);">
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 03 ENCODER -->
+  <div class="sec">
+    <div class="sec-head">
+      <div class="sec-num">03</div>
+      <span class="sec-title">Encoder</span>
+      <span class="sec-tag">Sensor de Posição</span>
+    </div>
+    <div class="sec-body">
+
+      <div class="f">
+        <label>O equipamento possui Encoder? <span class="req">*</span></label>
+        <div class="rg">
+          <label><input type="radio" name="enc" value="sim"><div class="rd"></div>Sim, possui encoder</label>
+          <label><input type="radio" name="enc" value="nao"><div class="rd"></div>Não possui encoder</label>
+        </div>
+      </div>
+
+      <div class="cond" id="enc-sim">
+        <div class="hr"></div>
+        <div class="g2">
+          <div class="f">
+            <label>Tipo de Encoder <span class="req">*</span></label>
+            <div class="rg" style="flex-direction:column;gap:6px">
+              <label><input type="radio" name="enc_tipo" value="sincos"><div class="rd"></div>Sin / Cos</label>
+              <label><input type="radio" name="enc_tipo" value="uvw"><div class="rd"></div>UVW</label>
+              <label><input type="radio" name="enc_tipo" value="incremental"><div class="rd"></div>Incremental</label>
+            </div>
+          </div>
+          <div class="f">
+            <label>Pulsos de Resolução (PPR) <span class="req">*</span></label>
+            <select id="ppr-sel">
+              <option value="">— Selecione —</option>
+              <option>512</option><option>1024</option><option>2048</option>
+              <option>4096</option><option>8192</option>
+              <option value="outro">Outro valor...</option>
+            </select>
+            <input id="ppr-custom" type="number" placeholder="Informe os pulsos (PPR)" style="display:none;margin-top:8px">
+          </div>
+          <div class="f s2">
+            <label>Modelo / Dados do Encoder <span class="req">*</span></label>
+            <input type="text" placeholder="Ex: Modelo, fabricante, referência do encoder instalado">
+          </div>
+          <div class="f s2">
+            <label>Informações Adicionais do Encoder</label>
+            <textarea placeholder="Descreva características técnicas adicionais, tensão de alimentação, protocolo de comunicação, etc." style="min-height:70px"></textarea>
+          </div>
+        </div>
+        <div class="hr"></div>
+        <div class="g2">
+          <div class="f">
+            <label>Foto do Encoder <span style="color:var(--gray-lt);font-weight:400;text-transform:none;letter-spacing:0">(recomendado — agiliza a identificação)</span></label>
+            <div class="upload">
+              <input type="file" id="file1" accept="image/*">
+              <div class="ico">📷</div>
+              <p><b>Foto 1 — Visão geral do encoder</b></p>
+              <p>PNG · JPG · WEBP &nbsp;|&nbsp; Máx. 10 MB</p>
+              <img id="prev1" alt="Foto 1 encoder" style="display:none;max-width:100%;max-height:180px;margin-top:10px;border-radius:6px;border:1px solid var(--line);">
+            </div>
+          </div>
+          <div class="f">
+            <label>Foto da Plaqueta / Etiqueta <span style="color:var(--gray-lt);font-weight:400;text-transform:none;letter-spacing:0">(opcional)</span></label>
+            <div class="upload">
+              <input type="file" id="file2" accept="image/*">
+              <div class="ico">🏷️</div>
+              <p><b>Foto 2 — Plaqueta ou etiqueta</b></p>
+              <p>PNG · JPG · WEBP &nbsp;|&nbsp; Máx. 10 MB</p>
+              <img id="prev2" alt="Foto 2 encoder" style="display:none;max-width:100%;max-height:180px;margin-top:10px;border-radius:6px;border:1px solid var(--line);">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cond" id="enc-nao">
+        <div class="hr"></div>
+        <div class="box-al">⚠️ <strong>Cliente sem encoder identificado.</strong> Consulte os modelos disponíveis na VerticalParts e selecione o mais adequado para oferta.</div>
+        <div class="offer">
+          <div class="offer-head">Modelos de Encoder Disponíveis — VerticalParts</div>
+          <table>
+            <tr>
+              <td>Modelo 1</td>
+              <td>
+                <strong>EI53C9.25-2048-SA5N2TH</strong><br>
+                <span style="font-size:12px;color:var(--gray)">Encoder Incremental SIN/COS · 2048 pulsos · 5V</span>
+              </td>
+            </tr>
+            <tr>
+              <td>Modelo 2</td>
+              <td>
+                <strong>EI100H40-1024BR-30Y1</strong><br>
+                <span style="font-size:12px;color:var(--gray)">Encoder A/B Incremental · 1024 pulsos · Eixo vazado 40mm · 12V</span>
+              </td>
+            </tr>
+            <tr>
+              <td>Modelo 3</td>
+              <td>
+                <strong>ERN1387 — Heidenhain</strong><br>
+                <span style="font-size:12px;color:var(--gray)">Encoder Incremental SIN/COS · 2048 pulsos · 5V</span>
+              </td>
+            </tr>
+          </table>
+        </div>
+        <div class="f" style="margin-top:14px">
+          <label>Modelo Selecionado para Oferta ao Cliente</label>
+          <select>
+            <option value="">— Selecione o modelo —</option>
+            <option>EI53C9.25-2048-SA5N2TH — Incremental SIN/COS 2048p 5V</option>
+            <option>EI100H40-1024BR-30Y1 — A/B Incremental 1024p Eixo 40mm 12V</option>
+            <option>ERN1387 Heidenhain — Incremental SIN/COS 2048p 5V</option>
+          </select>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 04 BOTOEIRA -->
+  <div class="sec">
+    <div class="sec-head">
+      <div class="sec-num">04</div>
+      <span class="sec-title">Botoeira</span>
+      <span class="sec-tag">Cabina &amp; Pavimento</span>
+    </div>
+    <div class="sec-body">
+
+      <!-- BOTOEIRA DE CABINA -->
+      <div style="margin-bottom:6px">
+        <span style="font-family:'Calibri',sans-serif;font-weight:700;font-size:13px;color:var(--orange);text-transform:uppercase;letter-spacing:1px;">Botoeira de Cabina</span>
+      </div>
+
+      <div class="g2">
+        <div class="f">
+          <label>Tipo de Botoeira de Cabina <span class="req">*</span></label>
+          <div class="rg">
+            <label><input type="radio" name="bot_cab" value="vidro" id="bot-cab-vidro"><div class="rd"></div>Vidro Preto</label>
+            <label><input type="radio" name="bot_cab" value="inox" id="bot-cab-inox"><div class="rd"></div>Inox</label>
+          </div>
+        </div>
+
+        <div class="f" id="cab-vidro-info" style="display:none">
+          <label>Modelo Vidro Preto</label>
+          <div class="offer">
+            <div class="offer-head">BCG401 — Black Series</div>
+            <table>
+              <tr><td>Material</td><td>Vidro Preto</td></tr>
+              <tr><td>Paradas</td><td>2 a 10 paradas</td></tr>
+            </table>
+          </div>
+        </div>
+
+        <div class="f" id="cab-vidro-nomenclatura" style="display:none">
+          <label>Nomenclatura dos Botões — Vidro Preto</label>
+          <textarea placeholder="Ex: SS, T, 1, 2, 3... (informe a nomenclatura de cada pavimento na ordem)" style="min-height:70px"></textarea>
+        </div>
+
+        <div class="f" id="cab-inox-info" style="display:none">
+          <label>Modelos Inox</label>
+          <div class="offer">
+            <div class="offer-head">Inox — Até 21 Paradas</div>
+            <table>
+              <tr><td>Modelos</td><td><strong>SEAD10-CG &nbsp;/&nbsp; BCG491 &nbsp;/&nbsp; BCGCM001</strong></td></tr>
+              <tr><td>Paradas</td><td>Até 21 paradas</td></tr>
+            </table>
+          </div>
+        </div>
+
+        <div class="f s2" id="cab-inox-extras" style="display:none">
+          <label style="margin-bottom:8px">Personalizações — Botoeira Inox</label>
+          <div style="background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:16px;display:flex;flex-direction:column;gap:14px;">
+
+            <div class="f">
+              <label>Nomenclatura dos Botões — Inox</label>
+              <textarea placeholder="Ex: SS, T, 1, 2, 3... (informe a nomenclatura de cada pavimento na ordem)" style="min-height:70px"></textarea>
+            </div>
+
+            <div class="f">
+              <label>Modelo do Botão <span class="req">*</span></label>
+              <div class="rg">
+                <label><input type="radio" name="inox_botao" value="BAS240"><div class="rd"></div>BAS240</label>
+                <label><input type="radio" name="inox_botao" value="MA2J03"><div class="rd"></div>MA2J03</label>
+              </div>
+            </div>
+
+            <div class="hr" style="margin:0"></div>
+
+            <div class="f">
+              <label>Gravação do Logo da Marca</label>
+              <div class="rg">
+                <label><input type="radio" name="inox_logo" value="sim" id="inox-logo-sim"><div class="rd"></div>Sim</label>
+                <label><input type="radio" name="inox_logo" value="nao"><div class="rd"></div>Não</label>
+              </div>
+              <div id="inox-logo-upload" style="display:none; margin-top:10px">
+                <div class="upload">
+                  <input type="file" id="file-logo" accept="image/png,image/jpeg,.pdf">
+                  <div class="ico">🖼️</div>
+                  <p><b>Enviar arquivo do Logo</b> ou arraste aqui</p>
+                  <p>PNG · JPG · PDF &nbsp;|&nbsp; Máx. 10 MB</p>
+                  <img id="prev-logo" alt="Preview logo" style="display:none;max-width:100%;max-height:160px;margin-top:10px;border-radius:6px;border:1px solid var(--line);">
+                  <p id="prev-logo-pdf" style="display:none;margin-top:8px;font-size:12px;color:var(--green);font-family:'Calibri',sans-serif;"></p>
+                </div>
+              </div>
+            </div>
+
+            <div class="hr" style="margin:0"></div>
+
+            <div style="font-family:'Calibri',sans-serif;font-weight:700;font-size:11px;color:var(--gray);text-transform:uppercase;letter-spacing:.7px;">Gravação de Informações no Painel</div>
+            <div class="g2">
+              <div class="f">
+                <label>Capacidade</label>
+                <div class="fu">
+                  <input type="number" min="0" placeholder="Ex: 450">
+                  <span class="un">kg</span>
+                </div>
+              </div>
+              <div class="f">
+                <label>Número de Passageiros</label>
+                <div class="fu">
+                  <input type="number" min="0" placeholder="Ex: 6">
+                  <span class="un">pax</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="f">
+          <label>Quantidade de Paradas</label>
+          <input type="number" id="cab-paradas" min="2" max="21" placeholder="Ex: 6">
+        </div>
+
+        <div class="f" id="cab-modelo-wrap" style="display:none">
+          <label>Modelo Selecionado — Cabina</label>
+          <select id="cab-modelo-sel">
+            <option value="">— Selecione —</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <!-- BOTOEIRA DE PAVIMENTO -->
+      <div style="margin-bottom:14px">
+        <span style="font-family:'Calibri',sans-serif;font-weight:700;font-size:13px;color:var(--orange);text-transform:uppercase;letter-spacing:1px;">Botoeira de Pavimento</span>
+      </div>
+
+      <!-- DISPLAY SOBRE A PORTA -->
+      <div style="background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:16px;margin-bottom:14px;">
+        <div style="font-family:'Calibri',sans-serif;font-weight:700;font-size:12px;color:var(--gray);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;">Display Sobre a Porta</div>
+        <div class="g2">
+          <div class="f">
+            <label>Possui Display Sobre a Porta? <span class="req">*</span></label>
+            <div class="rg">
+              <label><input type="radio" name="display_porta" value="sim" id="disp-sim"><div class="rd"></div>Sim</label>
+              <label><input type="radio" name="display_porta" value="nao"><div class="rd"></div>Não</label>
+            </div>
+          </div>
+          <div class="f" id="disp-material-wrap" style="display:none">
+            <label>Material do Display</label>
+            <div class="rg">
+              <label><input type="radio" name="display_mat" value="vidro"><div class="rd"></div>Vidro — BMG401</label>
+              <label><input type="radio" name="display_mat" value="inox"><div class="rd"></div>Inox — BMG491</label>
+            </div>
+          </div>
+          <div class="f">
+            <label>Quantidade de Displays</label>
+            <input type="number" min="1" placeholder="1 por pavimento">
+          </div>
+        </div>
+      </div>
+
+      <!-- BOTOEIRA COM BOTÃO SEM DISPLAY -->
+      <div style="background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:16px;margin-bottom:14px;">
+        <div style="font-family:'Calibri',sans-serif;font-weight:700;font-size:12px;color:var(--gray);text-transform:uppercase;letter-spacing:.7px;margin-bottom:4px;">Botoeira com Botão de Chamada — Sem Display</div>
+        <div style="font-size:11.5px;color:var(--gray-lt);font-family:'Calibri',sans-serif;margin-bottom:12px;">(Acompanha o display sobre a porta)</div>
+        <div class="g2">
+          <div class="f">
+            <label>Possui Botoeira sem Display? <span class="req">*</span></label>
+            <div class="rg">
+              <label><input type="radio" name="bot_sem_disp" value="sim" id="bsd-sim"><div class="rd"></div>Sim</label>
+              <label><input type="radio" name="bot_sem_disp" value="nao"><div class="rd"></div>Não</label>
+            </div>
+          </div>
+          <div class="f" id="bsd-wrap" style="display:none">
+            <label>Material</label>
+            <div class="rg">
+              <label><input type="radio" name="bot_sem_mat" value="vidro" id="bsd-vidro"><div class="rd"></div>Vidro</label>
+              <label><input type="radio" name="bot_sem_mat" value="inox" id="bsd-inox"><div class="rd"></div>Inox</label>
+            </div>
+          </div>
+          <div class="f" id="bsd-modelos-wrap" style="display:none">
+            <label>Modelos Disponíveis</label>
+            <div id="bsd-modelos-vidro" style="display:none">
+              <div class="offer">
+                <div class="offer-head">Vidro — BZGCM001</div>
+                <table>
+                  <tr>
+                    <td><strong>BZGCM001-T</strong> — Botão seta descida</td>
+                  </tr>
+                  <tr>
+                    <td><strong>BZGCM001-B</strong> — Botão seta subida</td>
+                  </tr>
+                  <tr>
+                    <td><strong>BZGCM001-M</strong> — Botão seta subida + seta descida</td>
+                  </tr>
+                </table>
+              </div>
+            </div>
+            <div id="bsd-modelos-inox" style="display:none">
+              <div class="offer">
+                <div class="offer-head">Inox — BZG491</div>
+                <table>
+                  <tr>
+                    <td><strong>BZG491-T</strong> — Botão seta descida</td>
+                  </tr>
+                  <tr>
+                    <td><strong>BZG491-B</strong> — Botão seta subida</td>
+                  </tr>
+                  <tr>
+                    <td><strong>BZG491-M</strong> — Botão seta subida + seta descida</td>
+                  </tr>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="f" id="bsd-qtd-wrap" style="display:none">
+            <label>Qtd. de Botoeiras por Pavimento</label>
+            <input type="number" min="1" placeholder="Ex: 1">
+          </div>
+          <div class="f" id="bsd-dir-wrap" style="display:none">
+            <label>Qtd. Botões — Subida</label>
+            <input type="number" min="0" placeholder="Ex: 1">
+          </div>
+          <div class="f" id="bsd-des-wrap" style="display:none">
+            <label>Qtd. Botões — Descida</label>
+            <input type="number" min="0" placeholder="Ex: 1">
+          </div>
+        </div>
+      </div>
+
+      <!-- BOTOEIRA COM DISPLAY E BOTÃO -->
+      <div style="background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:16px;">
+        <div style="font-family:'Calibri',sans-serif;font-weight:700;font-size:12px;color:var(--gray);text-transform:uppercase;letter-spacing:.7px;margin-bottom:4px;">Botoeira com Display e Botão de Chamada</div>
+        <div style="font-size:11.5px;color:var(--gray-lt);font-family:'Calibri',sans-serif;margin-bottom:12px;">(Não necessita de display sobre a porta)</div>
+        <div class="g2">
+          <div class="f">
+            <label>Possui Botoeira com Display? <span class="req">*</span></label>
+            <div class="rg">
+              <label><input type="radio" name="bot_com_disp" value="sim" id="bcd-sim"><div class="rd"></div>Sim</label>
+              <label><input type="radio" name="bot_com_disp" value="nao"><div class="rd"></div>Não</label>
+            </div>
+          </div>
+          <div class="f" id="bcd-wrap" style="display:none">
+            <label>Material</label>
+            <div class="rg">
+              <label><input type="radio" name="bot_com_mat" value="vidro" id="bcd-vidro"><div class="rd"></div>Vidro</label>
+              <label><input type="radio" name="bot_com_mat" value="inox" id="bcd-inox"><div class="rd"></div>Inox</label>
+            </div>
+          </div>
+          <div class="f s2" id="bcd-modelos-wrap" style="display:none">
+            <label>Modelos Disponíveis</label>
+            <div id="bcd-modelos-vidro" style="display:none">
+              <div class="offer">
+                <div class="offer-head">Vidro — BXGDM007</div>
+                <table>
+                  <tr>
+                    <td><strong>BXGDM007-T</strong> — Botão seta descida</td>
+                  </tr>
+                  <tr>
+                    <td><strong>BXGDM007-B</strong> — Botão seta subida</td>
+                  </tr>
+                  <tr>
+                    <td><strong>BXGDM007-M</strong> — Botão seta subida + seta descida</td>
+                  </tr>
+                </table>
+              </div>
+            </div>
+            <div id="bcd-modelos-inox" style="display:none">
+              <div class="offer">
+                <div class="offer-head">Inox — KXG811</div>
+                <table>
+                  <tr>
+                    <td><strong>KXG811-T</strong> — Botão seta descida</td>
+                  </tr>
+                  <tr>
+                    <td><strong>KXG811-B</strong> — Botão seta subida</td>
+                  </tr>
+                  <tr>
+                    <td><strong>KXG811-M</strong> — Botão seta subida + seta descida</td>
+                  </tr>
+                </table>
+              </div>
+              <div class="offer" style="margin-top:8px">
+                <div class="offer-head">Inox — BXGFM003</div>
+                <table>
+                  <tr>
+                    <td><strong>BXGFM003-T</strong> — Botão seta descida</td>
+                  </tr>
+                  <tr>
+                    <td><strong>BXGFM003-B</strong> — Botão seta subida</td>
+                  </tr>
+                  <tr>
+                    <td><strong>BXGFM003-M</strong> — Botão seta subida + seta descida</td>
+                  </tr>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="f s2" id="bcd-qtd-wrap" style="display:none">
+            <div class="hr" style="margin:8px 0"></div>
+            <div style="font-family:'Calibri',sans-serif;font-weight:700;font-size:11px;color:var(--gray);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;">Quantidade de Botoeiras por Posição</div>
+            <div class="g3">
+              <div class="f">
+                <label>Qtd. de Pavimentos</label>
+                <input type="number" id="bcd-total-pav" min="1" placeholder="Total de pavimentos">
+              </div>
+              <div class="f">
+                <label>Qtd. Botoeira — Seta Descida (-T)</label>
+                <input type="number" id="bcd-qtd-t" min="0" placeholder="Pavimento terminal">
+              </div>
+              <div class="f">
+                <label>Qtd. Botoeira — Seta Subida (-B)</label>
+                <input type="number" id="bcd-qtd-b" min="0" placeholder="Pavimento base">
+              </div>
+              <div class="f">
+                <label>Qtd. Botoeira — Subida + Descida (-M)</label>
+                <input type="number" id="bcd-qtd-m" min="0" placeholder="Pavimentos intermediários">
+              </div>
+            </div>
+            <div id="bcd-soma-info" style="display:none; margin-top:12px; padding:10px 14px; border-radius:6px; font-family:'Calibri',sans-serif; font-size:13px; font-weight:700;"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 05 PORTA DE CABINA -->
+  <div class="sec">
+    <div class="sec-head">
+      <div class="sec-num">05</div>
+      <span class="sec-title">Porta de Cabina</span>
+      <span class="sec-tag">Operador de Portas</span>
+    </div>
+    <div class="sec-body">
+
+      <div class="f">
+        <label>O elevador possui porta de cabina? <span class="req">*</span></label>
+        <div class="rg">
+          <label><input type="radio" name="porta" value="sim"><div class="rd"></div>Sim, possui porta</label>
+          <label><input type="radio" name="porta" value="nao"><div class="rd"></div>Não possui porta</label>
+        </div>
+      </div>
+
+      <div class="cond" id="porta-sim">
+        <div class="hr"></div>
+        <div class="g2">
+          <div class="f">
+            <label>Quantidade de Portas <span class="req">*</span></label>
+            <div class="rg">
+              <label><input type="radio" name="qtd_porta" value="1"><div class="rd"></div>1 Porta</label>
+              <label><input type="radio" name="qtd_porta" value="2"><div class="rd"></div>2 Portas</label>
+            </div>
+          </div>
+          <div class="f">
+            <label>Modelo do Operador de Cabina</label>
+            <input type="text" placeholder="Nome / modelo do operador">
+          </div>
+          <div class="f">
+            <label>Tensão do Módulo de Porta <span class="req">*</span></label>
+            <div class="fu"><input type="number" placeholder="Ex: 220"><span class="un">V</span></div>
+          </div>
+          <div class="f">
+            <label>Tipo de Acionamento <span class="req">*</span></label>
+            <div class="rg" style="flex-direction:column;gap:6px">
+              <label><input type="radio" name="acion" value="vvvf"><div class="rd"></div>VVVF — Frequência Variável</label>
+              <label><input type="radio" name="acion" value="rampa"><div class="rd"></div>Rampa Magnética</label>
+              <label><input type="radio" name="acion" value="manual"><div class="rd"></div>Abertura Manual</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cond" id="porta-nao">
+        <div class="hr"></div>
+        <div class="box-al">⚠️ <strong>Cliente sem porta de cabina.</strong> Oferta sugerida pela VerticalParts:</div>
+        <div class="offer">
+          <div class="offer-head">Porta Recomendada — BST J2511</div>
+          <table>
+            <tr><td>Fabricante</td><td><strong>BST</strong></td></tr>
+            <tr><td>Modelo</td><td><strong>J2511</strong></td></tr>
+            <tr><td>Dimensão</td><td><strong>800 × 2000 mm</strong></td></tr>
+            <tr><td>Abertura disponível</td><td><strong>Direita / Esquerda / Central</strong></td></tr>
+          </table>
+        </div>
+        <div class="f" style="margin-top:14px">
+          <label>Sentido de Abertura a Ofertar</label>
+          <div class="rg">
+            <label><input type="radio" name="abertura" value="direita"><div class="rd"></div>Direita →</label>
+            <label><input type="radio" name="abertura" value="esquerda"><div class="rd"></div>← Esquerda</label>
+            <label><input type="radio" name="abertura" value="central"><div class="rd"></div>↔ Central</label>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 06 PORTA DE PAVIMENTO -->
+  <div class="sec">
+    <div class="sec-head">
+      <div class="sec-num">06</div>
+      <span class="sec-title">Porta de Pavimento</span>
+      <span class="sec-tag">Portas de Andar</span>
+    </div>
+    <div class="sec-body">
+
+      <div class="f">
+        <label>O elevador possui porta de pavimento? <span class="req">*</span></label>
+        <div class="rg">
+          <label><input type="radio" name="porta_pav" value="sim" id="pp-sim"><div class="rd"></div>Sim, possui porta de pavimento</label>
+          <label><input type="radio" name="porta_pav" value="nao"><div class="rd"></div>Não possui porta de pavimento</label>
+        </div>
+      </div>
+
+      <div class="cond" id="pp-com">
+        <div class="hr"></div>
+        <div class="g2">
+          <div class="f">
+            <label>Quantidade de Pavimentos <span class="req">*</span></label>
+            <input type="number" id="pp-qtd-pav" min="1" placeholder="Ex: 4">
+          </div>
+          <div class="f">
+            <label>Tipo de Acionamento <span class="req">*</span></label>
+            <div class="rg">
+              <label><input type="radio" name="pp_acionamento" value="automatica"><div class="rd"></div>Automática</label>
+              <label><input type="radio" name="pp_acionamento" value="eixo_vertical"><div class="rd"></div>Eixo Vertical</label>
+              <label><input type="radio" name="pp_acionamento" value="manual"><div class="rd"></div>Manual</label>
+            </div>
+          </div>
+          <div class="f s2">
+            <label>Modelo / Referência da Porta</label>
+            <input type="text" placeholder="Ex: fabricante, modelo ou referência da porta de pavimento">
+          </div>
+          <div class="f s2">
+            <label>Observações sobre a Porta de Pavimento</label>
+            <textarea placeholder="Informações adicionais, condições especiais..." style="min-height:70px"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="cond" id="pp-nao">
+        <div class="hr"></div>
+        <div class="box-al">⚠️ <strong>Cliente sem porta de pavimento.</strong> Oferta sugerida pela VerticalParts:</div>
+        <div class="offer">
+          <div class="offer-head">Porta de Pavimento Recomendada — BST T2210</div>
+          <table>
+            <tr><td>Fabricante</td><td><strong>BST</strong></td></tr>
+            <tr><td>Modelo</td><td><strong>T2210</strong></td></tr>
+            <tr><td>Dimensão</td><td><strong>800 × 2000 mm</strong></td></tr>
+            <tr><td>Abertura</td><td id="pp-abertura-ref"><em style="color:var(--gray-lt)">Conforme sentido definido na Porta de Cabina (seção 05)</em></td></tr>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 07 DISTÂNCIAS -->
+  <div class="sec">
+    <div class="sec-head">
+      <div class="sec-num">07</div>
+      <span class="sec-title">Distâncias e Dimensões</span>
+      <span class="sec-tag">Características do Poço</span>
+    </div>
+    <div class="sec-body">
+
+      <div class="box-ok" style="margin-bottom:18px">
+        ℹ️ <strong>Dica:</strong> Todas as medidas devem ser informadas em milímetros (mm). Preencha os campos conforme levantamento in loco.
+      </div>
+
+      <div class="g3">
+
+        <div class="f">
+          <label>Quadro de Comando ao Furo da Laje</label>
+          <div class="fu"><input type="number" id="d-quadro" min="0" placeholder="Ex: 1500" oninput="calcCabo()"><span class="un">mm</span></div>
+        </div>
+
+        <div class="f">
+          <label>Última Altura</label>
+          <div class="fu"><input type="number" id="d-ultima" min="0" placeholder="Ex: 3500" oninput="calcCabo()"><span class="un">mm</span></div>
+        </div>
+
+        <div class="f">
+          <label>Percurso Total</label>
+          <div class="fu"><input type="number" id="d-percurso" min="0" placeholder="Ex: 12000" oninput="calcCabo()"><span class="un">mm</span></div>
+        </div>
+
+        <div class="f">
+          <label>Altura do Poço</label>
+          <div class="fu"><input type="number" id="d-poco" min="0" placeholder="Ex: 1200" oninput="calcCabo()"><span class="un">mm</span></div>
+        </div>
+
+        <div class="f">
+          <label>Altura da Cabina</label>
+          <div class="fu"><input type="number" id="d-cabina" min="0" placeholder="Ex: 2200" oninput="calcCabo()"><span class="un">mm</span></div>
+        </div>
+
+        <div class="f">
+          <label>Tamanho do Cabo de Manobra <span style="color:var(--orange);font-size:10px;font-weight:700;letter-spacing:.5px;background:var(--orange-lt);border:1px solid #f5c80050;padding:1px 7px;border-radius:10px;margin-left:6px;">AUTO</span></label>
+          <div class="fu">
+            <input type="number" id="d-cabo" min="0" placeholder="Preenchimento automático" readonly
+              style="background:#fffbe6;border:1.5px solid #f5c80080;color:var(--black);font-weight:700;cursor:default;">
+            <span class="un">mm</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="hr"></div>
+
+      <!-- TABELA ENTRE ANDARES -->
+      <div style="font-family:'Calibri',sans-serif;font-weight:700;font-size:11px;color:var(--gray);text-transform:uppercase;letter-spacing:.7px;margin-bottom:12px;">
+        Distância Entre os Andares
+      </div>
+      <div style="font-size:12px;color:var(--gray-lt);font-family:'Calibri',sans-serif;margin-bottom:14px;">
+        Informe a distância de cada andar em relação ao andar anterior (em mm). A quantidade de linhas abaixo segue automaticamente a "Quantidade de Paradas" informada na seção 01.
+      </div>
+
+      <div style="border:1px solid var(--line);border-radius:6px;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;font-family:'Calibri',sans-serif;font-size:13px;">
+          <thead>
+            <tr style="background:var(--orange);">
+              <th style="padding:9px 14px;text-align:left;color:var(--black);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.7px;width:60px;">Andar</th>
+              <th style="padding:9px 14px;text-align:left;color:var(--black);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.7px;">Referência</th>
+              <th style="padding:9px 14px;text-align:left;color:var(--black);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.7px;width:200px;">Distância (mm)</th>
+            </tr>
+          </thead>
+          <tbody id="andares-tbody">
+            <!-- Gerado via JS -->
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 08 OBSERVAÇÕES -->
+  <div class="sec">
+    <div class="sec-head">
+      <div class="sec-num">08</div>
+      <span class="sec-title">Observações Técnicas</span>
+      <span class="sec-tag">Informações Adicionais — 08/08</span>
+    </div>
+    <div class="sec-body">
+      <div class="f">
+        <label>Detalhes Adicionais</label>
+        <textarea placeholder="Características do poço, condições especiais de instalação, requisitos do cliente..." style="min-height:100px"></textarea>
+      </div>
+      <div class="box-ok" style="margin-top:14px">
+        <strong>✔ Checklist do Vendedor</strong><br>
+        Dados do motor conferidos diretamente na plaqueta do equipamento.<br>
+        Foto do encoder anexada — evita erros de compatibilidade e agiliza a cotação.<br>
+        Em caso de dúvida sobre o encoder, solicitar o manual do motor ao cliente.<br>
+        Porta BST J2511 disponível a pronta entrega — confirmar com o setor comercial.
+      </div>
+    </div>
+  </div>
+
+  <!-- AÇÕES -->
+  <div class="actions">
+    <button class="btn btn-ghost" id="btn-print">🖨️ Imprimir / Exportar PDF</button>
+  </div>
+
+</div><!-- /page-body -->
+
+<!-- RODAPÉ -->
+<footer>
+  <div class="foot">
+
+    <div class="foot-top">
+      <!-- LOGO -->
+      <div class="foot-logo-text">
+        <img
+          src="data:image/png;base64,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QSnLcWptawBSg+D0A6UAF4CGFhAWAJJMIaAlJDR094LsNbFgDPzoo4/mz5/Pxosv5CzMDmCcueOOO0466STeUp7nNTU1zZ49e/ny5R999BFiL4lp06bdc889TCny+XxFRQWAuXPnXnnllUwpoijq37//rbfeetZZZ3V0dFx88cWvvPIKb27Eabs4DoVln2KxqLVuaGiYN2/emDFjzMnJaM9UgNEgDMO33377kksuMagyduzYl156qba2FrHPCHttJA/Stra2mTNnfvzxx+l0OgiCCRMmvPjii6+++uqll15aKpU4BwcAg2zGZsycFNOLf/u3f7v88sv//Oc///jHP/Y8LxmDY5j5VCpVX19fX18/ceLEc889d9KkSfzYww8/fO2117KCgF1dORdp0tkkKQdJKX3f/+Y3v/nnP/8ZwC9/+csnn3ySmYVMJvP0008feeSRLDgwSjOel8vl55577k9/+tP777+/Zs2aHh+6qalp4sSJZ5999jnnnMMiCVONVCrF0zdMyo033nj33Xcz4YiiaOjQoQsWLBgwYADTWSMAAshkMp9//vl3v/vdJUuWpNNpIcThhx/+8ssv71S2EoAIYQkf1OZvfjvXNs/RzRYVhQyUrYV0LMpa2nNCIYUQllZWNpUZkq7ZHzUHWtZgoE4pVytpu1ltW1ohZRFoQ2vLE6q0BKFQEVmplJMd3VBtSzlcI0WwbekICYFIKQI5oDL5y1tanoH41JE5q+g4sITUygnKdjGwEOmM1F6lW1G2+nregdm+h1ruKKCKIF3RsrZ5btZaZZNPiAINBdICFmAJJUlr2ARHk22R8CiCtHyktDeqwZ1hV4+BVIg+L255ubD1o6C8CbpLKl9CSO1EFJHjCzudkgNdb0S6eqKsHQ8MImQjsqRwJGxB3ewECyA7Hv57TCyY/Zs7dy6fovgSxhgWaxk9jj766FNPPZVfsW2bsbq+vv6cc8557733mO5MmzbtgQce6NevH7/OlOLFF1+8+uqr161bx7u2b9++N99884wZM7q6us4777z58+dv2zFCSCkLhQIfqkopzgPsOM769esfeOCBW265hZ80QgdijklK6XnecccdN3jwYKOOef/995966qmLL76Y5QvDkzOl4GPzySef5IgYDrQ9+eSTKyoqSqVSV1cXY6yJoNs9SCk7OzsBsLcbj9D8BKBcLm/dunXV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"
+          alt="VerticalParts"
+          style="height:46px; object-fit:contain;">
+      </div>
+
+      <!-- CONTATOS -->
+      <div class="foot-info">
+        <div class="info-row">
+          <span class="info-label">📞</span>
+          <a href="tel:1125286473">(11) 2528-6473</a>
+        </div>
+        <div class="info-row">
+          <span class="info-label">✉</span>
+          <a href="mailto:comercial@verticalparts.com.br">comercial@verticalparts.com.br</a>
+        </div>
+        <div class="info-row">
+          <span class="info-label">🌐</span>
+          <a href="https://verticalparts.com.br" target="_blank">verticalparts.com.br</a>
+        </div>
+      </div>
+
+      <!-- BADGE -->
+      <div class="foot-badge">
+        Documento Interno<br>
+        Sistema de Comando<br>
+        Versão 1.0 · 2025
+      </div>
+    </div>
+
+    <div class="foot-bottom">
+      <p>© 2025 VerticalParts — Todos os direitos reservados</p>
+      <p>Uso interno · Não distribuir sem autorização</p>
+    </div>
+
+  </div>
+</footer>
+
+<script>
+  (function() {
+    const now = new Date();
+    document.getElementById('ref').textContent = Math.floor(10000 + Math.random() * 90000);
+    document.getElementById('dt').textContent =
+      now.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}) +
+      ' · ' + now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('dt-input').valueAsDate = now;
+
+    // Botoeira de cabina — vidro ou inox se cancelam
+    var modelosCabina = {
+      vidro: ['BCG401 Black Series'],
+      inox:  ['SEAD10-CG', 'BCG491', 'BCGCM001']
+    };
+
+    var paradasInput = document.getElementById('cab-paradas');
+
+    // Cálculo automático do cabo de manobra
+    window.calcCabo = function() {
+      var q = parseFloat(document.getElementById('d-quadro').value)   || 0;
+      var u = parseFloat(document.getElementById('d-ultima').value)   || 0;
+      var p = parseFloat(document.getElementById('d-percurso').value) || 0;
+      var po= parseFloat(document.getElementById('d-poco').value)     || 0;
+      var c = parseFloat(document.getElementById('d-cabina').value)   || 0;
+      var total = q + u + p + po + c + 10000;
+      var cabo = document.getElementById('d-cabo');
+      if (q || u || p || po || c) {
+        cabo.value = total;
+      } else {
+        cabo.value = '';
+      }
+    };
+
+    // Tabela de distâncias entre andares — quantidade de linhas segue
+    // "Quantidade de Paradas" (seção 01). Enquanto o campo estiver vazio,
+    // mostra uma mensagem pedindo para preenchê-lo primeiro.
+    var andaresValoresAnteriores = {};
+
+    function coletarValoresAndares() {
+      var valores = {};
+      document.querySelectorAll('#andares-tbody input[data-andar]').forEach(function(inp) {
+        if (inp.value !== '') valores[inp.dataset.andar] = inp.value;
+      });
+      return valores;
+    }
+
+    function renderAndares(qtd) {
+      var container = document.getElementById('andares-tbody');
+      if (!container) return;
+
+      andaresValoresAnteriores = Object.assign(andaresValoresAnteriores, coletarValoresAndares());
+
+      if (!qtd || qtd < 1) {
+        container.innerHTML =
+          '<tr><td colspan="3" style="padding:16px 14px;color:var(--gray-lt);font-size:13px;font-family:Calibri,sans-serif;">' +
+          'Informe a "Quantidade de Paradas" na seção 01 para gerar os campos de distância entre andares.' +
+          '</td></tr>';
+        return;
+      }
+
+      var andares = [];
+      for (var i = 1; i <= qtd; i++) {
+        var ref = i === 1 ? 'Base (nível do poço)' : 'Em relação ao ' + (i - 1) + 'º andar';
+        andares.push({ num: i, ref: ref });
+      }
+
+      function montarInput(a) {
+        var valorSalvo = andaresValoresAnteriores[a.num] || '';
+        return (
+          '<div class="fu">' +
+            '<input type="number" min="0" placeholder="0" data-andar="' + a.num + '" value="' + valorSalvo + '" ' +
+            'style="font-family:Calibri,sans-serif;font-size:13px;background:#fff;border:1.5px solid var(--line);border-radius:6px;padding:6px 46px 6px 9px;width:100%;outline:none;color:var(--black)" ' +
+            'onfocus="this.style.borderColor=\'var(--orange)\'" onblur="this.style.borderColor=\'var(--line)\'">' +
+            '<span class="un">mm</span>' +
+          '</div>'
+        );
+      }
+
+      function montarColuna(lista) {
+        var html = '<table style="width:100%;border-collapse:collapse;font-family:Calibri,sans-serif;font-size:13px;">';
+        html += '<thead><tr style="background:var(--orange)">' +
+          '<th style="padding:8px 10px;text-align:left;color:var(--black);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;width:36px">Nº</th>' +
+          '<th style="padding:8px 10px;text-align:left;color:var(--black);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px">Referência</th>' +
+          '<th style="padding:8px 10px;text-align:left;color:var(--black);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;width:160px">Medida (mm)</th>' +
+          '</tr></thead><tbody>';
+        lista.forEach(function(a, idx) {
+          var bg = (idx % 2 === 0) ? '#fafafa' : '#ffffff';
+          html += '<tr style="background:' + bg + ';border-bottom:1px solid var(--line)">' +
+            '<td style="padding:7px 10px;font-weight:700;color:var(--orange)">' + a.num + 'º</td>' +
+            '<td style="padding:7px 10px;color:var(--gray);font-size:12px">' + a.ref + '</td>' +
+            '<td style="padding:5px 10px">' + montarInput(a) + '</td>' +
+          '</tr>';
+        });
+        html += '</tbody></table>';
+        return html;
+      }
+
+      var html = '<tr><td colspan="3" style="padding:0">';
+      if (qtd > 15) {
+        // Duas colunas lado a lado quando há muitas paradas
+        var meio = Math.ceil(qtd / 2);
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);border-radius:6px;overflow:hidden">' +
+          montarColuna(andares.slice(0, meio)) + montarColuna(andares.slice(meio)) + '</div>';
+      } else {
+        html += '<div style="border:1px solid var(--line);border-radius:6px;overflow:hidden">' + montarColuna(andares) + '</div>';
+      }
+      html += '</td></tr>';
+      container.innerHTML = html;
+    }
+
+    // Estado inicial: nenhuma parada informada ainda
+    renderAndares(0);
+
+    // Sincronizar quantidade de paradas da seção 01 com seção 04 e com a
+    // tabela de Distância Entre os Andares (seção 07)
+    var paradasGlobal = document.getElementById('paradas-global');
+    if (paradasGlobal) {
+      paradasGlobal.addEventListener('input', function() {
+        var val = parseInt(this.value) || 0;
+
+        renderAndares(val);
+
+        var cabParadas = document.getElementById('cab-paradas');
+        if (!cabParadas) return;
+        var maxAtual = parseInt(cabParadas.max) || 21;
+        var novoVal = Math.min(val, maxAtual);
+        cabParadas.value = novoVal > 0 ? novoVal : '';
+        // Atualizar placeholder para indicar a origem
+        cabParadas.placeholder = val > 0 ? 'Preenchido pela seção 01 (' + novoVal + ')' : 'Ex: 6';
+      });
+    }
+
+    // Bloqueia digitação acima do limite em tempo real
+    paradasInput.addEventListener('input', function() {
+      var max = parseInt(this.max) || 21;
+      if (parseInt(this.value) > max) this.value = max;
+      if (parseInt(this.value) < 2 && this.value !== '') this.value = 2;
+    });
+
+    document.querySelectorAll('input[name="bot_cab"]').forEach(function(r) {
+      r.addEventListener('change', function() {
+        var isVidro = this.value === 'vidro';
+        document.getElementById('cab-vidro-info').style.display = isVidro ? 'block' : 'none';
+        document.getElementById('cab-vidro-nomenclatura').style.display = isVidro ? 'block' : 'none';
+        document.getElementById('cab-inox-info').style.display = !isVidro ? 'block' : 'none';
+        document.getElementById('cab-inox-extras').style.display = !isVidro ? 'block' : 'none';
+        document.getElementById('cab-modelo-wrap').style.display = 'block';
+
+        // Limitar paradas conforme material
+        if (isVidro) {
+          paradasInput.max = 10;
+          paradasInput.placeholder = 'Máx. 10 paradas';
+          if (parseInt(paradasInput.value) > 10) paradasInput.value = 10;
+        } else {
+          paradasInput.max = 21;
+          paradasInput.placeholder = 'Máx. 21 paradas';
+        }
+
+        var sel = document.getElementById('cab-modelo-sel');
+        sel.innerHTML = '<option value="">— Selecione —</option>';
+        modelosCabina[this.value].forEach(function(m) {
+          var opt = document.createElement('option');
+          opt.textContent = m;
+          sel.appendChild(opt);
+        });
+      });
+    });
+
+    // Validação soma de botoeiras por posição vs total de pavimentos
+    var bcdPav  = document.getElementById('bcd-total-pav');
+    var bcdT    = document.getElementById('bcd-qtd-t');
+    var bcdB    = document.getElementById('bcd-qtd-b');
+    var bcdM    = document.getElementById('bcd-qtd-m');
+    var bcdInfo = document.getElementById('bcd-soma-info');
+
+    function validarBcdSoma() {
+      var total = parseInt(bcdPav.value) || 0;
+      var t     = parseInt(bcdT.value)   || 0;
+      var b     = parseInt(bcdB.value)   || 0;
+      var m     = parseInt(bcdM.value)   || 0;
+      var soma  = t + b + m;
+
+      if (total === 0) { bcdInfo.style.display = 'none'; return; }
+
+      bcdInfo.style.display = 'block';
+
+      // Impedir que a soma ultrapasse o total
+      if (soma > total) {
+        // Reduzir o campo que acabou de ser alterado
+        var excesso = soma - total;
+        var ativo = document.activeElement;
+        if (ativo === bcdT) { bcdT.value = Math.max(0, t - excesso); }
+        else if (ativo === bcdB) { bcdB.value = Math.max(0, b - excesso); }
+        else if (ativo === bcdM) { bcdM.value = Math.max(0, m - excesso); }
+        soma = (parseInt(bcdT.value)||0) + (parseInt(bcdB.value)||0) + (parseInt(bcdM.value)||0);
+      }
+
+      var restante = total - soma;
+      if (soma === total) {
+        bcdInfo.style.background = '#e8f5e9';
+        bcdInfo.style.border = '1px solid #81c784';
+        bcdInfo.style.color = '#2e7d32';
+        bcdInfo.innerHTML = '✔ Distribuição completa: ' + soma + ' de ' + total + ' pavimentos atribuídos.';
+      } else {
+        bcdInfo.style.background = '#fffbe6';
+        bcdInfo.style.border = '1px solid #f5c800';
+        bcdInfo.style.color = '#7a6000';
+        bcdInfo.innerHTML = '⚠ ' + soma + ' de ' + total + ' pavimentos atribuídos — faltam <strong>' + restante + '</strong>.';
+      }
+    }
+
+    [bcdPav, bcdT, bcdB, bcdM].forEach(function(el) {
+      if (el) el.addEventListener('input', validarBcdSoma);
+    });
+
+    // Gravação de logo — mostrar upload ao selecionar Sim
+    document.querySelectorAll('input[name="inox_logo"]').forEach(function(r) {
+      r.addEventListener('change', function() {
+        document.getElementById('inox-logo-upload').style.display = this.value === 'sim' ? 'block' : 'none';
+      });
+    });
+
+    // Preview do logo (imagem ou PDF)
+    var fileLogoEl = document.getElementById('file-logo');
+    if (fileLogoEl) {
+      fileLogoEl.addEventListener('change', function() {
+        var f = this.files[0];
+        if (!f) return;
+        var prevImg = document.getElementById('prev-logo');
+        var prevPdf = document.getElementById('prev-logo-pdf');
+        if (f.type === 'application/pdf') {
+          prevImg.style.display = 'none';
+          prevPdf.textContent = '✔ PDF anexado: ' + f.name;
+          prevPdf.style.display = 'block';
+        } else {
+          prevPdf.style.display = 'none';
+          prevImg.src = URL.createObjectURL(f);
+          prevImg.style.display = 'block';
+        }
+      });
+    }
+
+    // Display sobre a porta
+    document.querySelectorAll('input[name="display_porta"]').forEach(function(r) {
+      r.addEventListener('change', function() {
+        document.getElementById('disp-material-wrap').style.display = this.value === 'sim' ? 'block' : 'none';
+      });
+    });
+
+    // Botoeira sem display
+    document.querySelectorAll('input[name="bot_sem_disp"]').forEach(function(r) {
+      r.addEventListener('change', function() {
+        var show = this.value === 'sim';
+        ['bsd-wrap','bsd-qtd-wrap','bsd-dir-wrap','bsd-des-wrap'].forEach(function(id) {
+          document.getElementById(id).style.display = show ? 'block' : 'none';
+        });
+        if (!show) {
+          document.getElementById('bsd-modelos-wrap').style.display = 'none';
+          document.getElementById('bsd-modelos-vidro').style.display = 'none';
+          document.getElementById('bsd-modelos-inox').style.display = 'none';
+        }
+      });
+    });
+    document.querySelectorAll('input[name="bot_sem_mat"]').forEach(function(r) {
+      r.addEventListener('change', function() {
+        document.getElementById('bsd-modelos-wrap').style.display = 'block';
+        document.getElementById('bsd-modelos-vidro').style.display = this.value === 'vidro' ? 'block' : 'none';
+        document.getElementById('bsd-modelos-inox').style.display = this.value === 'inox' ? 'block' : 'none';
+      });
+    });
+
+    // Botoeira com display
+    document.querySelectorAll('input[name="bot_com_disp"]').forEach(function(r) {
+      r.addEventListener('change', function() {
+        var show = this.value === 'sim';
+        ['bcd-wrap','bcd-qtd-wrap'].forEach(function(id) {
+          document.getElementById(id).style.display = show ? 'block' : 'none';
+        });
+        if (!show) {
+          document.getElementById('bcd-modelos-wrap').style.display = 'none';
+          document.getElementById('bcd-modelos-vidro').style.display = 'none';
+          document.getElementById('bcd-modelos-inox').style.display = 'none';
+        }
+      });
+    });
+    document.querySelectorAll('input[name="bot_com_mat"]').forEach(function(r) {
+      r.addEventListener('change', function() {
+        document.getElementById('bcd-modelos-wrap').style.display = 'block';
+        document.getElementById('bcd-modelos-vidro').style.display = this.value === 'vidro' ? 'block' : 'none';
+        document.getElementById('bcd-modelos-inox').style.display = this.value === 'inox' ? 'block' : 'none';
+      });
+    });
+
+    // Porta de pavimento
+    document.querySelectorAll('input[name="porta_pav"]').forEach(function(r) {
+      r.addEventListener('change', function() {
+        document.getElementById('pp-com').classList.toggle('on', this.value === 'sim');
+        document.getElementById('pp-nao').classList.toggle('on', this.value === 'nao');
+      });
+    });
+
+    // Espelhar sentido de abertura da porta de cabina na porta de pavimento
+    var aberturaLabels = { direita: 'Direita →', esquerda: '← Esquerda', central: '↔ Central' };
+    document.querySelectorAll('input[name="abertura"]').forEach(function(r) {
+      r.addEventListener('change', function() {
+        var ref = document.getElementById('pp-abertura-ref');
+        if (ref) ref.innerHTML = '<strong>' + (aberturaLabels[this.value] || this.value) + '</strong> <span style="color:var(--gray-lt);font-size:11px">(herdado da Porta de Cabina)</span>';
+      });
+    });
+
+    // Encoder
+    document.querySelectorAll('input[name="enc"]').forEach(function(r) {
+      r.addEventListener('change', function() {
+        var sim = document.getElementById('enc-sim');
+        var nao = document.getElementById('enc-nao');
+        if (this.value === 'sim') { sim.classList.add('on'); nao.classList.remove('on'); }
+        else { nao.classList.add('on'); sim.classList.remove('on'); }
+      });
+    });
+
+    // Porta
+    document.querySelectorAll('input[name="porta"]').forEach(function(r) {
+      r.addEventListener('change', function() {
+        var sim = document.getElementById('porta-sim');
+        var nao = document.getElementById('porta-nao');
+        if (this.value === 'sim') { sim.classList.add('on'); nao.classList.remove('on'); }
+        else { nao.classList.add('on'); sim.classList.remove('on'); }
+      });
+    });
+
+    // Pulsos PPR custom
+    var pprSel = document.getElementById('ppr-sel');
+    if (pprSel) {
+      pprSel.addEventListener('change', function() {
+        document.getElementById('ppr-custom').style.display = this.value === 'outro' ? 'block' : 'none';
+      });
+    }
+
+    // Preview fotos
+    function bindPreview(fileId, imgId) {
+      var el = document.getElementById(fileId);
+      if (!el) return;
+      el.addEventListener('change', function() {
+        var f = this.files[0];
+        if (!f) return;
+        var img = document.getElementById(imgId);
+        img.src = URL.createObjectURL(f);
+        img.style.display = 'block';
+      });
+    }
+    bindPreview('file-plaqueta1', 'prev-plaqueta1');
+    bindPreview('file-plaqueta2', 'prev-plaqueta2');
+    bindPreview('file1', 'prev1');
+    bindPreview('file2', 'prev2');
+
+    // Botões
+    var btnPrint = document.getElementById('btn-print');
+    if (btnPrint) btnPrint.addEventListener('click', function() { window.print(); });
+
+    var btnEnviar = document.getElementById('btn-enviar');
+    if (btnEnviar) btnEnviar.addEventListener('click', function() {
+      if (!document.getElementById('vendedor').value.trim()) {
+        alert('⚠️ Preencha o nome do vendedor.'); return;
+      }
+      if (!document.querySelector('input[name="motor"]:checked')) {
+        alert('⚠️ Selecione o tipo de motor.'); return;
+      }
+      alert('✅ Formulário enviado com sucesso!\n\nReferência: CMD-' +
+        document.getElementById('ref').textContent +
+        '\nVerticalParts agradece o seu pedido!');
+    });
+  })();
+</script>
