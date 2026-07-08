@@ -856,35 +856,98 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
       </div>
     );
   } else if (module === "M2") {
+    const fDate = (v: unknown) => {
+      if (typeof v !== "string" || !v) return "—";
+      const [y, m, d] = v.slice(0, 10).split("-");
+      return y && m && d ? `${d}/${m}/${y}` : v;
+    };
+    const TRANSPORT_LABELS: Record<string, string> = {
+      AVIAO: "Avião", CARRO_EMPRESA: "Carro da Empresa", CARRO_PROPRIO: "Carro Próprio", ONIBUS: "Ônibus",
+    };
+    const PURPOSE_LABELS: Record<string, string> = {
+      OBRA: "Obra", CURSO: "Curso", VISITA_CLIENTE: "Visita a Cliente", WORKSHOP: "Workshop", EVENTO_FEIRA: "Evento/Feira",
+    };
+    const FLIGHT_CLASS_LABELS: Record<string, string> = { ECONOMICA: "Econômica", EXECUTIVA: "Executiva" };
+    const FLIGHT_TIME_LABELS: Record<string, string> = {
+      QUALQUER: "Qualquer horário", MANHA: "Manhã (até 12h)", TARDE: "Tarde (12h às 18h)", NOITE: "Noite (após 18h)",
+    };
+    const FLIGHT_BAGGAGE_LABELS: Record<string, string> = { EQUIPAMENTO: "Equipamento", BAGAGEM_EXTRA: "Bagagem extra" };
+
+    const tripRows: Array<{ label: string; value: string; full?: boolean }> = [];
+    if (data.origin_city) tripRows.push({ label: "Origem", value: f(data.origin_city) });
+    if (data.destination_city) tripRows.push({ label: "Destino", value: f(data.destination_city) });
+    if (data.departure_date) tripRows.push({ label: "Data de Partida", value: fDate(data.departure_date) });
+    if (data.return_date) tripRows.push({ label: "Data de Retorno", value: fDate(data.return_date) });
+    if (data.duration_days != null) tripRows.push({ label: "Duração", value: `${f(data.duration_days)} dia(s)` });
+    if (data.transport_mode) {
+      tripRows.push({ label: "Meio de Transporte", value: TRANSPORT_LABELS[data.transport_mode as string] ?? f(data.transport_mode) });
+    }
+    if (data.transport_mode === "AVIAO") {
+      if (data.flight_class) tripRows.push({ label: "Classe", value: FLIGHT_CLASS_LABELS[data.flight_class as string] ?? f(data.flight_class) });
+      if (data.flight_time_preference) tripRows.push({ label: "Horário Preferido", value: FLIGHT_TIME_LABELS[data.flight_time_preference as string] ?? f(data.flight_time_preference) });
+      const baggage = data.flight_baggage as string[] | undefined;
+      if (baggage?.length) tripRows.push({ label: "Bagagem Especial", value: baggage.map((b) => FLIGHT_BAGGAGE_LABELS[b] ?? b).join(", ") });
+    }
+    if (data.needs_hotel) tripRows.push({ label: "Hotel", value: `${f(data.hotel_nights)} noite(s)` });
+    if (data.needs_local_car) tripRows.push({ label: "Carro no Destino", value: `${f(data.car_rental_days)} dia(s)` });
+    const purposes = data.purposes as string[] | undefined;
+    if (purposes?.length) tripRows.push({ label: "Objetivo", value: purposes.map((p) => PURPOSE_LABELS[p] ?? p).join(", "), full: true });
+    if (data.project_number) tripRows.push({ label: "Número do Projeto", value: f(data.project_number) });
+
+    const tripDetails = tripRows.length > 0 && (
+      <div className="space-y-2">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+          <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-gray-100 text-gray-600 text-[9px] font-bold">M</span>
+          {MODULE_LABELS[module]} — Dados da Viagem
+        </h3>
+        <Card>
+          <CardContent className="p-3">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+              {tripRows.map((r) => (
+                <div key={r.label} className={r.full ? "col-span-2" : ""}>
+                  <p className="text-[10px] text-muted-foreground">{r.label}</p>
+                  <p className="font-medium text-foreground break-words">{r.value}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+
     const travelers = data.travelers as Array<Record<string, unknown>> | undefined;
     if (travelers?.length) {
       return (
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-            <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-gray-100 text-gray-600 text-[9px] font-bold">M</span>
-            {MODULE_LABELS[module]} — {travelers.length} viajante{travelers.length !== 1 ? "s" : ""}
-          </h3>
+        <div className="space-y-3">
+          {tripDetails}
           <div className="space-y-2">
-            {travelers.map((t, i) => {
-              const photoPath = (t.docPhotoPath ?? t.doc_photo_path) as string | undefined;
-              return (
-                <Card key={i}>
-                  <CardContent className="p-3">
-                    <p className="text-xs font-semibold text-foreground">{i + 1}. {f(t.fullName)}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{f(t.docType)}: {f(t.docNumber)}</p>
-                    {photoPath && (
-                      <div className="mt-2">
-                        <StoragePhoto path={photoPath} alt={`Documento — ${f(t.fullName)}`} />
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-gray-100 text-gray-600 text-[9px] font-bold">M</span>
+              {MODULE_LABELS[module]} — {travelers.length} viajante{travelers.length !== 1 ? "s" : ""}
+            </h3>
+            <div className="space-y-2">
+              {travelers.map((t, i) => {
+                const photoPath = (t.docPhotoPath ?? t.doc_photo_path) as string | undefined;
+                return (
+                  <Card key={i}>
+                    <CardContent className="p-3">
+                      <p className="text-xs font-semibold text-foreground">{i + 1}. {f(t.fullName)}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{f(t.docType)}: {f(t.docNumber)}</p>
+                      {photoPath && (
+                        <div className="mt-2">
+                          <StoragePhoto path={photoPath} alt={`Documento — ${f(t.fullName)}`} />
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           </div>
         </div>
       );
     }
+    if (tripDetails) return tripDetails;
     if (data.traveler_name) rows.push({ label: "Viajante", value: f(data.traveler_name) });
   } else if (module === "M5") {
     if (data.cargo_description) rows.push({ label: "Descrição da Carga", value: f(data.cargo_description), full: true });

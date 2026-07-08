@@ -67,6 +67,23 @@ const PURPOSES = [
   { value: "EVENTO_FEIRA", label: "Evento/Feira" },
 ];
 
+const FLIGHT_CLASSES = [
+  { value: "ECONOMICA", label: "Econômica" },
+  { value: "EXECUTIVA", label: "Executiva" },
+];
+
+const FLIGHT_TIME_PREFERENCES = [
+  { value: "QUALQUER", label: "Qualquer horário" },
+  { value: "MANHA", label: "Manhã (até 12h)" },
+  { value: "TARDE", label: "Tarde (12h às 18h)" },
+  { value: "NOITE", label: "Noite (após 18h)" },
+];
+
+const FLIGHT_BAGGAGE_OPTIONS = [
+  { value: "EQUIPAMENTO", label: "Equipamento" },
+  { value: "BAGAGEM_EXTRA", label: "Bagagem extra" },
+];
+
 const STEPS = [
   { label: "Roteiro", icon: MapPin },
   { label: "Hospedagem", icon: Hotel },
@@ -109,12 +126,17 @@ function TripsPage() {
   const [returnDate, setReturnDate] = useState<Date | undefined>();
   const [returnDateOpen, setReturnDateOpen] = useState(false);
   const [transportMode, setTransportMode] = useState("");
+  const [flightClass, setFlightClass] = useState("ECONOMICA");
+  const [flightTimePreference, setFlightTimePreference] = useState("QUALQUER");
+  const [flightBaggage, setFlightBaggage] = useState<string[]>([]);
 
   const [needsHotel, setNeedsHotel] = useState(false);
   const [hotelNights, setHotelNights] = useState("");
   const [needsLocalCar, setNeedsLocalCar] = useState(false);
+  const [carRentalDays, setCarRentalDays] = useState("");
 
   const [purposes, setPurposes] = useState<string[]>([]);
+  const [projectNumber, setProjectNumber] = useState("");
   const [justification, setJustification] = useState("");
   const [shortNoticeJustification, setShortNoticeJustification] = useState("");
 
@@ -196,10 +218,15 @@ function TripsPage() {
       if (typeof s.departureDate === "string") setDepartureDate(new Date(s.departureDate));
       if (typeof s.returnDate === "string") setReturnDate(new Date(s.returnDate));
       if (typeof s.transportMode === "string") setTransportMode(s.transportMode);
+      if (typeof s.flightClass === "string") setFlightClass(s.flightClass);
+      if (typeof s.flightTimePreference === "string") setFlightTimePreference(s.flightTimePreference);
+      if (Array.isArray(s.flightBaggage)) setFlightBaggage(s.flightBaggage as string[]);
       if (typeof s.needsHotel === "boolean") setNeedsHotel(s.needsHotel);
       if (typeof s.hotelNights === "string") setHotelNights(s.hotelNights);
       if (typeof s.needsLocalCar === "boolean") setNeedsLocalCar(s.needsLocalCar);
+      if (typeof s.carRentalDays === "string") setCarRentalDays(s.carRentalDays);
       if (Array.isArray(s.purposes)) setPurposes(s.purposes as string[]);
+      if (typeof s.projectNumber === "string") setProjectNumber(s.projectNumber);
       if (typeof s.justification === "string") setJustification(s.justification);
       if (typeof s.shortNoticeJustification === "string")
         setShortNoticeJustification(s.shortNoticeJustification);
@@ -230,10 +257,15 @@ function TripsPage() {
       if (md.departure_date) setDepartureDate(new Date(md.departure_date as string));
       if (md.return_date) setReturnDate(new Date(md.return_date as string));
       setTransportMode((md.transport_mode as string | undefined) ?? "");
+      setFlightClass((md.flight_class as string | undefined) ?? "ECONOMICA");
+      setFlightTimePreference((md.flight_time_preference as string | undefined) ?? "QUALQUER");
+      setFlightBaggage((md.flight_baggage as string[] | undefined) ?? []);
       setNeedsHotel((md.needs_hotel as boolean | undefined) ?? false);
       setHotelNights(String((md.hotel_nights as number | undefined) ?? ""));
       setNeedsLocalCar((md.needs_local_car as boolean | undefined) ?? false);
+      setCarRentalDays(String((md.car_rental_days as number | undefined) ?? ""));
       setPurposes((md.purposes as string[] | undefined) ?? []);
+      setProjectNumber((md.project_number as string | undefined) ?? "");
       setJustification((data.justification as string) ?? "");
       setShortNoticeJustification((md.short_notice_justification as string | undefined) ?? "");
       const travelersData = (md.travelers as Array<{ id?: string; full_name: string; doc_type: string; doc_number: string; doc_photo_path?: string | null }> | undefined) ?? [];
@@ -268,10 +300,15 @@ function TripsPage() {
           departureDate: departureDate?.toISOString(),
           returnDate: returnDate?.toISOString(),
           transportMode,
+          flightClass,
+          flightTimePreference,
+          flightBaggage,
           needsHotel,
           hotelNights,
           needsLocalCar,
+          carRentalDays,
           purposes,
+          projectNumber,
           justification,
           shortNoticeJustification,
         }),
@@ -281,8 +318,9 @@ function TripsPage() {
     }
   }, [
     dialogOpen, step, travelers, originCity, destinationCity, departureDate,
-    returnDate, transportMode, needsHotel, hotelNights, needsLocalCar,
-    purposes, justification, shortNoticeJustification,
+    returnDate, transportMode, flightClass, flightTimePreference, flightBaggage,
+    needsHotel, hotelNights, needsLocalCar, carRentalDays,
+    purposes, projectNumber, justification, shortNoticeJustification,
   ]);
 
   const resetForm = () => {
@@ -297,10 +335,15 @@ function TripsPage() {
     setDepartureDate(undefined);
     setReturnDate(undefined);
     setTransportMode("");
+    setFlightClass("ECONOMICA");
+    setFlightTimePreference("QUALQUER");
+    setFlightBaggage([]);
     setNeedsHotel(false);
     setHotelNights("");
     setNeedsLocalCar(false);
+    setCarRentalDays("");
     setPurposes([]);
+    setProjectNumber("");
     setJustification("");
     setShortNoticeJustification("");
   };
@@ -308,6 +351,12 @@ function TripsPage() {
   const togglePurpose = (val: string) => {
     setPurposes((prev) =>
       prev.includes(val) ? prev.filter((p) => p !== val) : [...prev, val],
+    );
+  };
+
+  const toggleFlightBaggage = (val: string) => {
+    setFlightBaggage((prev) =>
+      prev.includes(val) ? prev.filter((b) => b !== val) : [...prev, val],
     );
   };
 
@@ -359,10 +408,18 @@ function TripsPage() {
         toast.error("Informe o número de noites de hotel.");
         return false;
       }
+      if (needsLocalCar && (!carRentalDays || parseInt(carRentalDays) <= 0)) {
+        toast.error("Informe a quantidade de dias de locação do carro.");
+        return false;
+      }
     }
     if (step === 2) {
       if (purposes.length === 0) {
         toast.error("Selecione pelo menos um objetivo.");
+        return false;
+      }
+      if (purposes.includes("OBRA") && !projectNumber.trim()) {
+        toast.error("Informe o número do projeto para viagens a obra.");
         return false;
       }
       if (justification.length < 20) {
@@ -420,10 +477,15 @@ function TripsPage() {
         return_date: returnDate?.toISOString().slice(0, 10),
         duration_days: durationDays,
         transport_mode: transportMode,
+        flight_class: transportMode === "AVIAO" ? flightClass : null,
+        flight_time_preference: transportMode === "AVIAO" ? flightTimePreference : null,
+        flight_baggage: transportMode === "AVIAO" ? flightBaggage : null,
         needs_hotel: needsHotel,
         hotel_nights: hotelNights ? parseInt(hotelNights) : null,
         needs_local_car: needsLocalCar,
+        car_rental_days: needsLocalCar && carRentalDays ? parseInt(carRentalDays) : null,
         purposes,
+        project_number: purposes.includes("OBRA") ? projectNumber.trim() : null,
         short_notice_justification: shortNoticeJustification || null,
       };
 
@@ -808,6 +870,67 @@ function TripsPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {transportMode === "AVIAO" && (
+                <div className="space-y-4 rounded-lg border p-3 bg-muted/20">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Classe</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {FLIGHT_CLASSES.map((c) => (
+                        <button
+                          key={c.value}
+                          type="button"
+                          onClick={() => setFlightClass(c.value)}
+                          className={cn(
+                            "rounded-lg border-2 p-2 text-xs font-medium text-center transition-all",
+                            flightClass === c.value
+                              ? "border-vp-yellow bg-amber-50 text-vp-yellow-dark"
+                              : "border-border hover:border-muted-foreground/40",
+                          )}
+                        >
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Horário preferido</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {FLIGHT_TIME_PREFERENCES.map((t) => (
+                        <button
+                          key={t.value}
+                          type="button"
+                          onClick={() => setFlightTimePreference(t.value)}
+                          className={cn(
+                            "rounded-lg border-2 p-2 text-xs font-medium text-center transition-all",
+                            flightTimePreference === t.value
+                              ? "border-vp-yellow bg-amber-50 text-vp-yellow-dark"
+                              : "border-border hover:border-muted-foreground/40",
+                          )}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Precisa de bagagem especial?</label>
+                    <div className="flex flex-col gap-1.5">
+                      {FLIGHT_BAGGAGE_OPTIONS.map((b) => (
+                        <label key={b.value} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={flightBaggage.includes(b.value)}
+                            onChange={() => toggleFlightBaggage(b.value)}
+                            className="h-4 w-4 rounded border-border accent-vp-yellow"
+                          />
+                          {b.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -839,6 +962,18 @@ function TripsPage() {
                 </div>
                 <Switch checked={needsLocalCar} onCheckedChange={setNeedsLocalCar} />
               </div>
+              {needsLocalCar && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Dias de Locação do Carro *</label>
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="0"
+                    value={carRentalDays}
+                    onChange={(e) => setCarRentalDays(e.target.value)}
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -866,6 +1001,16 @@ function TripsPage() {
                   ))}
                 </div>
               </div>
+              {purposes.includes("OBRA") && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Número do Projeto *</label>
+                  <Input
+                    placeholder="Ex.: 28978"
+                    value={projectNumber}
+                    onChange={(e) => setProjectNumber(e.target.value)}
+                  />
+                </div>
+              )}
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Justificativa *</label>
                 <Textarea
