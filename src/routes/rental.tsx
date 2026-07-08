@@ -39,6 +39,16 @@ const EQUIPMENT_CATEGORIES = [
   { value: "OUTRO", label: "Outro" },
 ];
 
+// Equipamentos que tipicamente exigem ART (Anotação de Responsabilidade
+// Técnica) para operação/instalação. Ajustável conforme a política interna.
+const ART_REQUIRED_CATEGORIES = ["GUINDASTE", "PLATAFORMA", "ANDAIME", "ESCAVADEIRA", "CAMINHAO_MUNCK"];
+
+const ART_STATUS_OPTIONS = [
+  { value: "EMITIR", label: "Não, precisamos emitir" },
+  { value: "TEMOS", label: "Sim, já temos" },
+  { value: "NAO_SEI", label: "Não sei informar" },
+];
+
 const URGENCY = [
   { value: "LOW", label: "Baixa" },
   { value: "MEDIUM", label: "Média" },
@@ -83,6 +93,16 @@ function RentalPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [specs, setSpecs] = useState("");
   const [quantity, setQuantity] = useState("1");
+
+  const [artStatus, setArtStatus] = useState("EMITIR");
+  const [needsSecurityInduction, setNeedsSecurityInduction] = useState(false);
+  const [clientNormFile, setClientNormFile] = useState<File | null>(null);
+  const [editClientNormPath, setEditClientNormPath] = useState<string | null>(null);
+
+  const needsArt = useMemo(
+    () => categories.some((c) => ART_REQUIRED_CATEGORIES.includes(c)),
+    [categories],
+  );
 
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [startDateOpen, setStartDateOpen] = useState(false);
@@ -135,6 +155,8 @@ function RentalPage() {
       else if (typeof s.category === 'string' && s.category) setCategories([s.category as string]);
       if (typeof s.specs === 'string') setSpecs(s.specs);
       if (typeof s.quantity === 'string') setQuantity(s.quantity);
+      if (typeof s.artStatus === 'string') setArtStatus(s.artStatus);
+      if (typeof s.needsSecurityInduction === 'boolean') setNeedsSecurityInduction(s.needsSecurityInduction);
       if (typeof s.startDate === 'string') setStartDate(new Date(s.startDate));
       if (typeof s.endDate === 'string') setEndDate(new Date(s.endDate));
       if (typeof s.deliveryLocation === 'string') setDeliveryLocation(s.deliveryLocation);
@@ -163,6 +185,9 @@ function RentalPage() {
       else if (typeof md.category === "string" && md.category) setCategories([md.category as string]);
       if (typeof md.specs === "string") setSpecs(md.specs);
       if (typeof md.quantity === "number") setQuantity(String(md.quantity));
+      if (typeof md.art_status === "string") setArtStatus(md.art_status);
+      if (typeof md.needs_security_induction === "boolean") setNeedsSecurityInduction(md.needs_security_induction);
+      setEditClientNormPath((md.client_norm_path as string | null) ?? null);
       if (typeof md.start_date === "string") setStartDate(new Date(md.start_date));
       if (typeof md.end_date === "string") setEndDate(new Date(md.end_date));
       if (typeof md.delivery_location === "string") setDeliveryLocation(md.delivery_location);
@@ -179,18 +204,21 @@ function RentalPage() {
     try {
       sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
         open: true, step, categories, specs, quantity,
+        artStatus, needsSecurityInduction,
         startDate: startDate?.toISOString(),
         endDate: endDate?.toISOString(),
         deliveryLocation, urgencyLevel, justification,
       }));
     } catch { /* ignore */ }
-  }, [dialogOpen, step, categories, specs, quantity,
+  }, [dialogOpen, step, categories, specs, quantity, artStatus, needsSecurityInduction,
       startDate, endDate, deliveryLocation, urgencyLevel, justification]);
 
   const resetForm = () => {
     sessionStorage.removeItem(DIALOG_KEY);
     setStep(0);
     setCategories([]); setSpecs(""); setQuantity("1");
+    setArtStatus("EMITIR"); setNeedsSecurityInduction(false);
+    setClientNormFile(null); setEditClientNormPath(null);
     setStartDate(undefined); setEndDate(undefined); setDeliveryLocation("");
     setUrgencyLevel(""); setJustification("");
     setEditMode(false); setEditReqId(null); setEditEdition(1);
@@ -223,11 +251,26 @@ function RentalPage() {
     if (!validateStep()) return;
     setIsSubmitting(true);
     try {
+      let clientNormPath: string | null = editClientNormPath;
+      if (clientNormFile) {
+        const ext = clientNormFile.name.split(".").pop()?.toLowerCase() || "pdf";
+        const path = `m6/${user?.id ?? "anon"}/${Date.now()}.${ext}`;
+        const { data: uploadData, error: uploadError } = await supabaseBrowser.storage
+          .from("travel-docs")
+          .upload(path, clientNormFile, { upsert: true });
+        if (uploadError) console.warn("[client norm upload]", uploadError.message);
+        else clientNormPath = uploadData.path;
+      }
+
       const moduleData = {
         categories,
         category: categories[0] ?? "",
         specs,
         quantity: parseInt(quantity),
+        needs_art: needsArt,
+        art_status: needsArt ? artStatus : null,
+        needs_security_induction: needsArt ? needsSecurityInduction : false,
+        client_norm_path: needsArt ? clientNormPath : null,
         start_date: startDate?.toISOString().slice(0, 10),
         end_date: endDate?.toISOString().slice(0, 10),
         rental_days: rentalDays,
@@ -378,6 +421,65 @@ function RentalPage() {
                   ))}
                 </div>
               </div>
+
+              {needsArt && (
+                <div className="space-y-3 rounded-lg border p-3 bg-muted/20">
+                  <p className="text-sm font-semibold flex items-center gap-1.5">
+                    📋 Segurança e Documentação
+                  </p>
+                  <div className="border-t" />
+                  <p className="text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-1.5 flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    Você solicitou equipamentos que precisam de ART.
+                  </p>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">A ART (Anotação de Responsabilidade Técnica) já existe?</label>
+                    <div className="flex flex-col gap-1.5">
+                      {ART_STATUS_OPTIONS.map((opt) => (
+                        <label key={opt.value} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="radio"
+                            name="art-status"
+                            checked={artStatus === opt.value}
+                            onChange={() => setArtStatus(opt.value)}
+                            className="h-4 w-4 accent-vp-yellow"
+                          />
+                          {opt.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={needsSecurityInduction}
+                        onChange={(e) => setNeedsSecurityInduction(e.target.checked)}
+                        className="h-4 w-4 rounded border-border accent-vp-yellow"
+                      />
+                      A obra exige indução de segurança?
+                    </label>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Tem alguma norma específica do cliente?</label>
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,image/*"
+                      className="hidden"
+                      id="client-norm-file"
+                      onChange={(e) => setClientNormFile(e.target.files?.[0] ?? null)}
+                    />
+                    <label
+                      htmlFor="client-norm-file"
+                      className="flex items-center gap-2 rounded-lg border-2 border-dashed p-2.5 cursor-pointer transition-colors border-border hover:border-muted-foreground/50 w-fit"
+                    >
+                      <span className="text-xs font-medium">📎 {clientNormFile ? clientNormFile.name : editClientNormPath ? "Trocar documento" : "Anexar documento"}</span>
+                    </label>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Esta seção é opcional.</p>
+                </div>
+              )}
+
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Especificações Técnicas</label>
                 <Textarea placeholder="Capacidade, potência, dimensões, requisitos especiais..." value={specs} onChange={(e) => setSpecs(e.target.value)} rows={2} />

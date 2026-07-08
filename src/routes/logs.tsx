@@ -794,6 +794,25 @@ const MODULE_LABELS: Record<string, string> = {
   M4: "Manutenção", M5: "Frete", M6: "Locação",
 };
 
+function StorageFileLink({ path, bucket = "travel-docs", label }: { path: string; bucket?: string; label: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!path) return;
+    setUrl(null);
+    supabaseBrowser.storage.from(bucket).createSignedUrl(path, 3600).then(({ data }) => {
+      if (data?.signedUrl) setUrl(data.signedUrl);
+    });
+  }, [path, bucket]);
+  if (!url) return null;
+  return (
+    <div className="col-span-2 mt-1">
+      <a href={url} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 hover:underline inline-flex items-center gap-1">
+        📎 {label}
+      </a>
+    </div>
+  );
+}
+
 function StoragePhoto({ path, bucket = "travel-docs", alt }: { path: string; bucket?: string; alt: string }) {
   const [url, setUrl] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -998,6 +1017,13 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
     if (data.end_date) rows.push({ label: "Término", value: f(data.end_date) });
     if (data.delivery_location) rows.push({ label: "Local de Entrega", value: f(data.delivery_location), full: true });
     if (data.specs) rows.push({ label: "Especificações", value: f(data.specs), full: true });
+    if (data.needs_art) {
+      const ART_STATUS_LABELS: Record<string, string> = {
+        EMITIR: "Precisa emitir", TEMOS: "Já existe", NAO_SEI: "Não informado",
+      };
+      rows.push({ label: "ART", value: ART_STATUS_LABELS[data.art_status as string] ?? "—" });
+      rows.push({ label: "Indução de Segurança", value: data.needs_security_induction ? "Exigida" : "Não exigida" });
+    }
   }
 
   if (!rows.length) return null;
@@ -1017,6 +1043,9 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
                 <p className="font-medium text-foreground break-words">{r.value}</p>
               </div>
             ))}
+            {module === "M6" && typeof data.client_norm_path === "string" && data.client_norm_path && (
+              <StorageFileLink path={data.client_norm_path} label="Norma específica do cliente" />
+            )}
           </div>
         </CardContent>
       </Card>
