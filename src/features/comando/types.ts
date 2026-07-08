@@ -1,5 +1,7 @@
 export type ComandoPedidoStatus = "rascunho" | "enviado" | "visualizado" | "respondido";
 
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
 export interface ComandoPedido {
   id: string;
   numero_documento: string;
@@ -10,7 +12,7 @@ export interface ComandoPedido {
   cliente_email: string | null;
   projeto_numero: string | null;
   observacoes_internas: string | null;
-  respostas: Record<string, unknown>;
+  respostas: Record<string, JsonValue>;
   requisition_id: string | null;
   created_by: string | null;
   created_at: string;
