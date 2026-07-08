@@ -9,10 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as PedidoComandoTokenRouteImport } from './routes/pedido-comando.$token'
-import { Route as ComandoRouteImport } from './routes/comando'
 import { Route as TripsRouteImport } from './routes/trips'
-import { Route as EstoqueOmieRouteImport } from './routes/estoque-omie'
 import { Route as ServicesRouteImport } from './routes/services'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RentalRouteImport } from './routes/rental'
@@ -25,29 +22,17 @@ import { Route as LogsRouteImport } from './routes/logs'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as FreightRouteImport } from './routes/freight'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as EstoqueOmieRouteImport } from './routes/estoque-omie'
+import { Route as ComandoRouteImport } from './routes/comando'
 import { Route as ApprovalRouteImport } from './routes/approval'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PedidoComandoTokenRouteImport } from './routes/pedido-comando.$token'
 
-const PedidoComandoTokenRoute = PedidoComandoTokenRouteImport.update({
-  id: '/pedido-comando/$token',
-  path: '/pedido-comando/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ComandoRoute = ComandoRouteImport.update({
-  id: '/comando',
-  path: '/comando',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const TripsRoute = TripsRouteImport.update({
   id: '/trips',
   path: '/trips',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EstoqueOmieRoute = EstoqueOmieRouteImport.update({
-  id: '/estoque-omie',
-  path: '/estoque-omie',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ServicesRoute = ServicesRouteImport.update({
@@ -110,6 +95,16 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EstoqueOmieRoute = EstoqueOmieRouteImport.update({
+  id: '/estoque-omie',
+  path: '/estoque-omie',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComandoRoute = ComandoRouteImport.update({
+  id: '/comando',
+  path: '/comando',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApprovalRoute = ApprovalRouteImport.update({
   id: '/approval',
   path: '/approval',
@@ -130,6 +125,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PedidoComandoTokenRoute = PedidoComandoTokenRouteImport.update({
+  id: '/pedido-comando/$token',
+  path: '/pedido-comando/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -143,7 +143,6 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/maintenance': typeof MaintenanceRoute
-  '/pedido-comando/$token': typeof PedidoComandoTokenRoute
   '/products': typeof ProductsRoute
   '/purchasing': typeof PurchasingRoute
   '/quoting': typeof QuotingRoute
@@ -152,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/services': typeof ServicesRoute
   '/trips': typeof TripsRoute
+  '/pedido-comando/$token': typeof PedidoComandoTokenRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -165,7 +165,6 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/maintenance': typeof MaintenanceRoute
-  '/pedido-comando/$token': typeof PedidoComandoTokenRoute
   '/products': typeof ProductsRoute
   '/purchasing': typeof PurchasingRoute
   '/quoting': typeof QuotingRoute
@@ -174,6 +173,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/services': typeof ServicesRoute
   '/trips': typeof TripsRoute
+  '/pedido-comando/$token': typeof PedidoComandoTokenRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -188,7 +188,6 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/maintenance': typeof MaintenanceRoute
-  '/pedido-comando/$token': typeof PedidoComandoTokenRoute
   '/products': typeof ProductsRoute
   '/purchasing': typeof PurchasingRoute
   '/quoting': typeof QuotingRoute
@@ -197,6 +196,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/services': typeof ServicesRoute
   '/trips': typeof TripsRoute
+  '/pedido-comando/$token': typeof PedidoComandoTokenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -212,7 +212,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/logs'
     | '/maintenance'
-    | '/pedido-comando/$token'
     | '/products'
     | '/purchasing'
     | '/quoting'
@@ -221,6 +220,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/services'
     | '/trips'
+    | '/pedido-comando/$token'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -234,7 +234,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/logs'
     | '/maintenance'
-    | '/pedido-comando/$token'
     | '/products'
     | '/purchasing'
     | '/quoting'
@@ -243,6 +242,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/services'
     | '/trips'
+    | '/pedido-comando/$token'
   id:
     | '__root__'
     | '/'
@@ -256,7 +256,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/logs'
     | '/maintenance'
-    | '/pedido-comando/$token'
     | '/products'
     | '/purchasing'
     | '/quoting'
@@ -265,6 +264,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/services'
     | '/trips'
+    | '/pedido-comando/$token'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -279,7 +279,6 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   LogsRoute: typeof LogsRoute
   MaintenanceRoute: typeof MaintenanceRoute
-  PedidoComandoTokenRoute: typeof PedidoComandoTokenRoute
   ProductsRoute: typeof ProductsRoute
   PurchasingRoute: typeof PurchasingRoute
   QuotingRoute: typeof QuotingRoute
@@ -288,24 +287,11 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   ServicesRoute: typeof ServicesRoute
   TripsRoute: typeof TripsRoute
+  PedidoComandoTokenRoute: typeof PedidoComandoTokenRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/pedido-comando/$token': {
-      id: '/pedido-comando/$token'
-      path: '/pedido-comando/$token'
-      fullPath: '/pedido-comando/$token'
-      preLoaderRoute: typeof PedidoComandoTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/comando': {
-      id: '/comando'
-      path: '/comando'
-      fullPath: '/comando'
-      preLoaderRoute: typeof ComandoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/trips': {
       id: '/trips'
       path: '/trips'
@@ -397,18 +383,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/approval': {
-      id: '/approval'
-      path: '/approval'
-      fullPath: '/approval'
-      preLoaderRoute: typeof ApprovalRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/estoque-omie': {
       id: '/estoque-omie'
       path: '/estoque-omie'
       fullPath: '/estoque-omie'
       preLoaderRoute: typeof EstoqueOmieRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/comando': {
+      id: '/comando'
+      path: '/comando'
+      fullPath: '/comando'
+      preLoaderRoute: typeof ComandoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/approval': {
+      id: '/approval'
+      path: '/approval'
+      fullPath: '/approval'
+      preLoaderRoute: typeof ApprovalRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/analytics': {
@@ -432,6 +425,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pedido-comando/$token': {
+      id: '/pedido-comando/$token'
+      path: '/pedido-comando/$token'
+      fullPath: '/pedido-comando/$token'
+      preLoaderRoute: typeof PedidoComandoTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -447,7 +447,6 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   LogsRoute: LogsRoute,
   MaintenanceRoute: MaintenanceRoute,
-  PedidoComandoTokenRoute: PedidoComandoTokenRoute,
   ProductsRoute: ProductsRoute,
   PurchasingRoute: PurchasingRoute,
   QuotingRoute: QuotingRoute,
@@ -456,6 +455,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   ServicesRoute: ServicesRoute,
   TripsRoute: TripsRoute,
+  PedidoComandoTokenRoute: PedidoComandoTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
