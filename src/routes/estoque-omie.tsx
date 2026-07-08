@@ -223,18 +223,18 @@ function EstoqueOmiePage() {
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="min-w-[1200px] w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  <th className="px-4 py-3">Código do Produto</th>
-                  <th className="px-4 py-3">Descrição do Produto</th>
-                  <th className="px-3 py-3 text-center">Curva</th>
-                  <th className="px-4 py-3 text-right">Estoque Físico</th>
-                  <th className="px-4 py-3 text-right">Reservado</th>
-                  <th className="px-4 py-3 text-right">Estoque Disponível</th>
-                  <th className="px-4 py-3 text-right">Estoque Mínimo</th>
-                  <th className="px-4 py-3 text-right">Sugestão de Compra</th>
-                  <th className="px-4 py-3 text-right">Comprado</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Código do Produto</th>
+                  <th className="px-4 py-3 min-w-[280px]">Descrição do Produto</th>
+                  <th className="px-3 py-3 text-center whitespace-nowrap">Curva</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Estoque Físico</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Reservado</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Estoque Disponível</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Estoque Mínimo</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Sugestão de Compra</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Comprado</th>
                 </tr>
               </thead>
               <tbody>
