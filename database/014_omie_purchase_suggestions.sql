@@ -13,7 +13,7 @@
 --    fixo de 2 unidades se o custo médio (cmc) for <= R$2.500, senão 1 unidade.
 --  - Sugestão de Compra = max(0, Estoque Mínimo − Estoque Disponível + Qtd
 --    Pendente − Comprado ainda não chegado).
---  - Recalculado 1x por semana (segunda-feira, 06h BRT) pela Edge Function
+--  - Recalculado todos os dias às 9h (BRT) pela Edge Function
 --    sync-omie-sales-velocity; o estoque em si já é sincronizado a cada hora
 --    comercial pela sync-omie-stock (ver 013_omie_stock_cache.sql).
 
@@ -167,11 +167,11 @@ create table if not exists public.omie_velocity_staging (
 alter table public.omie_velocity_cursor enable row level security;
 alter table public.omie_velocity_staging enable row level security;
 
--- Agenda a sincronização de giro/curva/pendentes 1x por semana, segunda-feira
--- às 6h (horário de Brasília = 9h UTC).
+-- Agenda a sincronização de giro/curva/pendentes todos os dias às 9h
+-- (horário de Brasília = 12h UTC).
 select cron.schedule(
-  'sync-omie-sales-velocity-weekly',
-  '0 9 * * 1',
+  'sync-omie-sales-velocity-daily',
+  '0 12 * * *',
   $$
   select net.http_post(
     url := 'https://vvgcrhtmzvssfdazkkzk.supabase.co/functions/v1/sync-omie-sales-velocity',
