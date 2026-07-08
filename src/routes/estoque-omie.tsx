@@ -313,19 +313,19 @@ function EstoqueOmiePage() {
 
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          <div className="max-h-[70vh] overflow-auto">
             <table className="min-w-[1200px] w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  <th className="px-4 py-3 whitespace-nowrap">Código do Produto</th>
-                  <th className="px-4 py-3 min-w-[280px]">Descrição do Produto</th>
-                  <th className="px-3 py-3 text-center whitespace-nowrap">Curva</th>
-                  <th className="px-4 py-3 text-right whitespace-nowrap">Estoque Físico</th>
-                  <th className="px-4 py-3 text-right whitespace-nowrap">Reservado</th>
-                  <th className="px-4 py-3 text-right whitespace-nowrap">Estoque Disponível</th>
-                  <th className="px-4 py-3 text-right whitespace-nowrap">Estoque Mínimo</th>
-                  <th className="px-4 py-3 text-right whitespace-nowrap">Sugestão de Compra</th>
-                  <th className="px-4 py-3 text-right whitespace-nowrap">Comprado</th>
+              <thead className="sticky top-0 z-20">
+                <tr className="border-b border-border bg-card text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground shadow-sm">
+                  <th className="px-4 py-3 whitespace-nowrap bg-card">Código do Produto</th>
+                  <th className="px-4 py-3 min-w-[280px] bg-card">Descrição do Produto</th>
+                  <th className="px-3 py-3 text-center whitespace-nowrap bg-card">Curva</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Estoque Físico</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Reservado</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Estoque Disponível</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Estoque Mínimo</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Sugestão de Compra</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Comprado</th>
                 </tr>
               </thead>
               <tbody>
