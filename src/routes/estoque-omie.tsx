@@ -159,6 +159,7 @@ function EstoqueOmiePage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [corFiltro, setCorFiltro] = useState<"todas" | StatusCor>("todas");
+  const [curvaFiltro, setCurvaFiltro] = useState<"todas" | OmiePurchaseSuggestionItem["curva"]>("todas");
 
   const load = async () => {
     setLoading(true);
@@ -185,9 +186,10 @@ function EstoqueOmiePage() {
     return items.filter((i) => {
       const combinaTexto = !q || i.codigo.toLowerCase().includes(q) || i.descricao.toLowerCase().includes(q);
       const combinaCor = corFiltro === "todas" || statusDoItem(i) === corFiltro;
-      return combinaTexto && combinaCor;
+      const combinaCurva = curvaFiltro === "todas" || i.curva === curvaFiltro;
+      return combinaTexto && combinaCor && combinaCurva;
     });
-  }, [items, search, corFiltro]);
+  }, [items, search, corFiltro, curvaFiltro]);
 
   const totais = useMemo(
     () =>
@@ -272,6 +274,32 @@ function EstoqueOmiePage() {
             </button>
           ))}
         </div>
+
+        <div className="h-6 w-px bg-border" />
+
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">Curva:</span>
+          {(["todas", "A", "B", "C", "D"] as const).map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => setCurvaFiltro(opt)}
+              className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                curvaFiltro === opt
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border bg-background text-foreground hover:bg-muted"
+              }`}
+            >
+              {opt === "todas" ? "Todas" : opt}
+            </button>
+          ))}
+        </div>
+
+        <div className="h-6 w-px bg-border" />
+
+        <span className="rounded-md border border-border bg-muted px-2.5 py-1.5 text-xs font-semibold text-foreground">
+          {filtered.length} {filtered.length === 1 ? "linha" : "linhas"}
+        </span>
       </div>
 
       {error && (
@@ -341,7 +369,7 @@ function EstoqueOmiePage() {
                 <tfoot>
                   <tr className="border-t-2 border-border bg-muted/60 font-semibold">
                     <td className="px-4 py-2.5" colSpan={3}>
-                      Total ({filtered.length} {filtered.length === 1 ? "produto" : "produtos"})
+                      Total
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{formatarNumero(totais.estoqueFisico)}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{formatarNumero(totais.estoqueReservado)}</td>
