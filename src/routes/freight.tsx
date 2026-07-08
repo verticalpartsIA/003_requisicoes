@@ -98,6 +98,7 @@ function FreightPage() {
   const [declaredValue, setDeclaredValue] = useState("");
 
   const [pickupDate, setPickupDate] = useState<Date | undefined>();
+  const [pickupDateOpen, setPickupDateOpen] = useState(false);
   const [urgencyLevel, setUrgencyLevel] = useState("");
   const [justification, setJustification] = useState("");
 
@@ -518,7 +519,7 @@ function FreightPage() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Data de Coleta *</label>
-                <Popover>
+                <Popover open={pickupDateOpen} onOpenChange={setPickupDateOpen}>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !pickupDate && "text-muted-foreground")}>
                       <CalendarIcon className="mr-2 h-4 w-4" />
@@ -526,7 +527,7 @@ function FreightPage() {
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={pickupDate} onSelect={setPickupDate}
+                    <Calendar mode="single" selected={pickupDate} onSelect={(d) => { setPickupDate(d); setPickupDateOpen(false); }}
                       disabled={(d) => d < addDays(new Date(), 1)} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
                   </PopoverContent>
                 </Popover>

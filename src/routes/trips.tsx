@@ -105,7 +105,9 @@ function TripsPage() {
   const [originCity, setOriginCity] = useState("");
   const [destinationCity, setDestinationCity] = useState("");
   const [departureDate, setDepartureDate] = useState<Date | undefined>();
+  const [departureDateOpen, setDepartureDateOpen] = useState(false);
   const [returnDate, setReturnDate] = useState<Date | undefined>();
+  const [returnDateOpen, setReturnDateOpen] = useState(false);
   const [transportMode, setTransportMode] = useState("");
 
   const [needsHotel, setNeedsHotel] = useState(false);
@@ -727,7 +729,7 @@ function TripsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Data de Partida *</label>
-                  <Popover>
+                  <Popover open={departureDateOpen} onOpenChange={setDepartureDateOpen}>
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
@@ -744,6 +746,7 @@ function TripsPage() {
                         onSelect={(d) => {
                           setDepartureDate(d);
                           if (returnDate && d && returnDate < d) setReturnDate(undefined);
+                          setDepartureDateOpen(false);
                         }}
                         disabled={(d) => d < new Date()}
                         initialFocus
@@ -755,7 +758,7 @@ function TripsPage() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Data de Retorno *</label>
-                  <Popover>
+                  <Popover open={returnDateOpen} onOpenChange={setReturnDateOpen}>
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
@@ -769,7 +772,7 @@ function TripsPage() {
                       <Calendar
                         mode="single"
                         selected={returnDate}
-                        onSelect={setReturnDate}
+                        onSelect={(d) => { setReturnDate(d); setReturnDateOpen(false); }}
                         disabled={(d) => d < (departureDate ?? new Date())}
                         initialFocus
                         className="p-3 pointer-events-auto"

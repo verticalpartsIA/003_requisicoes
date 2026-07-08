@@ -85,7 +85,9 @@ function RentalPage() {
   const [quantity, setQuantity] = useState("1");
 
   const [startDate, setStartDate] = useState<Date | undefined>();
+  const [startDateOpen, setStartDateOpen] = useState(false);
   const [endDate, setEndDate] = useState<Date | undefined>();
+  const [endDateOpen, setEndDateOpen] = useState(false);
   const [deliveryLocation, setDeliveryLocation] = useState("");
 
   const [urgencyLevel, setUrgencyLevel] = useState("");
@@ -392,7 +394,7 @@ function RentalPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Data de Início *</label>
-                  <Popover>
+                  <Popover open={startDateOpen} onOpenChange={setStartDateOpen}>
                     <PopoverTrigger asChild>
                       <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !startDate && "text-muted-foreground")}>
                         <CalendarIcon className="mr-2 h-4 w-4" />
@@ -400,14 +402,14 @@ function RentalPage() {
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar mode="single" selected={startDate} onSelect={setStartDate}
+                      <Calendar mode="single" selected={startDate} onSelect={(d) => { setStartDate(d); setStartDateOpen(false); }}
                         disabled={(d) => d < new Date()} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
                     </PopoverContent>
                   </Popover>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Data de Término *</label>
-                  <Popover>
+                  <Popover open={endDateOpen} onOpenChange={setEndDateOpen}>
                     <PopoverTrigger asChild>
                       <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !endDate && "text-muted-foreground")}>
                         <CalendarIcon className="mr-2 h-4 w-4" />
@@ -415,7 +417,7 @@ function RentalPage() {
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar mode="single" selected={endDate} onSelect={setEndDate}
+                      <Calendar mode="single" selected={endDate} onSelect={(d) => { setEndDate(d); setEndDateOpen(false); }}
                         disabled={(d) => d < (startDate || new Date())} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
                     </PopoverContent>
                   </Popover>

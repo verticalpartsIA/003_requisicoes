@@ -151,6 +151,7 @@ function ProductsPage() {
 
   // Logística
   const [deliveryDeadline, setDeliveryDeadline] = useState<Date | undefined>();
+  const [deliveryDeadlineOpen, setDeliveryDeadlineOpen] = useState(false);
   const [deliveryLocation, setDeliveryLocation] = useState("");
   const [urgencyLevel, setUrgencyLevel] = useState("");
   const [justification, setJustification] = useState("");
@@ -1012,7 +1013,7 @@ function ProductsPage() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Data Limite para Entrega *</label>
-                <Popover>
+                <Popover open={deliveryDeadlineOpen} onOpenChange={setDeliveryDeadlineOpen}>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !deliveryDeadline && "text-muted-foreground")}>
                       <CalendarIcon className="mr-2 h-4 w-4" />
@@ -1023,7 +1024,7 @@ function ProductsPage() {
                     <Calendar
                       mode="single"
                       selected={deliveryDeadline}
-                      onSelect={setDeliveryDeadline}
+                      onSelect={(d) => { setDeliveryDeadline(d); setDeliveryDeadlineOpen(false); }}
                       disabled={(d) => d < minDate}
                       initialFocus
                       className="p-3 pointer-events-auto"

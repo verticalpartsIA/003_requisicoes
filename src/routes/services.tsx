@@ -97,6 +97,7 @@ function ServicesPage() {
 
   // Step 2 — Prazo
   const [deadline, setDeadline] = useState<Date | undefined>();
+  const [deadlineOpen, setDeadlineOpen] = useState(false);
   const [urgencyLevel, setUrgencyLevel] = useState("");
   const [justification, setJustification] = useState("");
 
@@ -482,7 +483,7 @@ function ServicesPage() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Prazo Desejado *</label>
-                <Popover>
+                <Popover open={deadlineOpen} onOpenChange={setDeadlineOpen}>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !deadline && "text-muted-foreground")}>
                       <CalendarIcon className="mr-2 h-4 w-4" />
@@ -490,7 +491,7 @@ function ServicesPage() {
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={deadline} onSelect={setDeadline}
+                    <Calendar mode="single" selected={deadline} onSelect={(d) => { setDeadline(d); setDeadlineOpen(false); }}
                       disabled={(d) => d < minDate} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
                   </PopoverContent>
                 </Popover>
