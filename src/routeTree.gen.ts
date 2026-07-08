@@ -9,6 +9,8 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as PedidoComandoTokenRouteImport } from './routes/pedido-comando.$token'
+import { Route as ComandoRouteImport } from './routes/comando'
 import { Route as TripsRouteImport } from './routes/trips'
 import { Route as EstoqueOmieRouteImport } from './routes/estoque-omie'
 import { Route as ServicesRouteImport } from './routes/services'
@@ -28,6 +30,16 @@ import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 
+const PedidoComandoTokenRoute = PedidoComandoTokenRouteImport.update({
+  id: '/pedido-comando/$token',
+  path: '/pedido-comando/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComandoRoute = ComandoRouteImport.update({
+  id: '/comando',
+  path: '/comando',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TripsRoute = TripsRouteImport.update({
   id: '/trips',
   path: '/trips',
@@ -124,12 +136,14 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/approval': typeof ApprovalRoute
+  '/comando': typeof ComandoRoute
   '/estoque-omie': typeof EstoqueOmieRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/freight': typeof FreightRoute
   '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/maintenance': typeof MaintenanceRoute
+  '/pedido-comando/$token': typeof PedidoComandoTokenRoute
   '/products': typeof ProductsRoute
   '/purchasing': typeof PurchasingRoute
   '/quoting': typeof QuotingRoute
@@ -144,12 +158,14 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/approval': typeof ApprovalRoute
+  '/comando': typeof ComandoRoute
   '/estoque-omie': typeof EstoqueOmieRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/freight': typeof FreightRoute
   '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/maintenance': typeof MaintenanceRoute
+  '/pedido-comando/$token': typeof PedidoComandoTokenRoute
   '/products': typeof ProductsRoute
   '/purchasing': typeof PurchasingRoute
   '/quoting': typeof QuotingRoute
@@ -165,12 +181,14 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/approval': typeof ApprovalRoute
+  '/comando': typeof ComandoRoute
   '/estoque-omie': typeof EstoqueOmieRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/freight': typeof FreightRoute
   '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/maintenance': typeof MaintenanceRoute
+  '/pedido-comando/$token': typeof PedidoComandoTokenRoute
   '/products': typeof ProductsRoute
   '/purchasing': typeof PurchasingRoute
   '/quoting': typeof QuotingRoute
@@ -187,12 +205,14 @@ export interface FileRouteTypes {
     | '/admin'
     | '/analytics'
     | '/approval'
+    | '/comando'
     | '/estoque-omie'
     | '/forgot-password'
     | '/freight'
     | '/login'
     | '/logs'
     | '/maintenance'
+    | '/pedido-comando/$token'
     | '/products'
     | '/purchasing'
     | '/quoting'
@@ -207,12 +227,14 @@ export interface FileRouteTypes {
     | '/admin'
     | '/analytics'
     | '/approval'
+    | '/comando'
     | '/estoque-omie'
     | '/forgot-password'
     | '/freight'
     | '/login'
     | '/logs'
     | '/maintenance'
+    | '/pedido-comando/$token'
     | '/products'
     | '/purchasing'
     | '/quoting'
@@ -227,12 +249,14 @@ export interface FileRouteTypes {
     | '/admin'
     | '/analytics'
     | '/approval'
+    | '/comando'
     | '/estoque-omie'
     | '/forgot-password'
     | '/freight'
     | '/login'
     | '/logs'
     | '/maintenance'
+    | '/pedido-comando/$token'
     | '/products'
     | '/purchasing'
     | '/quoting'
@@ -248,12 +272,14 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   AnalyticsRoute: typeof AnalyticsRoute
   ApprovalRoute: typeof ApprovalRoute
+  ComandoRoute: typeof ComandoRoute
   EstoqueOmieRoute: typeof EstoqueOmieRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   FreightRoute: typeof FreightRoute
   LoginRoute: typeof LoginRoute
   LogsRoute: typeof LogsRoute
   MaintenanceRoute: typeof MaintenanceRoute
+  PedidoComandoTokenRoute: typeof PedidoComandoTokenRoute
   ProductsRoute: typeof ProductsRoute
   PurchasingRoute: typeof PurchasingRoute
   QuotingRoute: typeof QuotingRoute
@@ -266,6 +292,20 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/pedido-comando/$token': {
+      id: '/pedido-comando/$token'
+      path: '/pedido-comando/$token'
+      fullPath: '/pedido-comando/$token'
+      preLoaderRoute: typeof PedidoComandoTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/comando': {
+      id: '/comando'
+      path: '/comando'
+      fullPath: '/comando'
+      preLoaderRoute: typeof ComandoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/trips': {
       id: '/trips'
       path: '/trips'
@@ -400,12 +440,14 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   AnalyticsRoute: AnalyticsRoute,
   ApprovalRoute: ApprovalRoute,
+  ComandoRoute: ComandoRoute,
   EstoqueOmieRoute: EstoqueOmieRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   FreightRoute: FreightRoute,
   LoginRoute: LoginRoute,
   LogsRoute: LogsRoute,
   MaintenanceRoute: MaintenanceRoute,
+  PedidoComandoTokenRoute: PedidoComandoTokenRoute,
   ProductsRoute: ProductsRoute,
   PurchasingRoute: PurchasingRoute,
   QuotingRoute: QuotingRoute,

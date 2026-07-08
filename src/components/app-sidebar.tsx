@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   Shield,
   Boxes,
+  Settings2,
 } from "lucide-react";
 import {
   Sidebar,
@@ -40,6 +41,7 @@ const modules = [
   { title: "M4 - Manutenção", url: "/maintenance", icon: HardHat },
   { title: "M5 - Frete", url: "/freight", icon: Truck },
   { title: "M6 - Locação", url: "/rental", icon: Key },
+  { title: "M7 - Quadro de Comando", url: "/comando", icon: Settings2 },
 ];
 
 const workflows = [

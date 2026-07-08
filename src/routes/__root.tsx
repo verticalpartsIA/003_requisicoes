@@ -92,7 +92,10 @@ function ProtectedApp() {
     );
   }
 
-  const isPublicRoute = currentPath === "/login" || currentPath === "/reset-password";
+  const isPublicRoute =
+    currentPath === "/login" ||
+    currentPath === "/reset-password" ||
+    currentPath.startsWith("/pedido-comando/");
 
   if (!session && !isPublicRoute) {
     return <Navigate to="/login" search={{ redirect: currentPath }} />;
