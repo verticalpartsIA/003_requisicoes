@@ -1,12 +1,21 @@
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import type { QuotationQueueItem, SupplierEntry, TravelItem } from "@/features/quotations/api";
 import { getApprovalLevelForValue } from "@/lib/approval";
+import { getTierThresholds } from "@/features/admin/api";
 import { friendlySupabaseError } from "@/lib/supabase-error";
 
 type WinCriteria = "price" | "deadline" | "price_deadline";
-type QuotationStatus = "pending" | "quoting" | "awaiting_proposals" | "selecting_winner" | "completed";
+type QuotationStatus =
+  | "pending"
+  | "quoting"
+  | "awaiting_proposals"
+  | "selecting_winner"
+  | "completed";
 
-function mapQuotationStatus(requisitionStatus: string, quotationStatus?: QuotationStatus | null): QuotationStatus {
+function mapQuotationStatus(
+  requisitionStatus: string,
+  quotationStatus?: QuotationStatus | null,
+): QuotationStatus {
   if (quotationStatus) return quotationStatus;
   if (requisitionStatus === "ABERTO") return "pending";
   if (requisitionStatus === "COTAÇÃO") return "quoting";
@@ -32,17 +41,23 @@ export async function listQuotationQueueClient() {
   if (quotationsError) throw quotationsError;
 
   const quotationIds = (quotations || []).map((quotation) => quotation.id);
-  const { data: suppliers, error: suppliersError } = quotationIds.length === 0
-    ? { data: [], error: null }
-    : await supabaseBrowser
-        .from("quotation_suppliers")
-        .select("id,quotation_id,supplier_name,price,deadline,notes,proposal_received,is_winner")
-        .in("quotation_id", quotationIds);
+  const { data: suppliers, error: suppliersError } =
+    quotationIds.length === 0
+      ? { data: [], error: null }
+      : await supabaseBrowser
+          .from("quotation_suppliers")
+          .select("id,quotation_id,supplier_name,price,deadline,notes,proposal_received,is_winner")
+          .in("quotation_id", quotationIds);
 
   if (suppliersError) throw new Error(friendlySupabaseError(suppliersError));
 
-  const quotationByRequisition = new Map((quotations || []).map((quotation) => [quotation.requisition_id, quotation]));
-  const suppliersByQuotation = new Map<string, Array<typeof suppliers extends Array<infer T> ? T : never>>();
+  const quotationByRequisition = new Map(
+    (quotations || []).map((quotation) => [quotation.requisition_id, quotation]),
+  );
+  const suppliersByQuotation = new Map<
+    string,
+    Array<typeof suppliers extends Array<infer T> ? T : never>
+  >();
 
   (suppliers || []).forEach((supplier) => {
     const current = suppliersByQuotation.get(supplier.quotation_id) || [];
@@ -71,9 +86,9 @@ export async function listQuotationQueueClient() {
         travelItemRows.filter((r) => r.requisition_id === req.id).map((r) => r.item_type),
       );
       const expected: { item_type: string; sort_order: number }[] = [
-        { item_type: 'voo', sort_order: 0 },
-        ...(md.needs_hotel ? [{ item_type: 'hotel', sort_order: 1 }] : []),
-        ...(md.needs_local_car ? [{ item_type: 'carro', sort_order: 2 }] : []),
+        { item_type: "voo", sort_order: 0 },
+        ...(md.needs_hotel ? [{ item_type: "hotel", sort_order: 1 }] : []),
+        ...(md.needs_local_car ? [{ item_type: "carro", sort_order: 2 }] : []),
       ];
       const toInsert = expected
         .filter((e) => !existingTypes.has(e.item_type))
@@ -91,11 +106,16 @@ export async function listQuotationQueueClient() {
       .filter((q) => m2RequisitionIds.includes(q.requisition_id))
       .map((q) => q.id);
 
-    let m2SuppliersByItem = new Map<string, (typeof suppliers extends Array<infer T> ? T : never) & { item_id: string | null }>();
+    const m2SuppliersByItem = new Map<
+      string,
+      (typeof suppliers extends Array<infer T> ? T : never) & { item_id: string | null }
+    >();
     if (m2QuotationIds.length > 0) {
       const { data: m2Suppliers } = await supabaseBrowser
         .from("quotation_suppliers")
-        .select("id,quotation_id,supplier_name,price,deadline,notes,proposal_received,item_id,is_winner")
+        .select(
+          "id,quotation_id,supplier_name,price,deadline,notes,proposal_received,item_id,is_winner",
+        )
         .in("quotation_id", m2QuotationIds);
 
       (m2Suppliers || []).forEach((s) => {
@@ -146,7 +166,10 @@ export async function listQuotationQueueClient() {
         isWinner: supplier.is_winner,
       })),
       winCriteria: (quotation?.win_criteria as WinCriteria | null) || "price",
-      travelItems: requisition.module === "M2" ? (travelItemsByRequisition.get(requisition.id) || []) : undefined,
+      travelItems:
+        requisition.module === "M2"
+          ? travelItemsByRequisition.get(requisition.id) || []
+          : undefined,
     };
   });
 }
@@ -169,13 +192,11 @@ async function ensureQuotation(requisitionId: string, status: QuotationStatus) {
     return existing.id;
   }
 
-  const { error } = await supabaseBrowser
-    .from("quotations")
-    .insert({
-      requisition_id: requisitionId,
-      status,
-      started_at: new Date().toISOString(),
-    });
+  const { error } = await supabaseBrowser.from("quotations").insert({
+    requisition_id: requisitionId,
+    status,
+    started_at: new Date().toISOString(),
+  });
 
   if (error) throw new Error(friendlySupabaseError(error));
 
@@ -205,7 +226,10 @@ async function syncSuppliers(quotationId: string, suppliers: SupplierEntry[]) {
   const idsToDelete = [...existingIds].filter((id) => !incomingIds.has(id));
 
   if (idsToDelete.length > 0) {
-    const { error } = await supabaseBrowser.from("quotation_suppliers").delete().in("id", idsToDelete);
+    const { error } = await supabaseBrowser
+      .from("quotation_suppliers")
+      .delete()
+      .in("id", idsToDelete);
     if (error) throw new Error(friendlySupabaseError(error));
   }
 
@@ -225,9 +249,7 @@ async function syncSuppliers(quotationId: string, suppliers: SupplierEntry[]) {
   });
 
   // Upsert sem SELECT para não depender de policy de SELECT encadeada
-  const { error: upsertError } = await supabaseBrowser
-    .from("quotation_suppliers")
-    .upsert(payload);
+  const { error: upsertError } = await supabaseBrowser.from("quotation_suppliers").upsert(payload);
 
   if (upsertError) throw new Error(friendlySupabaseError(upsertError));
 
@@ -241,7 +263,10 @@ async function syncSuppliers(quotationId: string, suppliers: SupplierEntry[]) {
   return data || [];
 }
 
-export async function saveQuotationSuppliersClient(requisitionId: string, suppliers: SupplierEntry[]) {
+export async function saveQuotationSuppliersClient(
+  requisitionId: string,
+  suppliers: SupplierEntry[],
+) {
   const quotationId = await ensureQuotation(requisitionId, "awaiting_proposals");
   let savedSuppliers: Awaited<ReturnType<typeof syncSuppliers>>;
   try {
@@ -290,7 +315,10 @@ export async function saveQuotationSuppliersClient(requisitionId: string, suppli
   };
 }
 
-export async function saveQuotationProposalsClient(quotationId: string, suppliers: SupplierEntry[]) {
+export async function saveQuotationProposalsClient(
+  quotationId: string,
+  suppliers: SupplierEntry[],
+) {
   const savedSuppliers = await syncSuppliers(quotationId, suppliers);
   const { error } = await supabaseBrowser
     .from("quotations")
@@ -329,6 +357,9 @@ export async function finalizeQuotationClient(
   if (!winner || winner.price === null) {
     throw new Error("Fornecedor vencedor inválido para finalizar a cotação.");
   }
+
+  const thresholds = await getTierThresholds();
+  const approvalLevel = getApprovalLevelForValue(winner.price, thresholds);
 
   const { error: resetError } = await supabaseBrowser
     .from("quotation_suppliers")
@@ -371,7 +402,7 @@ export async function finalizeQuotationClient(
     .upsert({
       requisition_id: requisitionId,
       quotation_id: quotationId,
-      approval_level: getApprovalLevelForValue(winner.price),
+      approval_level: approvalLevel,
       total_value: winner.price,
       decision: "pending",
     })
@@ -401,16 +432,17 @@ export async function finalizeQuotationClient(
     old_status: requisition.status,
     new_status: "APROVAÇÃO",
     details: {
-      approval_level: getApprovalLevelForValue(winner.price),
+      approval_level: approvalLevel,
       total_value: winner.price,
     },
   });
-  if (secondLogError) console.warn("[audit_logs] APPROVAL_REQUESTED failed:", secondLogError.message);
+  if (secondLogError)
+    console.warn("[audit_logs] APPROVAL_REQUESTED failed:", secondLogError.message);
 }
 
 export interface M2ItemQuote {
   itemId: string;
-  itemType: 'voo' | 'hotel' | 'carro';
+  itemType: "voo" | "hotel" | "carro";
   supplierName: string;
   price: number;
   deadline: string;
@@ -438,20 +470,21 @@ export async function saveM2QuoteClient(requisitionId: string, itemQuotes: M2Ite
     .upsert(supplierPayload, { onConflict: "quotation_id,item_id" });
   if (suppliersError) throw new Error(friendlySupabaseError(suppliersError));
 
-  // 3. Total e nível de aprovação
+  // 3. Total e nível de aprovação (respeita os limites configurados no Admin)
   const totalValue = itemQuotes.reduce((sum, item) => sum + item.price, 0);
-  const approvalLevel = getApprovalLevelForValue(totalValue);
+  const approvalLevel = getApprovalLevelForValue(totalValue, await getTierThresholds());
 
   // 4. Upsert approval
-  const { error: approvalUpsertError } = await supabaseBrowser
-    .from("approvals")
-    .upsert({
+  const { error: approvalUpsertError } = await supabaseBrowser.from("approvals").upsert(
+    {
       requisition_id: requisitionId,
       quotation_id: quotationId,
       approval_level: approvalLevel,
       total_value: totalValue,
       decision: "pending",
-    }, { onConflict: "requisition_id" });
+    },
+    { onConflict: "requisition_id" },
+  );
   if (approvalUpsertError) throw new Error(friendlySupabaseError(approvalUpsertError));
 
   // 5. Busca o approval_id
@@ -486,7 +519,8 @@ export async function saveM2QuoteClient(requisitionId: string, itemQuotes: M2Ite
     .from("requisition_items")
     .update({ status: "quoted" })
     .in("id", itemIds);
-  if (itemStatusError) console.warn("[requisition_items] status update failed:", itemStatusError.message);
+  if (itemStatusError)
+    console.warn("[requisition_items] status update failed:", itemStatusError.message);
 
   // 8. Atualiza requisição para APROVAÇÃO
   const { data: requisition, error: requisitionError } = await supabaseBrowser
@@ -512,7 +546,11 @@ export async function saveM2QuoteClient(requisitionId: string, itemQuotes: M2Ite
     details: {
       total_value: totalValue,
       approval_level: approvalLevel,
-      items: itemQuotes.map((item) => ({ item_type: item.itemType, supplier: item.supplierName, price: item.price })),
+      items: itemQuotes.map((item) => ({
+        item_type: item.itemType,
+        supplier: item.supplierName,
+        price: item.price,
+      })),
     },
   });
   if (logError) console.warn("[audit_logs] M2_QUOTE_COMPLETED failed:", logError.message);

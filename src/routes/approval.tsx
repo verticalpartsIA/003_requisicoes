@@ -37,7 +37,8 @@ import {
 } from "@/features/approvals/client";
 import { useAuth } from "@/features/auth/auth-context";
 import { notifyVpClickClient } from "@/features/vpclick/client";
-import { APPROVAL_LEVEL_LABELS, APPROVAL_LEVEL_SHORT_LABELS } from "@/lib/approval";
+import { approvalLevelLabels, DEFAULT_TIER_THRESHOLDS, type TierThresholds } from "@/lib/approval";
+import { getTierThresholds } from "@/features/admin/api";
 import {
   getManagerScopeClient,
   listGestorQueueClient,
@@ -163,11 +164,14 @@ function GestorSection({ gestorName }: { gestorName: string }) {
             <CardContent className="p-4">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <Badge variant="outline" className="font-mono text-xs">{item.ticketNumber}</Badge>
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {item.ticketNumber}
+                  </Badge>
                   <div>
                     <p className="font-semibold text-foreground text-sm">{item.title}</p>
                     <p className="text-xs text-muted-foreground">
-                      {item.module} • {item.requesterName} • Depto: {item.requesterDepartment} • {item.createdAt}
+                      {item.module} • {item.requesterName} • Depto: {item.requesterDepartment} •{" "}
+                      {item.createdAt}
                     </p>
                   </div>
                 </div>
@@ -175,7 +179,10 @@ function GestorSection({ gestorName }: { gestorName: string }) {
                   variant="outline"
                   size="sm"
                   className="border-amber-300 hover:bg-amber-100"
-                  onClick={() => { setSelected(item); setNotes(""); }}
+                  onClick={() => {
+                    setSelected(item);
+                    setNotes("");
+                  }}
                 >
                   <Eye className="h-4 w-4 mr-1" /> Analisar
                 </Button>
@@ -227,7 +234,9 @@ function GestorSection({ gestorName }: { gestorName: string }) {
               </div>
 
               <DialogFooter className="gap-2">
-                <Button variant="ghost" onClick={() => setSelected(null)}>Cancelar</Button>
+                <Button variant="ghost" onClick={() => setSelected(null)}>
+                  Cancelar
+                </Button>
                 <Button
                   variant="destructive"
                   onClick={handleReject}
@@ -236,12 +245,7 @@ function GestorSection({ gestorName }: { gestorName: string }) {
                 >
                   <ThumbsDown className="h-4 w-4" /> Reprovar
                 </Button>
-                <Button
-                  variant="vp"
-                  onClick={handleApprove}
-                  disabled={isSaving}
-                  className="gap-1"
-                >
+                <Button variant="vp" onClick={handleApprove} disabled={isSaving} className="gap-1">
                   <ThumbsUp className="h-4 w-4" /> Aprovar
                 </Button>
               </DialogFooter>
@@ -264,11 +268,26 @@ function ApprovalPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isGestor, setIsGestor] = useState(false);
   const [deptsLoaded, setDeptsLoaded] = useState(false);
+  const [thresholds, setThresholds] = useState<TierThresholds>(DEFAULT_TIER_THRESHOLDS);
 
   const { user } = useAuth();
 
+  useEffect(() => {
+    if (!session) return;
+    void getTierThresholds()
+      .then(setThresholds)
+      .catch(() => {});
+  }, [session]);
+
+  const levelLabels = approvalLevelLabels(thresholds);
+  const shortLevelLabels: Record<1 | 2 | 3, string> = {
+    1: `Nível 1 (até ${thresholds.tier1_max.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })})`,
+    2: `Nível 2`,
+    3: `Nível 3 (acima ${thresholds.tier2_max.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })})`,
+  };
+
   // M2 per-item decisions: approvalItemId → 'approved' | 'rejected'
-  const [m2Decisions, setM2Decisions] = useState<Record<string, 'approved' | 'rejected'>>({});
+  const [m2Decisions, setM2Decisions] = useState<Record<string, "approved" | "rejected">>({});
 
   useEffect(() => {
     if (!session) return;
@@ -277,10 +296,12 @@ function ApprovalPage() {
 
   useEffect(() => {
     if (!user) return;
-    void getManagerScopeClient(user.id).then((scope) => {
-      setIsGestor(scope.departments.length > 0 || scope.isApproverOfSomeone);
-      setDeptsLoaded(true);
-    }).catch(() => setDeptsLoaded(true));
+    void getManagerScopeClient(user.id)
+      .then((scope) => {
+        setIsGestor(scope.departments.length > 0 || scope.isApproverOfSomeone);
+        setDeptsLoaded(true);
+      })
+      .catch(() => setDeptsLoaded(true));
   }, [user]);
   const canAccess = hasRole("admin") || hasRole("aprovador") || isGestor;
 
@@ -288,7 +309,7 @@ function ApprovalPage() {
     setSelected(request);
     setJustification("");
     if (request.moduleCode === "M2" && request.travelItems) {
-      const initial: Record<string, 'approved' | 'rejected'> = {};
+      const initial: Record<string, "approved" | "rejected"> = {};
       request.travelItems.forEach((ti) => {
         if (ti.decision === "approved" || ti.decision === "rejected") {
           initial[ti.approvalItemId] = ti.decision;
@@ -362,7 +383,9 @@ function ApprovalPage() {
   const handleM2Decide = async () => {
     if (!selected || !selected.travelItems) return;
 
-    const allDecided = selected.travelItems.every((ti) => m2Decisions[ti.approvalItemId] !== undefined);
+    const allDecided = selected.travelItems.every(
+      (ti) => m2Decisions[ti.approvalItemId] !== undefined,
+    );
     if (!allDecided) {
       toast.error("Decida Aprovar ou Reprovar cada item antes de confirmar.");
       return;
@@ -383,7 +406,9 @@ function ApprovalPage() {
       const rejectedCount = decisions.filter((d) => d.decision === "rejected").length;
 
       if (approvedCount > 0 && rejectedCount > 0) {
-        toast.success(`Decisão registrada: ${approvedCount} item(s) aprovado(s), ${rejectedCount} rejeitado(s). Encaminhado para compra.`);
+        toast.success(
+          `Decisão registrada: ${approvedCount} item(s) aprovado(s), ${rejectedCount} rejeitado(s). Encaminhado para compra.`,
+        );
       } else if (approvedCount > 0) {
         toast.success("Todos os itens aprovados. Encaminhado para compra.");
       } else {
@@ -405,14 +430,18 @@ function ApprovalPage() {
       setApprovals(await listPendingApprovalsClient());
       await router.invalidate();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível registrar as decisões.");
+      toast.error(
+        error instanceof Error ? error.message : "Não foi possível registrar as decisões.",
+      );
     } finally {
       setIsSaving(false);
     }
   };
 
   const isM2 = selected?.moduleCode === "M2";
-  const m2AllDecided = isM2 && (selected?.travelItems || []).every((ti) => m2Decisions[ti.approvalItemId] !== undefined);
+  const m2AllDecided =
+    isM2 &&
+    (selected?.travelItems || []).every((ti) => m2Decisions[ti.approvalItemId] !== undefined);
 
   if (!deptsLoaded) {
     return (
@@ -463,7 +492,7 @@ function ApprovalPage() {
                   <CardContent className="p-4 text-center">
                     <p className="text-2xl font-bold text-foreground">{count}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {APPROVAL_LEVEL_SHORT_LABELS[level as 1 | 2 | 3]}
+                      {shortLevelLabels[level as 1 | 2 | 3]}
                     </p>
                   </CardContent>
                 </Card>
@@ -479,16 +508,21 @@ function ApprovalPage() {
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
-                        <Badge variant="outline" className="font-mono text-xs">{request.id}</Badge>
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {request.id}
+                        </Badge>
                         <div>
                           <p className="font-semibold text-foreground text-sm">{request.title}</p>
                           <p className="text-xs text-muted-foreground">
-                            {request.module} • Requisitante: {request.requesterName} • {request.createdAt}
+                            {request.module} • Requisitante: {request.requesterName} •{" "}
+                            {request.createdAt}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${approvalLevelBadge[request.approvalLevel]}`}>
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${approvalLevelBadge[request.approvalLevel]}`}
+                        >
                           Nível {request.approvalLevel}
                         </span>
                         <Button variant="vp" size="sm" onClick={() => openApproval(request)}>
@@ -505,14 +539,21 @@ function ApprovalPage() {
                             {(request.travelItems || []).length} item(s) de viagem
                           </span>
                           <span>•</span>
-                          <span>R$ {request.totalValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          <span>
+                            R${" "}
+                            {request.totalValue.toLocaleString("pt-BR", {
+                              minimumFractionDigits: 2,
+                            })}
+                          </span>
                         </>
                       ) : (
                         <>
                           <Trophy className="h-3.5 w-3.5 text-vp-yellow-dark" />
                           <span className="font-medium text-foreground">{winner?.name}</span>
                           <span>•</span>
-                          <span>R$ {winner?.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          <span>
+                            R$ {winner?.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                          </span>
                           <span>•</span>
                           <span>Critério: {winCriteriaLabel[request.winCriteria]}</span>
                           <span>•</span>
@@ -541,8 +582,10 @@ function ApprovalPage() {
                   <DialogHeader>
                     <DialogTitle className="text-lg flex items-center gap-2">
                       Aprovação — {selected.id}
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${approvalLevelBadge[selected.approvalLevel]}`}>
-                        {APPROVAL_LEVEL_LABELS[selected.approvalLevel]}
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${approvalLevelBadge[selected.approvalLevel]}`}
+                      >
+                        {levelLabels[selected.approvalLevel]}
                       </span>
                     </DialogTitle>
                     <p className="text-sm text-muted-foreground">
@@ -566,7 +609,10 @@ function ApprovalPage() {
                         Itens de Viagem — decida cada item individualmente
                       </p>
                       {(selected.travelItems || []).map((ti: ApprovalTravelItem) => {
-                        const cfg = travelItemConfig[ti.itemType] ?? { label: ti.itemType, icon: null };
+                        const cfg = travelItemConfig[ti.itemType] ?? {
+                          label: ti.itemType,
+                          icon: null,
+                        };
                         const decision = m2Decisions[ti.approvalItemId];
                         return (
                           <Card
@@ -575,27 +621,37 @@ function ApprovalPage() {
                               decision === "approved"
                                 ? "border-green-400 bg-green-50/40"
                                 : decision === "rejected"
-                                ? "border-red-300 bg-red-50/30"
-                                : "border-border"
+                                  ? "border-red-300 bg-red-50/30"
+                                  : "border-border"
                             }`}
                           >
                             <CardContent className="p-4">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   {cfg.icon}
-                                  <span className="text-sm font-semibold text-foreground">{cfg.label}</span>
+                                  <span className="text-sm font-semibold text-foreground">
+                                    {cfg.label}
+                                  </span>
                                 </div>
                                 <span className="font-mono text-sm font-bold text-foreground">
-                                  R$ {ti.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                  R${" "}
+                                  {ti.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                                 </span>
                               </div>
-                              <p className="text-xs text-muted-foreground mt-1">{ti.supplierName}</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {ti.supplierName}
+                              </p>
                               <div className="flex gap-2 mt-3">
                                 <Button
                                   size="sm"
                                   variant={decision === "approved" ? "default" : "outline"}
                                   className={`gap-1 text-xs flex-1 ${decision === "approved" ? "bg-green-600 hover:bg-green-700 text-white" : ""}`}
-                                  onClick={() => setM2Decisions((prev) => ({ ...prev, [ti.approvalItemId]: "approved" }))}
+                                  onClick={() =>
+                                    setM2Decisions((prev) => ({
+                                      ...prev,
+                                      [ti.approvalItemId]: "approved",
+                                    }))
+                                  }
                                 >
                                   <ThumbsUp className="h-3.5 w-3.5" /> Aprovar
                                 </Button>
@@ -603,7 +659,12 @@ function ApprovalPage() {
                                   size="sm"
                                   variant={decision === "rejected" ? "destructive" : "outline"}
                                   className="gap-1 text-xs flex-1"
-                                  onClick={() => setM2Decisions((prev) => ({ ...prev, [ti.approvalItemId]: "rejected" }))}
+                                  onClick={() =>
+                                    setM2Decisions((prev) => ({
+                                      ...prev,
+                                      [ti.approvalItemId]: "rejected",
+                                    }))
+                                  }
                                 >
                                   <ThumbsDown className="h-3.5 w-3.5" /> Reprovar
                                 </Button>
@@ -616,12 +677,17 @@ function ApprovalPage() {
                       <div className="rounded-lg bg-accent/50 p-3 text-xs text-muted-foreground">
                         Total aprovado:{" "}
                         <strong className="text-foreground">
-                          R$ {(selected.travelItems || [])
-                            .filter((ti: ApprovalTravelItem) => m2Decisions[ti.approvalItemId] === "approved")
+                          R${" "}
+                          {(selected.travelItems || [])
+                            .filter(
+                              (ti: ApprovalTravelItem) =>
+                                m2Decisions[ti.approvalItemId] === "approved",
+                            )
                             .reduce((sum: number, ti: ApprovalTravelItem) => sum + ti.price, 0)
                             .toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                        </strong>
-                        {" "}/ Total geral: R$ {selected.totalValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </strong>{" "}
+                        / Total geral: R${" "}
+                        {selected.totalValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                       </div>
 
                       <div className="space-y-2">
@@ -635,7 +701,9 @@ function ApprovalPage() {
                       </div>
 
                       <DialogFooter className="gap-2">
-                        <Button variant="ghost" onClick={() => setSelected(null)}>Cancelar</Button>
+                        <Button variant="ghost" onClick={() => setSelected(null)}>
+                          Cancelar
+                        </Button>
                         <Button
                           variant="vp"
                           onClick={handleM2Decide}
@@ -678,7 +746,10 @@ function ApprovalPage() {
                                   )}
                                 </div>
                                 <span className="font-mono text-sm font-bold text-foreground">
-                                  R$ {supplier.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                  R${" "}
+                                  {supplier.price.toLocaleString("pt-BR", {
+                                    minimumFractionDigits: 2,
+                                  })}
                                 </span>
                               </div>
                               <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
