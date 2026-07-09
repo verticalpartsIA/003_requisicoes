@@ -7,6 +7,7 @@ interface RequisitionRow {
   status: string;
   created_at: string;
   module: "M1" | "M2" | "M3" | "M4" | "M5" | "M6";
+  requester_name: string | null;
 }
 
 const moduleMeta = {
@@ -21,13 +22,15 @@ const moduleMeta = {
 export async function getDashboardDataClient() {
   const { data, error } = await supabaseBrowser
     .from("requisitions")
-    .select("ticket_number,title,urgency,status,created_at,module")
+    .select("ticket_number,title,urgency,status,created_at,module,requester_name")
     .order("created_at", { ascending: false });
 
   if (error) throw error;
 
   const rows = (data || []) as RequisitionRow[];
-  const totalOpen = rows.filter((item) => item.status !== "CONCLUÍDO" && item.status !== "CANCELADO").length;
+  const totalOpen = rows.filter(
+    (item) => item.status !== "CONCLUÍDO" && item.status !== "CANCELADO",
+  ).length;
   const urgent = rows.filter((item) => item.urgency === "URGENT").length;
   const completed = rows.filter((item) => item.status === "CONCLUÍDO").length;
   const approvals = rows.filter((item) => item.status === "APROVAÇÃO").length;
@@ -42,7 +45,9 @@ export async function getDashboardDataClient() {
   const modules = (Object.keys(moduleMeta) as Array<keyof typeof moduleMeta>).map((tag) => ({
     tag,
     ...moduleMeta[tag],
-    count: rows.filter((item) => item.module === tag && item.status !== "CONCLUÍDO" && item.status !== "CANCELADO").length,
+    count: rows.filter(
+      (item) => item.module === tag && item.status !== "CONCLUÍDO" && item.status !== "CANCELADO",
+    ).length,
   }));
 
   const recentTickets = rows.slice(0, 8).map((item) => ({
@@ -50,6 +55,8 @@ export async function getDashboardDataClient() {
     title: item.title,
     urgency: item.urgency,
     status: item.status,
+    module: item.module,
+    requester: item.requester_name ?? "—",
     date: new Date(item.created_at).toLocaleDateString("pt-BR"),
   }));
 
