@@ -1,32 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { supabaseBrowser } from "@/lib/supabase-browser";
 import { useAuth } from "@/features/auth/auth-context";
+import { getAnalytics, type AnalyticsPayload } from "@/features/analytics/api";
 import {
   BarChart3,
-  TrendingUp,
-  TrendingDown,
-  Clock,
   CheckCircle2,
   AlertTriangle,
   Package,
-  Plane,
-  Wrench,
-  Truck,
-  Key,
-  Settings,
   Target,
   Timer,
   ArrowUpRight,
   ArrowDownRight,
   Activity,
-  Users,
   Zap,
   RotateCcw,
 } from "lucide-react";
-import { Download, FileText, FileSpreadsheet, Image, GitCompareArrows, Filter, ChevronRight } from "lucide-react";
-import { DollarSign, Loader2, Check, ExternalLink, Star, OctagonAlert } from "lucide-react";
-import { Radio, Bell, ShoppingCart, AlertCircle } from "lucide-react";
+import { Download, FileText, FileSpreadsheet, GitCompareArrows, Filter } from "lucide-react";
+import { Loader2, Check, OctagonAlert } from "lucide-react";
+import { Radio, Bell, ShoppingCart, AlertCircle, UserCheck, Trophy, FileEdit, PackageCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -48,7 +39,6 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   ChartContainer,
   ChartTooltip,
@@ -70,11 +60,6 @@ import {
   RadialBarChart,
   XAxis,
   YAxis,
-  Radar,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
 } from "recharts";
 
 export const Route = createFileRoute("/analytics")({
@@ -91,23 +76,8 @@ export const Route = createFileRoute("/analytics")({
 });
 
 /* ────────────────────────────────────────────────
- *  Mock data
+ *  Configs de gráfico (cores por módulo)
  * ──────────────────────────────────────────────── */
-
-const volumeTrendData = [
-  { month: "Jun/25", M1: 980, M2: 120, M3: 85, M4: 65, M5: 42, M6: 28 },
-  { month: "Jul/25", M1: 1020, M2: 135, M3: 90, M4: 70, M5: 45, M6: 30 },
-  { month: "Ago/25", M1: 1050, M2: 142, M3: 88, M4: 72, M5: 48, M6: 32 },
-  { month: "Set/25", M1: 1100, M2: 138, M3: 95, M4: 68, M5: 50, M6: 35 },
-  { month: "Out/25", M1: 1080, M2: 145, M3: 92, M4: 75, M5: 47, M6: 33 },
-  { month: "Nov/25", M1: 1150, M2: 150, M3: 98, M4: 78, M5: 52, M6: 36 },
-  { month: "Dez/25", M1: 1200, M2: 148, M3: 102, M4: 80, M5: 55, M6: 38 },
-  { month: "Jan/26", M1: 1180, M2: 155, M3: 100, M4: 82, M5: 53, M6: 37 },
-  { month: "Fev/26", M1: 1220, M2: 160, M3: 105, M4: 85, M5: 56, M6: 40 },
-  { month: "Mar/26", M1: 1250, M2: 158, M3: 108, M4: 88, M5: 58, M6: 42 },
-  { month: "Abr/26", M1: 1280, M2: 162, M3: 110, M4: 90, M5: 60, M6: 44 },
-  { month: "Mai/26", M1: 1247, M2: 156, M3: 112, M4: 92, M5: 62, M6: 45 },
-];
 
 const volumeChartConfig: ChartConfig = {
   M1: { label: "Produtos", color: "#3B82F6" },
@@ -118,15 +88,6 @@ const volumeChartConfig: ChartConfig = {
   M6: { label: "Locação", color: "#06B6D4" },
 };
 
-const moduleDistData = [
-  { name: "Produtos", value: 1247, fill: "#3B82F6" },
-  { name: "Viagens", value: 156, fill: "#10B981" },
-  { name: "Serviços", value: 112, fill: "#8B5CF6" },
-  { name: "Manutenção", value: 92, fill: "#F59E0B" },
-  { name: "Frete", value: 62, fill: "#EF4444" },
-  { name: "Locação", value: 45, fill: "#06B6D4" },
-];
-
 const pieChartConfig: ChartConfig = {
   Produtos: { label: "Produtos", color: "#3B82F6" },
   Viagens: { label: "Viagens", color: "#10B981" },
@@ -136,174 +97,36 @@ const pieChartConfig: ChartConfig = {
   Locação: { label: "Locação", color: "#06B6D4" },
 };
 
-const stageDurationData = [
-  { stage: "V1", label: "Requisição", avg: 0.5, target: 1 },
-  { stage: "V2", label: "Cotação", avg: 18.2, target: 24 },
-  { stage: "V3", label: "Aprovação", avg: 52.4, target: 72 },
-  { stage: "V4", label: "Compra", avg: 36.8, target: 48 },
-  { stage: "V5", label: "Recebimento", avg: 120.5, target: 168 },
-];
-
 const stageBarConfig: ChartConfig = {
   avg: { label: "Média (h)", color: "#3B82F6" },
   target: { label: "Meta (h)", color: "#E5E7EB" },
 };
 
-const slaByModuleData = [
-  { module: "M1", compliance: 89, label: "Produtos" },
-  { module: "M2", compliance: 94, label: "Viagens" },
-  { module: "M3", compliance: 82, label: "Serviços" },
-  { module: "M4", compliance: 76, label: "Manutenção" },
-  { module: "M5", compliance: 91, label: "Frete" },
-  { module: "M6", compliance: 88, label: "Locação" },
-];
-
-const radarData = [
-  { metric: "Volume", value: 85, fullMark: 100 },
-  { metric: "SLA", value: 87, fullMark: 100 },
-  { metric: "Qualidade", value: 92, fullMark: 100 },
-  { metric: "Eficiência", value: 78, fullMark: 100 },
-  { metric: "Economia", value: 81, fullMark: 100 },
-  { metric: "Automação", value: 65, fullMark: 100 },
-];
-
-const radarConfig: ChartConfig = {
-  value: { label: "Score", color: "#F5A623" },
-};
-
-const qualityMetrics = [
-  { label: "Taxa de Aprovação", value: 94.2, trend: 1.3, icon: CheckCircle2 },
-  { label: "Taxa de Exceção", value: 3.8, trend: -0.5, icon: AlertTriangle },
-  { label: "Taxa de Retrabalho", value: 2.1, trend: -0.8, icon: RotateCcw },
-];
-
-const efficiencyMetrics = [
-  { label: "Requisições/Comprador", value: 42, unit: "/mês", trend: 3 },
-  { label: "Taxa de Automação", value: 34, unit: "%", trend: 5 },
-  { label: "Touchless Rate", value: 18, unit: "%", trend: 2 },
-];
-
-const topBuyers = [
-  { name: "Maria Oliveira", tickets: 68, sla: 96 },
-  { name: "Ana Costa", tickets: 55, sla: 92 },
-  { name: "João Pereira", tickets: 48, sla: 89 },
-  { name: "Fernanda Lima", tickets: 42, sla: 94 },
-  { name: "Carlos Souza", tickets: 38, sla: 87 },
-];
-
-/* ── SLA Trend ── */
-const slaTrendData = [
-  { month: "Dez/25", compliance_rate: 81.7 },
-  { month: "Jan/26", compliance_rate: 83.7 },
-  { month: "Fev/26", compliance_rate: 85.4 },
-  { month: "Mar/26", compliance_rate: 87.0 },
-  { month: "Abr/26", compliance_rate: 87.3 },
-  { month: "Mai/26", compliance_rate: 87.0 },
-];
 const slaTrendConfig: ChartConfig = { compliance_rate: { label: "Compliance %", color: "#F5A623" } };
+const savingsChartConfig: ChartConfig = {
+  original: { label: "Proposta mais cara", color: "#E5E7EB" },
+  final: { label: "Valor contratado", color: "#3B82F6" },
+};
+const levelChartConfig: ChartConfig = { count: { label: "Aprovações", color: "#F5A623" } };
 
-/* ── Financial ── */
-const financialSummary = { budget_annual: 50_000_000, committed: 42_300_000, spent: 38_100_000, savings: 4_200_000, savings_percentage: 10.0 };
-const categorySpend = [
-  { category: "Matérias-primas", value: 12_400_000, pct: 29, count: 342 },
-  { category: "Equipamentos", value: 8_600_000, pct: 20, count: 128 },
-  { category: "Serviços Técnicos", value: 6_200_000, pct: 15, count: 95 },
-  { category: "Viagens", value: 4_100_000, pct: 10, count: 156 },
-  { category: "Manutenção", value: 3_800_000, pct: 9, count: 88 },
-  { category: "Outros", value: 3_000_000, pct: 7, count: 438 },
-];
-const topSuppliers = [
-  { name: "Casa dos Parafusos Ltda", value: 2_400_000, count: 156, rating: 4.8 },
-  { name: "TecnoServ Equipamentos", value: 1_800_000, count: 89, rating: 4.6 },
-  { name: "LogBrasil Transportes", value: 1_200_000, count: 234, rating: 4.3 },
-  { name: "Metalúrgica São Paulo", value: 980_000, count: 67, rating: 4.7 },
-  { name: "OfficeSupply Brasil", value: 750_000, count: 312, rating: 4.1 },
-];
-const monthlySavings = [
-  { month: "Jan/26", original: 3_200_000, final: 2_800_000, savings: 400_000 },
-  { month: "Fev/26", original: 3_800_000, final: 3_400_000, savings: 380_000 },
-  { month: "Mar/26", original: 4_100_000, final: 3_600_000, savings: 500_000 },
-  { month: "Abr/26", original: 3_900_000, final: 3_500_000, savings: 420_000 },
-  { month: "Mai/26", original: 4_200_000, final: 3_700_000, savings: 500_000 },
-];
-const savingsChartConfig: ChartConfig = { original: { label: "Valor Original", color: "#E5E7EB" }, final: { label: "Valor Final", color: "#3B82F6" }, savings: { label: "Economia", color: "#10B981" } };
-
-/* ── Operational Bottlenecks ── */
-const bottlenecks = [
-  { ticket_id: "M3-000042", stage: "V3_APROVAÇÃO", hours: 288, target: 72, responsible: "Roberto Mendes", role: "Aprovador" },
-  { ticket_id: "M1-000098", stage: "V2_COTAÇÃO", hours: 96, target: 72, responsible: "Ana Oliveira", role: "Cotador" },
-  { ticket_id: "M4-000031", stage: "V2_COTAÇÃO", hours: 68, target: 24, responsible: "Ana Oliveira", role: "Cotador" },
-];
-
-/* ── Real-time event simulation data ── */
-type WSEvent =
-  | { type: "requisition:created"; ticket_id: string; module: string; department: string; value: number; timestamp: string }
-  | { type: "sla:breach"; ticket_id: string; stage: string; target_hours: number; actual_hours: number; responsible: string }
-  | { type: "purchase:completed"; ticket_id: string; total_value: number; savings: number; cycle_time_days: number }
-  | { type: "metrics:update"; total_requests_today: number; total_value_today: number; active_bottlenecks: number; sla_compliance_rate: number };
-
-const departments = ["Engenharia", "Operações", "TI", "Administrativo", "Manutenção"];
-const modules = ["M1", "M2", "M3", "M4", "M5", "M6"];
-const stages = ["V2_COTAÇÃO", "V3_APROVAÇÃO", "V4_COMPRA", "V5_RECEBIMENTO"];
-const responsibles = ["Roberto Mendes", "Ana Oliveira", "Maria Oliveira", "João Pereira", "Fernanda Lima"];
-
-function generateRandomEvent(): WSEvent {
-  const rand = Math.random();
-  const now = new Date().toISOString();
-  if (rand < 0.45) {
-    const mod = modules[Math.floor(Math.random() * modules.length)];
-    const num = String(Math.floor(Math.random() * 900) + 100).padStart(6, "0");
-    return {
-      type: "requisition:created",
-      ticket_id: `${mod}-${num}`,
-      module: mod,
-      department: departments[Math.floor(Math.random() * departments.length)],
-      value: Math.floor(Math.random() * 50000) + 500,
-      timestamp: now,
-    };
-  } else if (rand < 0.65) {
-    const mod = modules[Math.floor(Math.random() * modules.length)];
-    const num = String(Math.floor(Math.random() * 900) + 100).padStart(6, "0");
-    const target = [24, 48, 72, 168][Math.floor(Math.random() * 4)];
-    return {
-      type: "sla:breach",
-      ticket_id: `${mod}-${num}`,
-      stage: stages[Math.floor(Math.random() * stages.length)],
-      target_hours: target,
-      actual_hours: target + Math.floor(Math.random() * 100) + 1,
-      responsible: responsibles[Math.floor(Math.random() * responsibles.length)],
-    };
-  } else if (rand < 0.85) {
-    const mod = modules[Math.floor(Math.random() * modules.length)];
-    const num = String(Math.floor(Math.random() * 900) + 100).padStart(6, "0");
-    const total = Math.floor(Math.random() * 80000) + 2000;
-    return {
-      type: "purchase:completed",
-      ticket_id: `${mod}-${num}`,
-      total_value: total,
-      savings: Math.floor(total * (Math.random() * 0.15 + 0.02)),
-      cycle_time_days: +(Math.random() * 12 + 2).toFixed(1),
-    };
-  } else {
-    return {
-      type: "metrics:update",
-      total_requests_today: Math.floor(Math.random() * 30) + 40,
-      total_value_today: Math.floor(Math.random() * 500000) + 200000,
-      active_bottlenecks: Math.floor(Math.random() * 5) + 1,
-      sla_compliance_rate: +(Math.random() * 8 + 82).toFixed(1),
-    };
-  }
-}
+const PERIOD_LABELS: Record<string, string> = {
+  "30d": "Últimos 30 dias", "3m": "Últimos 3 meses", "6m": "Últimos 6 meses", "12m": "Últimos 12 meses",
+};
 
 /* ────────────────────────────────────────────────
  *  Helpers
  * ──────────────────────────────────────────────── */
 
-function SLAGauge({ value }: { value: number }) {
-  const color =
-    value >= 95 ? "#10B981" : value >= 85 ? "#F59E0B" : "#EF4444";
-  const label =
-    value >= 95 ? "Excelente" : value >= 85 ? "Atenção" : "Crítico";
+function SLAGauge({ value }: { value: number | null }) {
+  if (value == null) {
+    return (
+      <div className="flex h-[160px] items-center justify-center text-sm text-muted-foreground">
+        Sem dados no período
+      </div>
+    );
+  }
+  const color = value >= 95 ? "#10B981" : value >= 85 ? "#F59E0B" : "#EF4444";
+  const label = value >= 95 ? "Excelente" : value >= 85 ? "Atenção" : "Crítico";
   const gaugeData = [{ value, fill: color }];
   const gaugeConfig: ChartConfig = { value: { label: "SLA", color } };
 
@@ -336,181 +159,210 @@ function SLAGauge({ value }: { value: number }) {
   );
 }
 
+function DeltaLine({ delta, unit, invert, compareLabel }: { delta: number | null; unit: string; invert?: boolean; compareLabel: string | null }) {
+  if (delta == null || compareLabel == null) {
+    return <p className="text-xs text-muted-foreground mt-1">no período selecionado</p>;
+  }
+  const positiveIsGood = !invert;
+  const isGood = delta === 0 ? true : delta > 0 === positiveIsGood;
+  const Icon = delta >= 0 ? ArrowUpRight : ArrowDownRight;
+  return (
+    <div className="flex items-center gap-1 mt-1">
+      <Icon className={`h-3 w-3 ${isGood ? "text-emerald-500" : "text-red-500"}`} />
+      <span className={`text-xs font-medium ${isGood ? "text-emerald-600" : "text-red-500"}`}>
+        {delta > 0 ? "+" : ""}{delta}{unit}
+      </span>
+      <span className="text-xs text-muted-foreground">{compareLabel}</span>
+    </div>
+  );
+}
+
+const fmtBRL = (v: number) =>
+  v >= 1_000_000 ? `R$ ${(v / 1_000_000).toFixed(1)}M`
+    : v >= 1_000 ? `R$ ${(v / 1_000).toFixed(1)}K`
+    : `R$ ${v.toLocaleString("pt-BR")}`;
+
+const relativeTime = (iso: string) => {
+  const diffMin = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (diffMin < 1) return "agora";
+  if (diffMin < 60) return `${diffMin}min`;
+  const h = Math.floor(diffMin / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+};
+
+const FEED_META: Record<string, { label: string; icon: typeof Package; bg: string; fg: string; badge: string }> = {
+  SUBMITTED: { label: "Nova Requisição", icon: Package, bg: "bg-blue-100", fg: "text-blue-600", badge: "bg-blue-50 text-blue-600 border-blue-200" },
+  GESTOR_APPROVED: { label: "Aprovada pelo Gestor", icon: UserCheck, bg: "bg-amber-100", fg: "text-amber-700", badge: "bg-amber-50 text-amber-700 border-amber-200" },
+  GESTOR_REJECTED: { label: "Reprovada pelo Gestor", icon: AlertCircle, bg: "bg-red-100", fg: "text-red-600", badge: "bg-red-50 text-red-600 border-red-200" },
+  QUOTATION_STARTED: { label: "Cotação Iniciada", icon: FileText, bg: "bg-purple-100", fg: "text-purple-600", badge: "bg-purple-50 text-purple-600 border-purple-200" },
+  WINNER_SELECTED: { label: "Vencedor Selecionado", icon: Trophy, bg: "bg-yellow-100", fg: "text-yellow-700", badge: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+  M2_QUOTE_COMPLETED: { label: "Cotação de Viagem", icon: FileText, bg: "bg-purple-100", fg: "text-purple-600", badge: "bg-purple-50 text-purple-600 border-purple-200" },
+  APPROVAL_REQUESTED: { label: "Enviada p/ Aprovação", icon: Bell, bg: "bg-orange-100", fg: "text-orange-600", badge: "bg-orange-50 text-orange-600 border-orange-200" },
+  APPROVAL_GRANTED: { label: "Aprovada", icon: CheckCircle2, bg: "bg-emerald-100", fg: "text-emerald-600", badge: "bg-emerald-50 text-emerald-600 border-emerald-200" },
+  APPROVAL_REJECTED: { label: "Reprovada", icon: AlertCircle, bg: "bg-red-100", fg: "text-red-600", badge: "bg-red-50 text-red-600 border-red-200" },
+  PURCHASE_CONFIRMED: { label: "Compra Confirmada", icon: ShoppingCart, bg: "bg-emerald-100", fg: "text-emerald-600", badge: "bg-emerald-50 text-emerald-600 border-emerald-200" },
+  RECEIPT_REGISTERED: { label: "Recebimento", icon: PackageCheck, bg: "bg-cyan-100", fg: "text-cyan-700", badge: "bg-cyan-50 text-cyan-700 border-cyan-200" },
+  REQUISITION_EDITED: { label: "Requisição Editada", icon: FileEdit, bg: "bg-slate-100", fg: "text-slate-600", badge: "bg-slate-50 text-slate-600 border-slate-200" },
+};
+
 /* ────────────────────────────────────────────────
  *  Page Component
  * ──────────────────────────────────────────────── */
 
 function AnalyticsPage() {
   const { session } = useAuth();
-  const [period, setPeriod] = useState("12m");
+  const [period, setPeriod] = useState<"30d" | "3m" | "6m" | "12m">("3m");
   const [moduleFilter, setModuleFilter] = useState("Todos");
   const [compareMode, setCompareMode] = useState<"none" | "previous_period" | "same_period_last_year">("none");
-  const [highlightModule, setHighlightModule] = useState<string | null>(null);
-  const [exportOpen, setExportOpen] = useState(false);
-  const [drillPath, setDrillPath] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<"executive" | "sla" | "financial" | "operational">("executive");
+  const [data, setData] = useState<AnalyticsPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+
+  const [exportOpen, setExportOpen] = useState(false);
   const [exportReportType, setExportReportType] = useState<"executive" | "sla" | "financial" | "operational">("executive");
   const [exportFormat, setExportFormat] = useState<"PDF" | "Excel" | "CSV">("PDF");
-  const [exportIncludeCharts, setExportIncludeCharts] = useState(true);
-  const [exportIncludeRaw, setExportIncludeRaw] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
-  const [exportResult, setExportResult] = useState<{ download_url: string; expires_at: string; file_size_bytes: number; generated_at: string } | null>(null);
+  const [exportDone, setExportDone] = useState<string | null>(null);
 
-  /* ── KPIs reais do banco ── */
-  const [dbKpis, setDbKpis] = useState<{
-    totalTickets: number;
-    approvalRate: number;
-    moduleDistData: typeof moduleDistData;
-  } | null>(null);
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const payload = await getAnalytics({ data: { period, module: moduleFilter, compare: compareMode } });
+      setData(payload);
+      setLastRefresh(new Date());
+    } catch (err) {
+      console.error("[analytics]", err);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [period, moduleFilter, compareMode]);
 
   useEffect(() => {
     if (!session) return;
-    (async () => {
-      const { data: reqs } = await supabaseBrowser
-        .from("requisitions")
-        .select("module,status")
-        .limit(5000);
-      if (!reqs) return;
+    void fetchData();
+  }, [session, fetchData]);
 
-      const total = reqs.length;
-      const concluded = reqs.filter((r) => r.status === "CONCLUÍDO" || r.status === "COMPRA" || r.status === "RECEBIMENTO").length;
-      const rejected = reqs.filter((r) => r.status === "REJEITADO" || r.status === "CANCELADO").length;
-      const decided = concluded + rejected;
-      const approvalRateReal = decided > 0 ? +(concluded / decided * 100).toFixed(1) : 0;
-
-      const moduleCounts: Record<string, number> = {};
-      for (const r of reqs) {
-        moduleCounts[r.module] = (moduleCounts[r.module] ?? 0) + 1;
-      }
-      const MODULE_META: { key: string; name: string; fill: string }[] = [
-        { key: "M1", name: "Produtos", fill: "#3B82F6" },
-        { key: "M2", name: "Viagens", fill: "#10B981" },
-        { key: "M3", name: "Serviços", fill: "#8B5CF6" },
-        { key: "M4", name: "Manutenção", fill: "#F59E0B" },
-        { key: "M5", name: "Frete", fill: "#EF4444" },
-        { key: "M6", name: "Locação", fill: "#06B6D4" },
-      ];
-      const realModuleDist = MODULE_META.map((m) => ({
-        name: m.name,
-        value: moduleCounts[m.key] ?? 0,
-        fill: m.fill,
-      }));
-
-      setDbKpis({ totalTickets: total, approvalRate: approvalRateReal, moduleDistData: realModuleDist });
-    })();
+  // Atualização periódica real (60s), sem piscar a tela
+  const fetchRef = useRef(fetchData);
+  fetchRef.current = fetchData;
+  useEffect(() => {
+    if (!session) return;
+    const interval = setInterval(() => void fetchRef.current(true), 60_000);
+    return () => clearInterval(interval);
   }, [session]);
 
-  /* ── Real-time simulation ── */
-  const [liveEvents, setLiveEvents] = useState<(WSEvent & { _id: number })[]>([]);
-  const [liveMetrics, setLiveMetrics] = useState({
-    total_requests_today: 52,
-    total_value_today: 384_000,
-    active_bottlenecks: 3,
-    sla_compliance_rate: 87.0,
-  });
-  const [wsConnected, setWsConnected] = useState(false);
-  const eventIdRef = useRef(0);
+  const compareLabel = compareMode === "previous_period"
+    ? "vs período anterior"
+    : compareMode === "same_period_last_year" ? "vs ano anterior" : null;
 
-  useEffect(() => {
-    const connectDelay = setTimeout(() => setWsConnected(true), 800);
-    return () => clearTimeout(connectDelay);
-  }, []);
-
-  useEffect(() => {
-    if (!wsConnected) return;
-    const interval = setInterval(() => {
-      const evt = generateRandomEvent();
-      if (evt.type === "metrics:update") {
-        setLiveMetrics({
-          total_requests_today: evt.total_requests_today,
-          total_value_today: evt.total_value_today,
-          active_bottlenecks: evt.active_bottlenecks,
-          sla_compliance_rate: evt.sla_compliance_rate,
-        });
-      }
-      eventIdRef.current += 1;
-      setLiveEvents((prev) => [{ ...evt, _id: eventIdRef.current }, ...prev].slice(0, 20));
-    }, 3000 + Math.random() * 2000);
-    return () => clearInterval(interval);
-  }, [wsConnected]);
-
-  const buildCsvContent = (): string => {
-    const sep = exportFormat === "CSV" ? "," : "\t";
-    const q = (v: string | number) => {
-      const s = String(v);
-      return exportFormat === "CSV" ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-
+  /* ── Export com dados reais ── */
+  const buildRows = useCallback((): { header: string[]; rows: (string | number)[][]; title: string } => {
+    const d = data!;
     if (exportReportType === "executive") {
-      const header = [q("Mês"), q("M1 Produtos"), q("M2 Viagens"), q("M3 Serviços"), q("M4 Manutenção"), q("M5 Frete"), q("M6 Locação")].join(sep);
-      const rows = volumeTrendData.map((r) =>
-        [q(r.month), r.M1, r.M2, r.M3, r.M4, r.M5, r.M6].join(sep)
-      );
-      return [header, ...rows].join("\r\n");
+      return {
+        title: "Relatório Executivo",
+        header: ["Período", "M1 Produtos", "M2 Viagens", "M3 Serviços", "M4 Manutenção", "M5 Frete", "M6 Locação"],
+        rows: d.volumeTrend.map((r) => [r.month, r.M1, r.M2, r.M3, r.M4, r.M5, r.M6] as (string | number)[]),
+      };
     }
     if (exportReportType === "sla") {
-      const header = [q("Módulo"), q("Label"), q("Compliance %")].join(sep);
-      const rows = slaByModuleData.map((r) =>
-        [q(r.module), q(r.label), r.compliance].join(sep)
-      );
-      return [header, ...rows].join("\r\n");
+      return {
+        title: "Relatório de SLA",
+        header: ["Estágio", "Média (h)", "Mediana (h)", "P95 (h)", "Meta (h)", "Amostras"],
+        rows: d.stageDuration.map((s) => [s.label, s.avg, s.median, s.p95, s.target, s.count]),
+      };
     }
     if (exportReportType === "financial") {
-      const header = [q("Categoria"), q("Valor R$"), q("% Orçamento"), q("Qtd Pedidos")].join(sep);
-      const rows = categorySpend.map((r) =>
-        [q(r.category), r.value, r.pct, r.count].join(sep)
-      );
-      return [header, ...rows].join("\r\n");
+      return {
+        title: "Relatório Financeiro",
+        header: ["Módulo", "Valor Comprado R$", "% do Gasto", "Qtd Compras"],
+        rows: d.financial.spendByModule.map((c) => [c.label, c.value, c.pct, c.count]),
+      };
     }
-    // operational
-    const header = [q("Comprador"), q("Requisições"), q("Valor R$"), q("Tempo Médio (dias)"), q("SLA %")].join(sep);
-    const rows = [
-      { name: "Maria Oliveira", requests: 234, value: 1_200_000, avgDays: 4.2, sla: 92 },
-      { name: "Ana Costa", requests: 198, value: 980_000, avgDays: 5.1, sla: 88 },
-      { name: "João Pereira", requests: 176, value: 850_000, avgDays: 4.8, sla: 91 },
-      { name: "Fernanda Lima", requests: 152, value: 720_000, avgDays: 3.9, sla: 95 },
-      { name: "Carlos Souza", requests: 134, value: 650_000, avgDays: 6.2, sla: 84 },
-    ].map((r) => [q(r.name), r.requests, r.value, r.avgDays, r.sla].join(sep));
-    return [header, ...rows].join("\r\n");
-  };
+    return {
+      title: "Relatório Operacional",
+      header: ["Comprador", "Compras", "Valor Total R$"],
+      rows: d.topBuyers.map((b) => [b.name, b.purchases, b.totalValue]),
+    };
+  }, [data, exportReportType]);
 
   const handleExportGenerate = async () => {
+    if (!data) return;
     setExportLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
-    const now = new Date();
+    try {
+      const { header, rows, title } = buildRows();
+      const now = new Date();
+      const baseName = `vprequisicoes-${exportReportType}-${now.toISOString().slice(0, 10)}`;
 
-    const csvContent = buildCsvContent();
-    const mimeType = exportFormat === "PDF" ? "text/plain;charset=utf-8" : "text/csv;charset=utf-8";
-    const extension = exportFormat === "PDF" ? "txt" : exportFormat === "Excel" ? "tsv" : "csv";
-    const blob = new Blob(["﻿" + csvContent], { type: mimeType });
-    const blobUrl = URL.createObjectURL(blob);
-    const filename = `vprequisicoes-${exportReportType}-${now.toISOString().slice(0, 10)}.${extension}`;
-
-    // Dispara o download imediatamente
-    const anchor = document.createElement("a");
-    anchor.href = blobUrl;
-    anchor.download = filename;
-    anchor.click();
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000);
-
-    setExportResult({
-      download_url: blobUrl,
-      expires_at: new Date(now.getTime() + 30 * 60 * 1000).toISOString(),
-      file_size_bytes: blob.size,
-      generated_at: now.toISOString(),
-    });
-    setExportLoading(false);
+      if (exportFormat === "PDF") {
+        const { jsPDF } = await import("jspdf");
+        const doc = new jsPDF();
+        doc.setFontSize(16);
+        doc.text(`VPRequisições — ${title}`, 14, 18);
+        doc.setFontSize(9);
+        doc.text(`Período: ${PERIOD_LABELS[period]} · Módulo: ${moduleFilter} · Gerado em ${now.toLocaleString("pt-BR")}`, 14, 25);
+        doc.setFontSize(10);
+        let y = 36;
+        const colW = 180 / header.length;
+        doc.setFont("helvetica", "bold");
+        header.forEach((h, i) => doc.text(String(h), 14 + i * colW, y, { maxWidth: colW - 2 }));
+        doc.setFont("helvetica", "normal");
+        y += 7;
+        for (const row of rows) {
+          if (y > 280) { doc.addPage(); y = 20; }
+          row.forEach((cell, i) => {
+            const text = typeof cell === "number" ? cell.toLocaleString("pt-BR") : String(cell);
+            doc.text(text, 14 + i * colW, y, { maxWidth: colW - 2 });
+          });
+          y += 6;
+        }
+        doc.save(`${baseName}.pdf`);
+        setExportDone(`${baseName}.pdf`);
+      } else {
+        const sep = exportFormat === "CSV" ? "," : "\t";
+        const q = (v: string | number) => {
+          const s = typeof v === "number" ? String(v) : v;
+          return exportFormat === "CSV" ? `"${s.replace(/"/g, '""')}"` : s;
+        };
+        const content = [header.map(q).join(sep), ...rows.map((r) => r.map(q).join(sep))].join("\r\n");
+        const ext = exportFormat === "CSV" ? "csv" : "xls";
+        const blob = new Blob(["﻿" + content], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${baseName}.${ext}`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 30_000);
+        setExportDone(`${baseName}.${ext}`);
+      }
+    } finally {
+      setExportLoading(false);
+    }
   };
 
-  const fmtBRL = (v: number) => v >= 1_000_000 ? `R$ ${(v / 1_000_000).toFixed(1)}M` : `R$ ${(v / 1_000).toFixed(0)}K`;
-  const fmtBytes = (b: number) => b < 1024 * 1024 ? `${(b / 1024).toFixed(1)} KB` : `${(b / (1024 * 1024)).toFixed(1)} MB`;
+  if (loading && !data) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-vp-yellow border-t-transparent" />
+      </div>
+    );
+  }
 
-  // KPIs: usa dados reais quando disponíveis, fallback para estimativas históricas
-  const totalTickets = dbKpis?.totalTickets ?? 1714;
-  const avgCycleHours = 156; // calculado futuramente a partir de completed_at
-  const slaCompliance = 87;  // calculado futuramente a partir de SLA targets
-  const approvalRate = dbKpis?.approvalRate ?? 94.2;
-  const liveModuleDist = dbKpis?.moduleDistData ?? moduleDistData;
+  if (!data) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-muted-foreground">
+        <AlertTriangle className="h-8 w-8" />
+        <p className="text-sm">Não foi possível carregar as métricas.</p>
+        <Button variant="outline" size="sm" onClick={() => void fetchData()}>Tentar novamente</Button>
+      </div>
+    );
+  }
+
+  const { kpis, slaBreakdown } = data;
+  const slaTotalOpen = slaBreakdown.onTime + slaBreakdown.atRisk + slaBreakdown.exceeded;
+  const activeModules = moduleFilter === "Todos" ? (["M1", "M2", "M3", "M4", "M5", "M6"] as const) : ([moduleFilter] as const);
 
   return (
     <>
@@ -529,7 +381,6 @@ function AnalyticsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Module filter */}
           <Select value={moduleFilter} onValueChange={setModuleFilter}>
             <SelectTrigger className="w-[120px]">
               <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
@@ -541,8 +392,7 @@ function AnalyticsPage() {
               ))}
             </SelectContent>
           </Select>
-          {/* Period */}
-          <Select value={period} onValueChange={setPeriod}>
+          <Select value={period} onValueChange={(v) => setPeriod(v as typeof period)}>
             <SelectTrigger className="w-[140px]">
               <SelectValue />
             </SelectTrigger>
@@ -553,7 +403,6 @@ function AnalyticsPage() {
               <SelectItem value="12m">Últimos 12 meses</SelectItem>
             </SelectContent>
           </Select>
-          {/* Time comparison */}
           <Select value={compareMode} onValueChange={(v) => setCompareMode(v as typeof compareMode)}>
             <SelectTrigger className="w-[160px]">
               <GitCompareArrows className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
@@ -565,33 +414,12 @@ function AnalyticsPage() {
               <SelectItem value="same_period_last_year">Mesmo período ano anterior</SelectItem>
             </SelectContent>
           </Select>
-          {/* Export */}
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setExportOpen(true)}>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { setExportDone(null); setExportOpen(true); }}>
             <Download className="h-4 w-4" />
             <span className="hidden sm:inline">Exportar</span>
           </Button>
         </div>
       </div>
-
-      {/* Drill-down breadcrumb */}
-      {drillPath.length > 0 && (
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <button className="hover:text-foreground transition-colors" onClick={() => setDrillPath([])}>
-            Dashboard
-          </button>
-          {drillPath.map((p, i) => (
-            <span key={p} className="flex items-center gap-1">
-              <ChevronRight className="h-3 w-3" />
-              <button
-                className="hover:text-foreground transition-colors"
-                onClick={() => setDrillPath(drillPath.slice(0, i + 1))}
-              >
-                {p}
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
 
       {/* Comparison banner */}
       {compareMode !== "none" && (
@@ -601,9 +429,9 @@ function AnalyticsPage() {
             <p className="text-xs text-muted-foreground">
               Comparando com{" "}
               <span className="font-medium text-foreground">
-                {compareMode === "previous_period" ? "período anterior" : "mesmo período do ano anterior"}
+                {compareMode === "previous_period" ? "o período anterior de mesma duração" : "o mesmo período do ano anterior"}
               </span>
-              {" · "}Variações exibidas em valores absolutos e percentuais.
+              {" · "}Variações calculadas sobre os dados reais.
             </p>
             <button className="ml-auto text-xs text-muted-foreground hover:text-foreground" onClick={() => setCompareMode("none")}>
               Remover
@@ -611,8 +439,6 @@ function AnalyticsPage() {
           </CardContent>
         </Card>
       )}
-
-      {/* KPI Row */}
 
       {/* View Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
@@ -624,6 +450,12 @@ function AnalyticsPage() {
         </TabsList>
       </Tabs>
 
+      {loading && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" /> Atualizando métricas...
+        </div>
+      )}
+
       {/* KPI Row — always visible */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="card-hover-yellow">
@@ -633,13 +465,9 @@ function AnalyticsPage() {
               <Package className="h-4 w-4 text-muted-foreground" />
             </div>
             <p className="text-2xl font-bold text-foreground mt-1">
-              {totalTickets.toLocaleString("pt-BR")}
+              {kpis.totalReqs.toLocaleString("pt-BR")}
             </p>
-            <div className="flex items-center gap-1 mt-1">
-              <ArrowUpRight className="h-3 w-3 text-emerald-500" />
-              <span className="text-xs text-emerald-600 font-medium">+8.2%</span>
-              <span className="text-xs text-muted-foreground">vs mês anterior</span>
-            </div>
+            <DeltaLine delta={kpis.totalReqsDelta} unit="%" compareLabel={compareLabel} />
           </CardContent>
         </Card>
 
@@ -650,13 +478,11 @@ function AnalyticsPage() {
               <Timer className="h-4 w-4 text-muted-foreground" />
             </div>
             <p className="text-2xl font-bold text-foreground mt-1">
-              {Math.floor(avgCycleHours / 24)}d {avgCycleHours % 24}h
+              {kpis.avgCycleHours != null
+                ? `${Math.floor(kpis.avgCycleHours / 24)}d ${kpis.avgCycleHours % 24}h`
+                : "—"}
             </p>
-            <div className="flex items-center gap-1 mt-1">
-              <ArrowDownRight className="h-3 w-3 text-emerald-500" />
-              <span className="text-xs text-emerald-600 font-medium">-12h</span>
-              <span className="text-xs text-muted-foreground">vs mês anterior</span>
-            </div>
+            <DeltaLine delta={kpis.avgCycleDeltaHours} unit="h" invert compareLabel={compareLabel} />
           </CardContent>
         </Card>
 
@@ -666,12 +492,10 @@ function AnalyticsPage() {
               <p className="text-xs text-muted-foreground font-medium">Compliance SLA</p>
               <Target className="h-4 w-4 text-muted-foreground" />
             </div>
-            <p className="text-2xl font-bold text-foreground mt-1">{slaCompliance}%</p>
-            <div className="flex items-center gap-1 mt-1">
-              <ArrowUpRight className="h-3 w-3 text-emerald-500" />
-              <span className="text-xs text-emerald-600 font-medium">+2.1%</span>
-              <span className="text-xs text-muted-foreground">vs mês anterior</span>
-            </div>
+            <p className="text-2xl font-bold text-foreground mt-1">
+              {kpis.slaCompliance != null ? `${kpis.slaCompliance}%` : "—"}
+            </p>
+            <DeltaLine delta={kpis.slaComplianceDelta} unit="pp" compareLabel={compareLabel} />
           </CardContent>
         </Card>
 
@@ -681,12 +505,10 @@ function AnalyticsPage() {
               <p className="text-xs text-muted-foreground font-medium">Taxa Aprovação</p>
               <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
             </div>
-            <p className="text-2xl font-bold text-foreground mt-1">{approvalRate}%</p>
-            <div className="flex items-center gap-1 mt-1">
-              <ArrowUpRight className="h-3 w-3 text-emerald-500" />
-              <span className="text-xs text-emerald-600 font-medium">+1.3%</span>
-              <span className="text-xs text-muted-foreground">vs mês anterior</span>
-            </div>
+            <p className="text-2xl font-bold text-foreground mt-1">
+              {kpis.approvalRate != null ? `${kpis.approvalRate}%` : "—"}
+            </p>
+            <DeltaLine delta={kpis.approvalRateDelta} unit="pp" compareLabel={compareLabel} />
           </CardContent>
         </Card>
       </div>
@@ -696,16 +518,18 @@ function AnalyticsPage() {
         <Card className="lg:col-span-2 card-hover-yellow">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Volume de Requisições</CardTitle>
-            <p className="text-xs text-muted-foreground">Últimos 12 meses por módulo</p>
+            <p className="text-xs text-muted-foreground">
+              {PERIOD_LABELS[period]}{moduleFilter !== "Todos" ? ` · ${moduleFilter}` : " por módulo"}
+            </p>
           </CardHeader>
           <CardContent>
             <ChartContainer config={volumeChartConfig} className="h-[280px] w-full">
-              <AreaChart data={volumeTrendData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+              <AreaChart data={data.volumeTrend} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis dataKey="month" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
-                <YAxis tick={{ fontSize: 10 }} className="fill-muted-foreground" />
+                <YAxis tick={{ fontSize: 10 }} allowDecimals={false} className="fill-muted-foreground" />
                 <ChartTooltip content={<ChartTooltipContent />} />
-                {(["M1", "M2", "M3", "M4", "M5", "M6"] as const).map((key) => (
+                {activeModules.map((key) => (
                   <Area
                     key={key}
                     type="monotone"
@@ -725,21 +549,26 @@ function AnalyticsPage() {
         <Card className="card-hover-yellow">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Compliance SLA Geral</CardTitle>
-            <p className="text-xs text-muted-foreground">Meta: ≥ 95%</p>
+            <p className="text-xs text-muted-foreground">Meta: ≥ 95% · etapas concluídas dentro do prazo</p>
           </CardHeader>
           <CardContent className="flex flex-col items-center justify-center pt-4">
-            <SLAGauge value={slaCompliance} />
+            <SLAGauge value={kpis.slaCompliance} />
             <div className="w-full mt-6 space-y-2">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">
+                Requisições em andamento ({slaTotalOpen})
+              </p>
               {[
-                { label: "No prazo", value: 1491, pct: 87, color: "#10B981" },
-                { label: "Em risco", value: 137, pct: 8, color: "#F59E0B" },
-                { label: "Excedido", value: 86, pct: 5, color: "#EF4444" },
+                { label: "No prazo", value: slaBreakdown.onTime, color: "#10B981" },
+                { label: "Em risco", value: slaBreakdown.atRisk, color: "#F59E0B" },
+                { label: "Excedido", value: slaBreakdown.exceeded, color: "#EF4444" },
               ].map((item) => (
                 <div key={item.label} className="flex items-center gap-2 text-xs">
                   <div className="h-2 w-2 rounded-full" style={{ background: item.color }} />
                   <span className="text-muted-foreground flex-1">{item.label}</span>
                   <span className="font-medium text-foreground">{item.value}</span>
-                  <span className="text-muted-foreground">({item.pct}%)</span>
+                  <span className="text-muted-foreground">
+                    ({slaTotalOpen > 0 ? Math.round((item.value / slaTotalOpen) * 100) : 0}%)
+                  </span>
                 </div>
               ))}
             </div>
@@ -752,42 +581,48 @@ function AnalyticsPage() {
         <Card className="card-hover-yellow">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Distribuição por Módulo</CardTitle>
-            <p className="text-xs text-muted-foreground">Maio/2026</p>
+            <p className="text-xs text-muted-foreground">{PERIOD_LABELS[period]}</p>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={pieChartConfig} className="h-[250px] w-full">
-              <PieChart>
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Pie
-                  data={liveModuleDist}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={90}
-                  paddingAngle={3}
-                  dataKey="value"
-                  nameKey="name"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  labelLine={false}
-                >
-                  {liveModuleDist.map((entry) => (
-                    <Cell key={entry.name} fill={entry.fill} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ChartContainer>
+            {data.moduleDist.every((m) => m.value === 0) ? (
+              <div className="flex h-[250px] items-center justify-center text-sm text-muted-foreground">
+                Sem requisições no período
+              </div>
+            ) : (
+              <ChartContainer config={pieChartConfig} className="h-[250px] w-full">
+                <PieChart>
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Pie
+                    data={data.moduleDist.filter((m) => m.value > 0)}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={90}
+                    paddingAngle={3}
+                    dataKey="value"
+                    nameKey="name"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    labelLine={false}
+                  >
+                    {data.moduleDist.filter((m) => m.value > 0).map((entry) => (
+                      <Cell key={entry.name} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ChartContainer>
+            )}
           </CardContent>
         </Card>
 
         <Card className="card-hover-yellow">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Duração por Estágio</CardTitle>
-            <p className="text-xs text-muted-foreground">Média vs Meta (horas)</p>
+            <p className="text-xs text-muted-foreground">Média real vs Meta (horas)</p>
           </CardHeader>
           <CardContent>
             <ChartContainer config={stageBarConfig} className="h-[250px] w-full">
               <BarChart
-                data={stageDurationData}
+                data={data.stageDuration}
                 layout="vertical"
                 margin={{ top: 5, right: 10, left: 10, bottom: 0 }}
               >
@@ -809,21 +644,28 @@ function AnalyticsPage() {
         </Card>
       </div>
 
-      {/* SLA by Module + Performance Radar */}
+      {/* SLA by Module + Aprovações por Alçada */}
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="card-hover-yellow">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">SLA por Módulo</CardTitle>
-            <p className="text-xs text-muted-foreground">Compliance % por módulo</p>
+            <p className="text-xs text-muted-foreground">Compliance % das etapas concluídas no período</p>
           </CardHeader>
           <CardContent className="space-y-3">
-            {slaByModuleData.map((mod) => {
+            {data.slaByModule.map((mod) => {
+              if (mod.compliance == null) {
+                return (
+                  <div key={mod.module} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">{mod.module} — {mod.label}</span>
+                      <span className="text-muted-foreground">sem dados</span>
+                    </div>
+                    <Progress value={0} className="h-2" />
+                  </div>
+                );
+              }
               const color =
-                mod.compliance >= 90
-                  ? "text-emerald-600"
-                  : mod.compliance >= 80
-                    ? "text-amber-600"
-                    : "text-red-600";
+                mod.compliance >= 90 ? "text-emerald-600" : mod.compliance >= 80 ? "text-amber-600" : "text-red-600";
               const bg =
                 mod.compliance >= 90
                   ? "[&>div]:bg-emerald-500"
@@ -847,25 +689,35 @@ function AnalyticsPage() {
 
         <Card className="card-hover-yellow">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Radar de Performance</CardTitle>
-            <p className="text-xs text-muted-foreground">Visão multidimensional</p>
+            <CardTitle className="text-sm font-semibold">Aprovações por Alçada</CardTitle>
+            <p className="text-xs text-muted-foreground">Decisões no período, por nível</p>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={radarConfig} className="h-[250px] w-full">
-              <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="70%">
-                <PolarGrid className="stroke-border" />
-                <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
-                <PolarRadiusAxis tick={{ fontSize: 8 }} domain={[0, 100]} className="fill-muted-foreground" />
-                <Radar
-                  name="Score"
-                  dataKey="value"
-                  stroke="#F5A623"
-                  fill="#F5A623"
-                  fillOpacity={0.25}
-                  strokeWidth={2}
-                />
-              </RadarChart>
-            </ChartContainer>
+            {data.approvalsByLevel.every((l) => l.count === 0) ? (
+              <div className="flex h-[250px] items-center justify-center text-sm text-muted-foreground">
+                Nenhuma decisão de aprovação no período
+              </div>
+            ) : (
+              <>
+                <ChartContainer config={levelChartConfig} className="h-[190px] w-full">
+                  <BarChart data={data.approvalsByLevel.map((l) => ({ ...l, label: `${l.level}ª Alçada` }))} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
+                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} className="fill-muted-foreground" />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="count" fill="#F5A623" radius={[4, 4, 0, 0]} barSize={40} />
+                  </BarChart>
+                </ChartContainer>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  {data.approvalsByLevel.map((l) => (
+                    <div key={l.level} className="rounded-lg border p-2">
+                      <p className="text-[10px] text-muted-foreground">{l.level}ª Alçada</p>
+                      <p className="text-xs font-bold text-foreground">{fmtBRL(l.totalValue)}</p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -873,72 +725,62 @@ function AnalyticsPage() {
       {/* Quality + Efficiency + Top Buyers (Executive) */}
       {activeTab === "executive" && (
       <div className="grid lg:grid-cols-3 gap-4">
-        {/* Quality */}
         <Card className="card-hover-yellow">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Qualidade</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {qualityMetrics.map((m) => {
-              const isPositive =
-                m.label === "Taxa de Aprovação" ? m.trend > 0 : m.trend < 0;
-              return (
-                <div key={m.label} className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent">
-                    <m.icon className="h-4 w-4 text-vp-yellow-dark" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-muted-foreground">{m.label}</p>
-                    <p className="text-sm font-bold text-foreground">{m.value}%</p>
-                  </div>
-                  <span
-                    className={`text-xs font-medium ${isPositive ? "text-emerald-600" : "text-red-500"}`}
-                  >
-                    {m.trend > 0 ? "+" : ""}
-                    {m.trend}%
-                  </span>
+            {[
+              { label: "Taxa de Aprovação", value: data.quality.approvalRate != null ? `${data.quality.approvalRate}%` : "—", icon: CheckCircle2 },
+              { label: "Requisições Reprovadas", value: String(data.quality.rejectedCount), icon: AlertTriangle },
+              { label: "Requisições Editadas", value: String(data.quality.editedCount), icon: RotateCcw },
+            ].map((m) => (
+              <div key={m.label} className="flex items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent">
+                  <m.icon className="h-4 w-4 text-vp-yellow-dark" />
                 </div>
-              );
-            })}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground">{m.label}</p>
+                  <p className="text-sm font-bold text-foreground">{m.value}</p>
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
 
-        {/* Efficiency */}
         <Card className="card-hover-yellow">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Eficiência</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {efficiencyMetrics.map((m) => (
+            {[
+              { label: "Compras Concluídas", value: String(data.efficiency.purchasesCount) },
+              { label: "Cotações Concluídas", value: String(data.efficiency.quotationsCompleted) },
+              { label: "Tempo Médio de Cotação", value: data.efficiency.avgQuotationHours != null ? `${data.efficiency.avgQuotationHours}h` : "—" },
+            ].map((m) => (
               <div key={m.label} className="flex items-center gap-3">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent">
                   <Zap className="h-4 w-4 text-vp-yellow-dark" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-muted-foreground">{m.label}</p>
-                  <p className="text-sm font-bold text-foreground">
-                    {m.value}
-                    <span className="text-xs font-normal text-muted-foreground ml-0.5">
-                      {m.unit}
-                    </span>
-                  </p>
+                  <p className="text-sm font-bold text-foreground">{m.value}</p>
                 </div>
-                <span className="text-xs font-medium text-emerald-600">
-                  +{m.trend}
-                </span>
               </div>
             ))}
           </CardContent>
         </Card>
 
-        {/* Top Buyers */}
         <Card className="card-hover-yellow">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Top Compradores</CardTitle>
-            <p className="text-xs text-muted-foreground">Por volume mensal</p>
+            <p className="text-xs text-muted-foreground">Por compras no período</p>
           </CardHeader>
           <CardContent className="space-y-3">
-            {topBuyers.map((b, i) => (
+            {data.topBuyers.length === 0 && (
+              <p className="text-xs text-muted-foreground italic">Nenhuma compra no período.</p>
+            )}
+            {data.topBuyers.map((b, i) => (
               <div key={b.name} className="flex items-center gap-3">
                 <span className="text-xs font-bold text-muted-foreground w-4">
                   {i + 1}.
@@ -946,19 +788,9 @@ function AnalyticsPage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-foreground truncate">{b.name}</p>
                   <p className="text-[10px] text-muted-foreground">
-                    {b.tickets} tickets · SLA {b.sla}%
+                    {b.purchases} compra(s) · {fmtBRL(b.totalValue)}
                   </p>
                 </div>
-                <Badge
-                  variant="outline"
-                  className={`text-[10px] ${
-                    b.sla >= 90
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                      : "bg-amber-50 text-amber-700 border-amber-200"
-                  }`}
-                >
-                  {b.sla}%
-                </Badge>
               </div>
             ))}
           </CardContent>
@@ -972,16 +804,16 @@ function AnalyticsPage() {
           <Card className="card-hover-yellow">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold">Tendência SLA</CardTitle>
-              <p className="text-xs text-muted-foreground">Compliance % últimos 6 meses</p>
+              <p className="text-xs text-muted-foreground">Compliance % últimos 6 meses (dados reais)</p>
             </CardHeader>
             <CardContent>
               <ChartContainer config={slaTrendConfig} className="h-[250px] w-full">
-                <LineChart data={slaTrendData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                <LineChart data={data.slaTrend} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                   <XAxis dataKey="month" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
-                  <YAxis domain={[75, 100]} tick={{ fontSize: 10 }} className="fill-muted-foreground" />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} className="fill-muted-foreground" />
                   <ChartTooltip content={<ChartTooltipContent />} />
-                  <Line type="monotone" dataKey="compliance_rate" stroke="#F5A623" strokeWidth={3} dot={{ r: 5, fill: "#F5A623" }} />
+                  <Line type="monotone" dataKey="compliance_rate" stroke="#F5A623" strokeWidth={3} dot={{ r: 5, fill: "#F5A623" }} connectNulls />
                 </LineChart>
               </ChartContainer>
             </CardContent>
@@ -990,18 +822,16 @@ function AnalyticsPage() {
             <Card className="card-hover-yellow">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">Duração por Estágio (detalhada)</CardTitle>
-                <p className="text-xs text-muted-foreground">Média · Mediana · P95 vs Meta</p>
+                <p className="text-xs text-muted-foreground">Média · Mediana · P95 vs Meta — {PERIOD_LABELS[period]}</p>
               </CardHeader>
               <CardContent className="space-y-3">
-                {[
-                  { stage: "V2 Cotação", avg: 42, median: 36, p95: 68, target: 72 },
-                  { stage: "V3 Aprovação", avg: 52, median: 48, p95: 96, target: 72 },
-                  { stage: "V4 Compra", avg: 36, median: 30, p95: 62, target: 48 },
-                  { stage: "V5 Recebimento", avg: 120, median: 96, p95: 192, target: 168 },
-                ].map((s) => (
+                {data.stageDuration.filter((s) => s.count > 0).length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">Nenhuma etapa concluída no período.</p>
+                )}
+                {data.stageDuration.filter((s) => s.count > 0).map((s) => (
                   <div key={s.stage} className="space-y-1">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium text-foreground">{s.stage}</span>
+                      <span className="font-medium text-foreground">{s.label} ({s.count})</span>
                       <span className={s.p95 > s.target ? "text-red-500 font-semibold" : "text-emerald-600 font-semibold"}>
                         P95: {s.p95}h {s.p95 > s.target ? "⚠" : "✓"}
                       </span>
@@ -1020,18 +850,21 @@ function AnalyticsPage() {
                   <OctagonAlert className="h-4 w-4 text-red-500" />
                   Gargalos Ativos
                 </CardTitle>
-                <p className="text-xs text-muted-foreground">{bottlenecks.length} tickets acima da meta</p>
+                <p className="text-xs text-muted-foreground">{data.bottlenecks.length} requisição(ões) acima da meta do estágio atual</p>
               </CardHeader>
               <CardContent className="space-y-3">
-                {bottlenecks.map((b) => (
-                  <div key={b.ticket_id} className="rounded-lg border p-3 space-y-1">
+                {data.bottlenecks.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">Nenhum gargalo ativo. 🎉</p>
+                )}
+                {data.bottlenecks.map((b) => (
+                  <div key={b.ticket} className="rounded-lg border p-3 space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-mono font-bold text-foreground">{b.ticket_id}</span>
+                      <span className="text-xs font-mono font-bold text-foreground">{b.ticket}</span>
                       <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200">
                         {b.hours}h / {b.target}h meta
                       </Badge>
                     </div>
-                    <p className="text-[10px] text-muted-foreground">{b.stage.replace(/_/g, " ")} · {b.responsible} ({b.role})</p>
+                    <p className="text-[10px] text-muted-foreground">{b.stage} · Solicitante: {b.requester}</p>
                     <Progress value={Math.min((b.hours / b.target) * 100, 100)} className="h-1 [&>div]:bg-red-500" />
                   </div>
                 ))}
@@ -1044,72 +877,59 @@ function AnalyticsPage() {
       {/* ═══ FINANCIAL TAB ═══ */}
       {activeTab === "financial" && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: "Orçamento Anual", value: financialSummary.budget_annual },
-              { label: "Comprometido", value: financialSummary.committed },
-              { label: "Realizado", value: financialSummary.spent },
-              { label: "Economia", value: financialSummary.savings },
+              { label: "Valor Aprovado", value: fmtBRL(data.financial.approvedTotal) },
+              { label: "Valor Comprado", value: fmtBRL(data.financial.purchasedTotal) },
+              { label: "Economia em Cotações", value: fmtBRL(data.financial.savings) },
+              { label: "% Economia", value: data.financial.savingsPct != null ? `${data.financial.savingsPct}%` : "—", highlight: true },
             ].map((item) => (
               <Card key={item.label} className="card-hover-yellow">
                 <CardContent className="p-4">
                   <p className="text-[10px] text-muted-foreground font-medium">{item.label}</p>
-                  <p className="text-lg font-bold text-foreground mt-1">{fmtBRL(item.value)}</p>
+                  <p className={`text-lg font-bold mt-1 ${item.highlight ? "text-emerald-600" : "text-foreground"}`}>{item.value}</p>
                 </CardContent>
               </Card>
             ))}
-            <Card className="card-hover-yellow">
-              <CardContent className="p-4">
-                <p className="text-[10px] text-muted-foreground font-medium">% Economia</p>
-                <p className="text-lg font-bold text-emerald-600 mt-1">{financialSummary.savings_percentage}%</p>
-              </CardContent>
-            </Card>
           </div>
-          <Card className="card-hover-yellow">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">Utilização do Orçamento</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Comprometido</span>
-                <span className="font-semibold text-foreground">{((financialSummary.committed / financialSummary.budget_annual) * 100).toFixed(1)}%</span>
-              </div>
-              <Progress value={(financialSummary.committed / financialSummary.budget_annual) * 100} className="h-3 [&>div]:bg-amber-500" />
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Realizado</span>
-                <span className="font-semibold text-foreground">{((financialSummary.spent / financialSummary.budget_annual) * 100).toFixed(1)}%</span>
-              </div>
-              <Progress value={(financialSummary.spent / financialSummary.budget_annual) * 100} className="h-3" />
-            </CardContent>
-          </Card>
           <div className="grid lg:grid-cols-2 gap-4">
             <Card className="card-hover-yellow">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Economia Mensal</CardTitle>
-                <p className="text-xs text-muted-foreground">Valor original vs final</p>
+                <CardTitle className="text-sm font-semibold">Economia Mensal em Cotações</CardTitle>
+                <p className="text-xs text-muted-foreground">Proposta mais cara vs valor contratado</p>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={savingsChartConfig} className="h-[220px] w-full">
-                  <BarChart data={monthlySavings} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="month" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
-                    <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1_000_000).toFixed(1)}M`} className="fill-muted-foreground" />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="original" fill="#E5E7EB" radius={[4, 4, 0, 0]} barSize={20} />
-                    <Bar dataKey="final" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={20} />
-                  </BarChart>
-                </ChartContainer>
+                {data.financial.monthlySavings.every((m) => m.original === 0) ? (
+                  <div className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
+                    Nenhuma cotação com múltiplas propostas no período
+                  </div>
+                ) : (
+                  <ChartContainer config={savingsChartConfig} className="h-[220px] w-full">
+                    <BarChart data={data.financial.monthlySavings} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis dataKey="month" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
+                      <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} className="fill-muted-foreground" />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Bar dataKey="original" fill="#E5E7EB" radius={[4, 4, 0, 0]} barSize={20} />
+                      <Bar dataKey="final" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={20} />
+                    </BarChart>
+                  </ChartContainer>
+                )}
               </CardContent>
             </Card>
             <Card className="card-hover-yellow">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Gasto por Categoria</CardTitle>
+                <CardTitle className="text-sm font-semibold">Gasto por Módulo</CardTitle>
+                <p className="text-xs text-muted-foreground">Compras confirmadas no período</p>
               </CardHeader>
               <CardContent className="space-y-3">
-                {categorySpend.map((c) => (
-                  <div key={c.category} className="space-y-1">
+                {data.financial.spendByModule.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">Nenhuma compra no período.</p>
+                )}
+                {data.financial.spendByModule.map((c) => (
+                  <div key={c.module} className="space-y-1">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">{c.category}</span>
+                      <span className="text-muted-foreground">{c.module} — {c.label} · {c.count} compra(s)</span>
                       <span className="font-medium text-foreground">{fmtBRL(c.value)} ({c.pct}%)</span>
                     </div>
                     <Progress value={c.pct} className="h-1.5" />
@@ -1121,18 +941,18 @@ function AnalyticsPage() {
           <Card className="card-hover-yellow">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold">Top Fornecedores</CardTitle>
+              <p className="text-xs text-muted-foreground">Por valor comprado no período</p>
             </CardHeader>
             <CardContent className="space-y-3">
-              {topSuppliers.map((s, i) => (
+              {data.financial.topSuppliers.length === 0 && (
+                <p className="text-xs text-muted-foreground italic">Nenhuma compra no período.</p>
+              )}
+              {data.financial.topSuppliers.map((s, i) => (
                 <div key={s.name} className="flex items-center gap-3">
                   <span className="text-xs font-bold text-muted-foreground w-4">{i + 1}.</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-foreground truncate">{s.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{s.count} pedidos · {fmtBRL(s.value)}</p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
-                    <span className="text-xs font-medium text-foreground">{s.rating}</span>
+                    <p className="text-[10px] text-muted-foreground">{s.count} pedido(s) · {fmtBRL(s.value)}</p>
                   </div>
                 </div>
               ))}
@@ -1147,42 +967,33 @@ function AnalyticsPage() {
           <Card className="card-hover-yellow">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold">Produtividade por Comprador</CardTitle>
+              <p className="text-xs text-muted-foreground">Compras confirmadas — {PERIOD_LABELS[period]}</p>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b text-muted-foreground">
-                      <th className="text-left py-2 font-medium">Comprador</th>
-                      <th className="text-right py-2 font-medium">Requisições</th>
-                      <th className="text-right py-2 font-medium">Valor</th>
-                      <th className="text-right py-2 font-medium">Tempo Médio</th>
-                      <th className="text-right py-2 font-medium">SLA %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      { name: "Maria Oliveira", requests: 234, value: 1_200_000, avgDays: 4.2, sla: 92 },
-                      { name: "Ana Costa", requests: 198, value: 980_000, avgDays: 5.1, sla: 88 },
-                      { name: "João Pereira", requests: 176, value: 850_000, avgDays: 4.8, sla: 91 },
-                      { name: "Fernanda Lima", requests: 152, value: 720_000, avgDays: 3.9, sla: 95 },
-                      { name: "Carlos Souza", requests: 134, value: 650_000, avgDays: 6.2, sla: 84 },
-                    ].map((b) => (
-                      <tr key={b.name} className="border-b border-border/50 hover:bg-accent/50">
-                        <td className="py-2 font-medium text-foreground">{b.name}</td>
-                        <td className="py-2 text-right text-foreground">{b.requests}</td>
-                        <td className="py-2 text-right text-foreground">{fmtBRL(b.value)}</td>
-                        <td className="py-2 text-right text-foreground">{b.avgDays}d</td>
-                        <td className="py-2 text-right">
-                          <Badge variant="outline" className={`text-[10px] ${b.sla >= 90 ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
-                            {b.sla}%
-                          </Badge>
-                        </td>
+              {data.topBuyers.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic py-4 text-center">Nenhuma compra no período.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="text-left py-2 font-medium">Comprador</th>
+                        <th className="text-right py-2 font-medium">Compras</th>
+                        <th className="text-right py-2 font-medium">Valor Total</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {data.topBuyers.map((b) => (
+                        <tr key={b.name} className="border-b border-border/50 hover:bg-accent/50">
+                          <td className="py-2 font-medium text-foreground">{b.name}</td>
+                          <td className="py-2 text-right text-foreground">{b.purchases}</td>
+                          <td className="py-2 text-right text-foreground">{fmtBRL(b.totalValue)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
           <div className="grid lg:grid-cols-2 gap-4">
@@ -1192,7 +1003,7 @@ function AnalyticsPage() {
               </CardHeader>
               <CardContent>
                 <ChartContainer config={stageBarConfig} className="h-[250px] w-full">
-                  <BarChart data={stageDurationData} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
+                  <BarChart data={data.stageDuration} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" horizontal={false} />
                     <XAxis type="number" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
                     <YAxis dataKey="label" type="category" tick={{ fontSize: 10 }} width={80} className="fill-muted-foreground" />
@@ -1211,15 +1022,18 @@ function AnalyticsPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {bottlenecks.map((b) => (
-                  <div key={b.ticket_id} className="rounded-lg border p-3 space-y-1">
+                {data.bottlenecks.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">Nenhum gargalo ativo. 🎉</p>
+                )}
+                {data.bottlenecks.map((b) => (
+                  <div key={b.ticket} className="rounded-lg border p-3 space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-mono font-bold text-foreground">{b.ticket_id}</span>
+                      <span className="text-xs font-mono font-bold text-foreground">{b.ticket}</span>
                       <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200">
-                        {Math.round(b.hours / b.target * 100)}% da meta
+                        {Math.round((b.hours / b.target) * 100)}% da meta
                       </Badge>
                     </div>
-                    <p className="text-[10px] text-muted-foreground">{b.stage.replace(/_/g, " ")} · {b.responsible} ({b.role}) · {b.hours}h</p>
+                    <p className="text-[10px] text-muted-foreground">{b.stage} · {b.requester} · {b.hours}h no estágio</p>
                   </div>
                 ))}
               </CardContent>
@@ -1229,132 +1043,92 @@ function AnalyticsPage() {
       )}
     </div>
 
-    {/* ═══ Real-time Event Feed ═══ */}
+    {/* ═══ Atividade Recente (dados reais, atualização a cada 60s) ═══ */}
     <div className="max-w-6xl mx-auto mt-6 space-y-4">
-      {/* Live Metrics Ticker */}
       <Card className="card-hover-yellow overflow-hidden">
         <CardContent className="p-0">
           <div className="flex items-center gap-3 px-4 py-2 border-b bg-accent/30">
             <div className="relative flex items-center gap-2">
               <Radio className="h-4 w-4 text-emerald-500" />
-              {wsConnected && <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />}
+              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             </div>
-            <span className="text-xs font-semibold text-foreground">Tempo Real</span>
-            <Badge variant="outline" className={`text-[10px] ${wsConnected ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-muted text-muted-foreground"}`}>
-              {wsConnected ? "Conectado" : "Conectando..."}
+            <span className="text-xs font-semibold text-foreground">Hoje</span>
+            <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+              Atualiza a cada 60s
             </Badge>
+            {lastRefresh && (
+              <span className="ml-auto text-[10px] text-muted-foreground">
+                Atualizado {lastRefresh.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            )}
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-border">
             <div className="p-3 text-center">
               <p className="text-[10px] text-muted-foreground font-medium">Requisições Hoje</p>
-              <p className="text-lg font-bold text-foreground">{liveMetrics.total_requests_today}</p>
+              <p className="text-lg font-bold text-foreground">{data.live.reqsToday}</p>
             </div>
             <div className="p-3 text-center">
-              <p className="text-[10px] text-muted-foreground font-medium">Valor Hoje</p>
-              <p className="text-lg font-bold text-foreground">{fmtBRL(liveMetrics.total_value_today)}</p>
+              <p className="text-[10px] text-muted-foreground font-medium">Valor Aprovado Hoje</p>
+              <p className="text-lg font-bold text-foreground">{fmtBRL(data.live.valueApprovedToday)}</p>
             </div>
             <div className="p-3 text-center">
               <p className="text-[10px] text-muted-foreground font-medium">Gargalos Ativos</p>
-              <p className={`text-lg font-bold ${liveMetrics.active_bottlenecks > 3 ? "text-red-500" : "text-foreground"}`}>{liveMetrics.active_bottlenecks}</p>
+              <p className={`text-lg font-bold ${data.live.activeBottlenecks > 3 ? "text-red-500" : "text-foreground"}`}>{data.live.activeBottlenecks}</p>
             </div>
             <div className="p-3 text-center">
               <p className="text-[10px] text-muted-foreground font-medium">SLA Compliance</p>
-              <p className={`text-lg font-bold ${liveMetrics.sla_compliance_rate >= 85 ? "text-foreground" : "text-red-500"}`}>{liveMetrics.sla_compliance_rate}%</p>
+              <p className={`text-lg font-bold ${data.live.slaCompliance == null || data.live.slaCompliance >= 85 ? "text-foreground" : "text-red-500"}`}>
+                {data.live.slaCompliance != null ? `${data.live.slaCompliance}%` : "—"}
+              </p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Event Feed */}
       <Card className="card-hover-yellow">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <Activity className="h-4 w-4 text-vp-yellow-dark" />
             Feed de Eventos
           </CardTitle>
-          <p className="text-xs text-muted-foreground">Últimos eventos do sistema em tempo real</p>
+          <p className="text-xs text-muted-foreground">Últimos eventos reais registrados no sistema</p>
         </CardHeader>
         <CardContent>
-          {liveEvents.length === 0 ? (
+          {data.feed.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-              <Activity className="h-8 w-8 mb-2 animate-pulse" />
-              <p className="text-xs">{wsConnected ? "Aguardando eventos..." : "Conectando ao servidor..."}</p>
+              <Activity className="h-8 w-8 mb-2" />
+              <p className="text-xs">Nenhum evento registrado ainda.</p>
             </div>
           ) : (
             <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-              {liveEvents.map((evt) => (
-                <div
-                  key={evt._id}
-                  className="flex items-start gap-3 rounded-lg border p-3 animate-in slide-in-from-top-2 duration-300"
-                >
-                  {evt.type === "requisition:created" && (
-                    <>
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-100">
-                        <Package className="h-3.5 w-3.5 text-blue-600" />
+              {data.feed.map((evt) => {
+                const meta = FEED_META[evt.action] ?? {
+                  label: evt.action.replace(/_/g, " "), icon: Activity,
+                  bg: "bg-slate-100", fg: "text-slate-600", badge: "bg-slate-50 text-slate-600 border-slate-200",
+                };
+                const Icon = meta.icon;
+                return (
+                  <div key={evt.id} className="flex items-start gap-3 rounded-lg border p-3">
+                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${meta.bg}`}>
+                      <Icon className={`h-3.5 w-3.5 ${meta.fg}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        {evt.ticket && (
+                          <span className="text-xs font-mono font-bold text-foreground">{evt.ticket}</span>
+                        )}
+                        <Badge variant="outline" className={`text-[9px] ${meta.badge}`}>{meta.label}</Badge>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-mono font-bold text-foreground">{evt.ticket_id}</span>
-                          <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-600 border-blue-200">Nova Requisição</Badge>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {evt.module} · {evt.department} · {fmtBRL(evt.value)}
-                        </p>
-                      </div>
-                    </>
-                  )}
-                  {evt.type === "sla:breach" && (
-                    <>
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-red-100">
-                        <AlertCircle className="h-3.5 w-3.5 text-red-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-mono font-bold text-foreground">{evt.ticket_id}</span>
-                          <Badge variant="outline" className="text-[9px] bg-red-50 text-red-600 border-red-200">SLA Excedido</Badge>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {evt.stage.replace(/_/g, " ")} · {evt.actual_hours}h / {evt.target_hours}h meta · {evt.responsible}
-                        </p>
-                      </div>
-                    </>
-                  )}
-                  {evt.type === "purchase:completed" && (
-                    <>
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-100">
-                        <ShoppingCart className="h-3.5 w-3.5 text-emerald-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-mono font-bold text-foreground">{evt.ticket_id}</span>
-                          <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-600 border-emerald-200">Compra Concluída</Badge>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {fmtBRL(evt.total_value)} · Economia {fmtBRL(evt.savings)} · {evt.cycle_time_days}d ciclo
-                        </p>
-                      </div>
-                    </>
-                  )}
-                  {evt.type === "metrics:update" && (
-                    <>
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-amber-100">
-                        <BarChart3 className="h-3.5 w-3.5 text-amber-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-[9px] bg-amber-50 text-amber-600 border-amber-200">Métricas Atualizadas</Badge>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {evt.total_requests_today} req · {fmtBRL(evt.total_value_today)} · SLA {evt.sla_compliance_rate}% · {evt.active_bottlenecks} gargalos
-                        </p>
-                      </div>
-                    </>
-                  )}
-                  <span className="text-[9px] text-muted-foreground shrink-0 tabular-nums">
-                    agora
-                  </span>
-                </div>
-              ))}
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {evt.actor ? `${evt.actor} · ` : ""}{new Date(evt.createdAt).toLocaleString("pt-BR")}
+                      </p>
+                    </div>
+                    <span className="text-[9px] text-muted-foreground shrink-0 tabular-nums">
+                      {relativeTime(evt.createdAt)}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -1370,10 +1144,10 @@ function AnalyticsPage() {
             Exportar Relatório
           </DialogTitle>
           <DialogDescription>
-            Gere um relatório para download
+            Gera um arquivo com os dados reais exibidos no período selecionado
           </DialogDescription>
         </DialogHeader>
-        {!exportResult ? (
+        {!exportDone ? (
           <div className="space-y-5 mt-2">
             <div className="space-y-2">
               <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tipo de Relatório</Label>
@@ -1407,20 +1181,10 @@ function AnalyticsPage() {
                 ))}
               </RadioGroup>
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Checkbox id="ex-charts" checked={exportIncludeCharts} onCheckedChange={(v) => setExportIncludeCharts(!!v)} />
-                <Label htmlFor="ex-charts" className="text-sm cursor-pointer">Incluir gráficos</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox id="ex-raw" checked={exportIncludeRaw} onCheckedChange={(v) => setExportIncludeRaw(!!v)} />
-                <Label htmlFor="ex-raw" className="text-sm cursor-pointer">Incluir dados brutos</Label>
-              </div>
-            </div>
             <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
-              📋 Idioma: Português (pt-BR) · Período: {period === "30d" ? "Últimos 30 dias" : period === "3m" ? "Últimos 3 meses" : period === "6m" ? "Últimos 6 meses" : "Últimos 12 meses"}
+              📋 Período: {PERIOD_LABELS[period]} · Módulo: {moduleFilter === "Todos" ? "Todos" : moduleFilter}
             </div>
-            <Button className="w-full gap-2" onClick={handleExportGenerate} disabled={exportLoading}>
+            <Button className="w-full gap-2" onClick={() => void handleExportGenerate()} disabled={exportLoading}>
               {exportLoading ? (<><Loader2 className="h-4 w-4 animate-spin" />Gerando...</>) : (<><Download className="h-4 w-4" />Gerar Relatório</>)}
             </Button>
           </div>
@@ -1430,22 +1194,10 @@ function AnalyticsPage() {
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
                 <Check className="h-6 w-6 text-emerald-600" />
               </div>
-              <p className="text-sm font-medium text-foreground">Relatório gerado!</p>
+              <p className="text-sm font-medium text-foreground">Relatório baixado!</p>
+              <p className="text-xs text-muted-foreground font-mono">{exportDone}</p>
             </div>
-            <Card>
-              <CardContent className="p-4 space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">Tipo</span><span className="font-medium capitalize">{exportReportType}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Formato</span><span className="font-medium">{exportFormat}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Tamanho</span><span className="font-medium">{fmtBytes(exportResult.file_size_bytes)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Expira</span><span className="font-medium">{new Date(exportResult.expires_at).toLocaleDateString("pt-BR")}</span></div>
-              </CardContent>
-            </Card>
-            <div className="flex gap-2">
-              <Button className="flex-1 gap-2" asChild>
-                <a href={exportResult.download_url} download><Download className="h-4 w-4" />Baixar</a>
-              </Button>
-              <Button variant="outline" className="flex-1" onClick={() => setExportResult(null)}>Novo Relatório</Button>
-            </div>
+            <Button variant="outline" className="w-full" onClick={() => setExportDone(null)}>Novo Relatório</Button>
           </div>
         )}
       </DialogContent>
