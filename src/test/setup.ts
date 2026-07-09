@@ -2,6 +2,11 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 
+// Env fake para módulos que instanciam o client Supabase no import (issue #2)
+vi.stubEnv("VITE_SUPABASE_URL", "https://example.supabase.co");
+vi.stubEnv("VITE_SUPABASE_ANON_KEY", "test-anon-key");
+vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key");
+
 afterEach(() => {
   cleanup();
 });

@@ -6,7 +6,17 @@ export interface TicketRow {
   title: string;
   requester: string;
   urgency: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
-  status: "RASCUNHO" | "ABERTO" | "COTAÇÃO" | "APROVAÇÃO" | "COMPRA" | "RECEBIMENTO" | "CONCLUÍDO" | "REJEITADO" | "CANCELADO";
+  status:
+    | "RASCUNHO"
+    | "GESTOR"
+    | "ABERTO"
+    | "COTAÇÃO"
+    | "APROVAÇÃO"
+    | "COMPRA"
+    | "RECEBIMENTO"
+    | "CONCLUÍDO"
+    | "REJEITADO"
+    | "CANCELADO";
   date: string;
 }
 
@@ -26,6 +36,7 @@ const urgencyLabels: Record<string, string> = {
 
 const statusStyles: Record<string, string> = {
   RASCUNHO: "bg-gray-100 text-gray-600",
+  GESTOR: "bg-amber-100 text-amber-800",
   ABERTO: "bg-blue-100 text-blue-700",
   COTAÇÃO: "bg-purple-100 text-purple-700",
   APROVAÇÃO: "bg-amber-100 text-amber-700",

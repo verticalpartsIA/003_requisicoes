@@ -1,0 +1,14 @@
+# Mantém arquivos de texto com LF no working tree em qualquer SO (issue #4).
+* text=auto eol=lf
+
+# Binários — nunca converter
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.lockb binary

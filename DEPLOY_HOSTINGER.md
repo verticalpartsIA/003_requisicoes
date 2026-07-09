@@ -68,8 +68,8 @@ Notas:
 5. Fechar compra em `/purchasing`.
 6. Registrar recebimento em `/receipt`.
 
-## Pendencias nao bloqueantes para um deploy controlado
+## Estado atual (julho/2026)
 
-- Rotas `trips`, `services`, `maintenance`, `freight` e `rental` ainda estao majoritariamente mockadas.
-- `analytics` e `logs` ainda precisam de backend real completo.
-- Antes de abrir para uso amplo, vale substituir usuarios de teste por contas operacionais reais.
+- Todos os modulos (`products`, `trips`, `services`, `maintenance`, `freight`, `rental`) criam e listam requisicoes reais no Supabase.
+- `analytics` e `logs` usam exclusivamente dados reais (agregacoes de `requisitions`, `approvals`, `purchases`, `receipts` e `audit_logs` via server functions); nao ha mais fallback mockado.
+- Contas de usuarios sao operacionais reais, gerenciadas pelo painel Admin (papeis, alcadas, aprovador por colaborador, inativar/excluir).

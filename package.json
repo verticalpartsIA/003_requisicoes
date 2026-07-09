@@ -8,10 +8,13 @@
   },
   "scripts": {
     "dev": "vite dev",
-    "build": "sh -c 'ENV=/home/u969661049/domains/vprequisicoes.vpsistema.com/public_html/.builds/config/.env; [ -f \"$ENV\" ] && set -a && . \"$ENV\" && set +a; NODE_OPTIONS=--max-old-space-size=2048 npx vite build'",
+    "build": "node scripts/build.mjs",
     "build:dev": "vite build --mode development",
     "start": "node server.js",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
@@ -57,7 +60,7 @@
     "embla-carousel-react": "^8.6.0",
     "html2canvas-pro": "^2.2.1",
     "input-otp": "^1.4.2",
-    "jspdf": "^3.0.4",
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.575.0",
     "react": "^19.2.0",
     "react-day-picker": "^9.14.0",

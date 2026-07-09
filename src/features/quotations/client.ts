@@ -95,7 +95,7 @@ export async function listQuotationQueueClient() {
     if (m2QuotationIds.length > 0) {
       const { data: m2Suppliers } = await supabaseBrowser
         .from("quotation_suppliers")
-        .select("id,quotation_id,supplier_name,price,deadline,notes,item_id,is_winner")
+        .select("id,quotation_id,supplier_name,price,deadline,notes,proposal_received,item_id,is_winner")
         .in("quotation_id", m2QuotationIds);
 
       (m2Suppliers || []).forEach((s) => {
