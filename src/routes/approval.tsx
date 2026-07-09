@@ -39,7 +39,7 @@ import { useAuth } from "@/features/auth/auth-context";
 import { notifyVpClickClient } from "@/features/vpclick/client";
 import { APPROVAL_LEVEL_LABELS, APPROVAL_LEVEL_SHORT_LABELS } from "@/lib/approval";
 import {
-  getManagerDepartmentsClient,
+  getManagerScopeClient,
   listGestorQueueClient,
   gestorApproveClient,
   gestorRejectClient,
@@ -84,7 +84,6 @@ const travelItemConfig: Record<string, { label: string; icon: React.ReactNode }>
 
 function GestorSection({ gestorName }: { gestorName: string }) {
   const [gestorQueue, setGestorQueue] = useState<GestorQueueItem[]>([]);
-  const [managedDepts, setManagedDepts] = useState<string[]>([]);
   const [selected, setSelected] = useState<GestorQueueItem | null>(null);
   const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -94,27 +93,23 @@ function GestorSection({ gestorName }: { gestorName: string }) {
 
   useEffect(() => {
     if (!user) return;
-    void getManagerDepartmentsClient(user.id).then(async (depts) => {
-      setManagedDepts(depts);
-      if (depts.length > 0) {
-        const queue = await listGestorQueueClient(depts);
-        setGestorQueue(queue);
-      }
+    void listGestorQueueClient(user.id).then((queue) => {
+      setGestorQueue(queue);
       setLoaded(true);
     });
   }, [user]);
 
   const reload = async () => {
-    if (managedDepts.length === 0) return;
-    const queue = await listGestorQueueClient(managedDepts);
+    if (!user) return;
+    const queue = await listGestorQueueClient(user.id);
     setGestorQueue(queue);
   };
 
   const handleApprove = async () => {
-    if (!selected) return;
+    if (!selected || !user) return;
     setIsSaving(true);
     try {
-      await gestorApproveClient(selected.requisitionId, gestorName, notes);
+      await gestorApproveClient(selected.requisitionId, user.id, gestorName, notes);
       toast.success("Requisição aprovada e encaminhada para cotação.");
       setSelected(null);
       setNotes("");
@@ -127,14 +122,14 @@ function GestorSection({ gestorName }: { gestorName: string }) {
   };
 
   const handleReject = async () => {
-    if (!selected) return;
+    if (!selected || !user) return;
     if (!notes.trim()) {
       toast.error("Informe uma justificativa para reprovar.");
       return;
     }
     setIsSaving(true);
     try {
-      await gestorRejectClient(selected.requisitionId, gestorName, notes);
+      await gestorRejectClient(selected.requisitionId, user.id, gestorName, notes);
       toast.success("Requisição reprovada.");
       setSelected(null);
       setNotes("");
@@ -146,7 +141,7 @@ function GestorSection({ gestorName }: { gestorName: string }) {
     }
   };
 
-  if (!loaded || managedDepts.length === 0) return null;
+  if (!loaded) return null;
 
   return (
     <>
@@ -157,7 +152,7 @@ function GestorSection({ gestorName }: { gestorName: string }) {
         <div>
           <h2 className="text-xl font-bold text-foreground">Aprovação do Gestor</h2>
           <p className="text-sm text-muted-foreground">
-            Requisições dos seus departamentos aguardando aprovação
+            Requisições dos seus colaboradores aguardando sua aprovação
           </p>
         </div>
       </div>
@@ -267,7 +262,7 @@ function ApprovalPage() {
   const [selected, setSelected] = useState<ApprovalRequestItem | null>(null);
   const [justification, setJustification] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [managedDepts, setManagedDepts] = useState<string[]>([]);
+  const [isGestor, setIsGestor] = useState(false);
   const [deptsLoaded, setDeptsLoaded] = useState(false);
 
   const { user } = useAuth();
@@ -282,13 +277,11 @@ function ApprovalPage() {
 
   useEffect(() => {
     if (!user) return;
-    void getManagerDepartmentsClient(user.id).then((depts) => {
-      setManagedDepts(depts);
+    void getManagerScopeClient(user.id).then((scope) => {
+      setIsGestor(scope.departments.length > 0 || scope.isApproverOfSomeone);
       setDeptsLoaded(true);
     }).catch(() => setDeptsLoaded(true));
   }, [user]);
-
-  const isGestor = managedDepts.length > 0;
   const canAccess = hasRole("admin") || hasRole("aprovador") || isGestor;
 
   const openApproval = (request: ApprovalRequestItem) => {

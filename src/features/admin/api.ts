@@ -6,6 +6,8 @@ export interface UserWithRoles {
   full_name: string | null;
   email: string | null;
   department: string | null;
+  approver_id: string | null;
+  active: boolean;
   roles: { role: AppRole; approval_tier: 1 | 2 | 3 | null }[];
 }
 
@@ -19,7 +21,7 @@ export interface TierThresholds {
 export async function listUsersWithRoles(): Promise<UserWithRoles[]> {
   const { data: profiles, error: profilesError } = await supabaseBrowser
     .from("profiles")
-    .select("id, full_name, email, department")
+    .select("id, full_name, email, department, approver_id, active")
     .order("full_name");
 
   if (profilesError) throw profilesError;
@@ -35,6 +37,8 @@ export async function listUsersWithRoles(): Promise<UserWithRoles[]> {
     full_name: p.full_name,
     email: p.email,
     department: p.department,
+    approver_id: p.approver_id ?? null,
+    active: p.active !== false,
     roles: (userRoles ?? [])
       .filter((r) => r.user_id === p.id)
       .map((r) => ({
@@ -115,6 +119,16 @@ export async function setUserDepartment(userId: string, department: string): Pro
   const { error } = await supabaseBrowser
     .from("profiles")
     .update({ department: department.trim() || null })
+    .eq("id", userId);
+  if (error) throw error;
+}
+
+// ─── Aprovador designado do colaborador ────────────────────────────────────────
+
+export async function setUserApprover(userId: string, approverId: string | null): Promise<void> {
+  const { error } = await supabaseBrowser
+    .from("profiles")
+    .update({ approver_id: approverId })
     .eq("id", userId);
   if (error) throw error;
 }

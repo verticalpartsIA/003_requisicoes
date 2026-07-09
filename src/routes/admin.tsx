@@ -11,6 +11,9 @@ import {
   ChevronDown,
   Building2,
   UserCheck,
+  UserRoundCheck,
+  Ban,
+  RotateCcw,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,6 +35,7 @@ import {
   updateApprovalTier,
   getTierThresholds,
   saveTierThresholds,
+  setUserApprover,
   type UserWithRoles,
   type TierThresholds,
 } from "@/features/admin/api";
@@ -42,6 +46,7 @@ import {
   removeDeptManagerClient,
   type DeptManagerEntry,
 } from "@/features/admin/client";
+import { setUserActive, deleteUserAccount } from "@/features/admin/server";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin")({
@@ -142,14 +147,15 @@ function AdminPage() {
 }
 
 function UsersTab() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<UserWithRoles[]>([]);
   const [deptManagers, setDeptManagers] = useState<DeptManagerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingDept, setEditingDept] = useState<Record<string, string>>({});
   const [newGestorDept, setNewGestorDept] = useState<Record<string, string>>({});
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       const [usersData, managersData] = await Promise.all([
         listUsersWithRoles(),
@@ -163,17 +169,24 @@ function UsersTab() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao carregar usuários.");
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   }, []);
 
   useEffect(() => { void load(); }, [load]);
 
+  // Todas as ações abaixo atualizam o estado local, sem recarregar a lista —
+  // a página não "pula" para o topo ao salvar.
+  const patchUser = (userId: string, patch: Partial<UserWithRoles>) => {
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...patch } : u)));
+  };
+
   const handleAddRole = async (userId: string, role: AppRole) => {
     try {
       await addUserRole(userId, role);
+      const target = users.find((u) => u.id === userId);
+      patchUser(userId, { roles: [...(target?.roles ?? []), { role, approval_tier: null }] });
       toast.success(`Papel "${ROLE_LABELS[role]}" adicionado.`);
-      await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao adicionar papel.");
     }
@@ -182,8 +195,9 @@ function UsersTab() {
   const handleRemoveRole = async (userId: string, role: AppRole) => {
     try {
       await removeUserRole(userId, role);
+      const target = users.find((u) => u.id === userId);
+      patchUser(userId, { roles: (target?.roles ?? []).filter((r) => r.role !== role) });
       toast.success(`Papel "${ROLE_LABELS[role]}" removido.`);
-      await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao remover papel.");
     }
@@ -192,8 +206,13 @@ function UsersTab() {
   const handleSetTier = async (userId: string, tier: 1 | 2 | 3 | null) => {
     try {
       await updateApprovalTier(userId, tier);
+      const target = users.find((u) => u.id === userId);
+      patchUser(userId, {
+        roles: (target?.roles ?? []).map((r) =>
+          r.role === "aprovador" ? { ...r, approval_tier: tier } : r,
+        ),
+      });
       toast.success(tier ? `Alçada ${tier} atribuída.` : "Alçada removida.");
-      await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao atualizar alçada.");
     }
@@ -201,11 +220,61 @@ function UsersTab() {
 
   const handleSaveDept = async (userId: string) => {
     try {
-      await setUserDepartmentClient(userId, editingDept[userId] ?? "");
+      const dept = (editingDept[userId] ?? "").trim();
+      await setUserDepartmentClient(userId, dept);
+      patchUser(userId, { department: dept || null });
       toast.success("Departamento atualizado.");
-      await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao salvar departamento.");
+    }
+  };
+
+  const handleSetApprover = async (userId: string, approverId: string | null) => {
+    try {
+      await setUserApprover(userId, approverId);
+      patchUser(userId, { approver_id: approverId });
+      const approver = users.find((u) => u.id === approverId);
+      toast.success(
+        approverId
+          ? `Aprovador definido: ${approver?.full_name ?? "usuário"}. As requisições deste colaborador irão para ele.`
+          : "Aprovador removido.",
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao definir aprovador.");
+    }
+  };
+
+  const handleToggleActive = async (target: UserWithRoles) => {
+    if (!currentUser) return;
+    const activating = !target.active;
+    if (!activating) {
+      const ok = window.confirm(
+        `Inativar ${target.full_name ?? target.email}? O usuário não conseguirá mais entrar no sistema até ser reativado.`,
+      );
+      if (!ok) return;
+    }
+    try {
+      await setUserActive({ data: { adminId: currentUser.id, targetUserId: target.id, active: activating } });
+      patchUser(target.id, { active: activating });
+      toast.success(activating ? "Usuário reativado." : "Usuário inativado. O login foi bloqueado.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao alterar status do usuário.");
+    }
+  };
+
+  const handleDeleteUser = async (target: UserWithRoles) => {
+    if (!currentUser) return;
+    const ok = window.confirm(
+      `EXCLUIR definitivamente ${target.full_name ?? target.email}? Esta ação não pode ser desfeita. As requisições já criadas por ele são mantidas no histórico.`,
+    );
+    if (!ok) return;
+    try {
+      await deleteUserAccount({ data: { adminId: currentUser.id, targetUserId: target.id } });
+      setUsers((prev) => prev.filter((u) => u.id !== target.id));
+      setDeptManagers((prev) => prev.filter((dm) => dm.manager_user_id !== target.id));
+      toast.success("Usuário excluído.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao excluir usuário.");
     }
   };
 
@@ -214,9 +283,9 @@ function UsersTab() {
     if (!dept) { toast.error("Informe o nome do departamento."); return; }
     try {
       await addDeptManagerClient(dept, userId);
-      toast.success(`Usuário designado como gestor de "${dept}".`);
       setNewGestorDept((prev) => ({ ...prev, [userId]: "" }));
-      await load();
+      await load(false);
+      toast.success(`Usuário designado como gestor de "${dept}".`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao designar gestor.");
     }
@@ -225,8 +294,8 @@ function UsersTab() {
   const handleRemoveGestor = async (entryId: string) => {
     try {
       await removeDeptManagerClient(entryId);
+      setDeptManagers((prev) => prev.filter((dm) => dm.id !== entryId));
       toast.success("Designação de gestor removida.");
-      await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao remover gestor.");
     }
@@ -258,16 +327,26 @@ function UsersTab() {
         const currentDept = editingDept[user.id] ?? user.department ?? "";
         const savedDept = user.department ?? "";
         const deptChanged = currentDept !== savedDept;
+        const approver = users.find((u) => u.id === user.approver_id);
+        const approverCandidates = users.filter((u) => u.id !== user.id && u.active);
+        const isSelf = user.id === currentUser?.id;
 
         return (
-          <Card key={user.id} className="border-border/60">
+          <Card key={user.id} className={`border-border/60 ${user.active ? "" : "opacity-60 bg-muted/30"}`}>
             <CardContent className="pt-5 pb-4 space-y-4">
               {/* Info do usuário + Papéis */}
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="font-semibold text-sm truncate">
-                    {user.full_name || "Sem nome"}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-sm truncate">
+                      {user.full_name || "Sem nome"}
+                    </p>
+                    {!user.active && (
+                      <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                        Inativo
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                 </div>
 
@@ -351,6 +430,43 @@ function UsersTab() {
 
               <Separator />
 
+              {/* Aprovador designado das requisições deste colaborador */}
+              <div className="flex items-center gap-2">
+                <UserRoundCheck className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-xs text-muted-foreground w-24 shrink-0">Aprovador:</span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className={`inline-flex items-center gap-1 rounded border px-2.5 py-1 text-xs transition-colors hover:bg-accent ${approver ? "text-foreground" : "text-muted-foreground italic"}`}>
+                      {approver ? (approver.full_name ?? approver.email) : "Não definido"}
+                      <ChevronDown className="h-3 w-3 opacity-50" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
+                    {approverCandidates.map((candidate) => (
+                      <DropdownMenuItem
+                        key={candidate.id}
+                        onClick={() => void handleSetApprover(user.id, candidate.id)}
+                      >
+                        {candidate.full_name ?? candidate.email}
+                      </DropdownMenuItem>
+                    ))}
+                    {user.approver_id && (
+                      <>
+                        <Separator className="my-1" />
+                        <DropdownMenuItem onClick={() => void handleSetApprover(user.id, null)}>
+                          Remover aprovador
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                {approver && (
+                  <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                    aprova as requisições deste colaborador
+                  </span>
+                )}
+              </div>
+
               {/* Departamento */}
               <div className="flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -422,6 +538,36 @@ function UsersTab() {
                     </Button>
                   </div>
                 </div>
+              </div>
+
+              <Separator />
+
+              {/* Ações da conta */}
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className={`h-7 text-xs px-2 ${user.active ? "text-amber-700 border-amber-300 hover:bg-amber-50" : "text-green-700 border-green-300 hover:bg-green-50"}`}
+                  disabled={isSelf}
+                  title={isSelf ? "Você não pode inativar a própria conta." : undefined}
+                  onClick={() => void handleToggleActive(user)}
+                >
+                  {user.active ? (
+                    <><Ban className="h-3 w-3 mr-1" /> Inativar</>
+                  ) : (
+                    <><RotateCcw className="h-3 w-3 mr-1" /> Reativar</>
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs px-2 text-red-700 border-red-300 hover:bg-red-50"
+                  disabled={isSelf}
+                  title={isSelf ? "Você não pode excluir a própria conta." : undefined}
+                  onClick={() => void handleDeleteUser(user)}
+                >
+                  <Trash2 className="h-3 w-3 mr-1" /> Excluir
+                </Button>
               </div>
             </CardContent>
           </Card>
