@@ -26,10 +26,9 @@ create policy omie_purchase_pending_select_authenticated
 
 -- Escrita apenas via service_role (edge function sync-omie-purchase-orders).
 
--- IMPORTANTE: a troca da view `omie_purchase_suggestions` para usar esta tabela
--- como fonte do "Comprado" foi ADIADA. A reconciliação com dados reais do Omie
--- revelou pedidos de compra antigos largados em aberto (ex.: previsão 2006) que
--- contaminam o "aguardando entrega" e poderiam zerar indevidamente a Sugestão de
--- Compra de itens críticos. A troca só será feita após definir a regra de corte
--- para pedidos vencidos (ver migration 018, pendente de decisão de negócio).
+-- A troca da view `omie_purchase_suggestions` para usar esta tabela como fonte
+-- do "Comprado" foi feita na migration 018, com um corte de 6 meses: a
+-- reconciliação com dados reais do Omie revelou pedidos de compra antigos
+-- largados em aberto (ex.: previsão 2006) que contaminariam o "aguardando
+-- entrega" e zerariam indevidamente a Sugestão de Compra de itens críticos.
 -- Até lá, a view segue com a fonte anterior (lançamento manual).

@@ -50,6 +50,16 @@ export async function listOmieStockFromCacheClient(): Promise<OmieStockCacheResu
   return { items, lastSyncedAt };
 }
 
+export interface OmiePurchaseOrderDetail {
+  numero: string;
+  qtde: number;
+  recebida: number;
+  aguardando: number;
+  previsao: string | null;
+  fornecedor: string;
+  unidade: string;
+}
+
 export interface OmiePurchaseSuggestionItem {
   codigo: string;
   descricao: string;
@@ -60,6 +70,8 @@ export interface OmiePurchaseSuggestionItem {
   curva: "A" | "B" | "C" | "D";
   qtdPendente: number;
   comprado: number;
+  proximaPrevisao: string | null;
+  pedidos: OmiePurchaseOrderDetail[];
   sugestaoCompra: number;
   estoqueAtualizadoEm: string | null;
   giroCalculadoEm: string | null;
@@ -75,7 +87,7 @@ export async function listOmiePurchaseSuggestionsClient(): Promise<OmiePurchaseS
   const { data, error } = await supabaseBrowser
     .from("omie_purchase_suggestions")
     .select(
-      "codigo,descricao,estoque_fisico,estoque_reservado,estoque_disponivel,estoque_minimo,curva,qtd_pendente,comprado,sugestao_compra,estoque_atualizado_em,giro_calculado_em",
+      "codigo,descricao,estoque_fisico,estoque_reservado,estoque_disponivel,estoque_minimo,curva,qtd_pendente,comprado,proxima_previsao,pedidos,sugestao_compra,estoque_atualizado_em,giro_calculado_em",
     )
     .order("descricao", { ascending: true });
 
@@ -92,6 +104,8 @@ export async function listOmiePurchaseSuggestionsClient(): Promise<OmiePurchaseS
     curva: row.curva as "A" | "B" | "C" | "D",
     qtdPendente: row.qtd_pendente,
     comprado: row.comprado,
+    proximaPrevisao: row.proxima_previsao,
+    pedidos: (row.pedidos ?? []) as OmiePurchaseOrderDetail[],
     sugestaoCompra: row.sugestao_compra,
     estoqueAtualizadoEm: row.estoque_atualizado_em,
     giroCalculadoEm: row.giro_calculado_em,
@@ -106,24 +120,4 @@ export async function listOmiePurchaseSuggestionsClient(): Promise<OmiePurchaseS
     }, null);
 
   return { items, lastSyncedAt: latestOf("estoqueAtualizadoEm"), lastVelocitySyncedAt: latestOf("giroCalculadoEm") };
-}
-
-export interface RegistrarComprasInput {
-  codigo: string;
-  quantidade: number;
-  previsaoChegada: string;
-  createdBy?: string;
-  createdByName?: string;
-}
-
-export async function registrarCompraClient(input: RegistrarComprasInput) {
-  const { error } = await supabaseBrowser.from("omie_purchase_orders").insert({
-    codigo: input.codigo,
-    quantidade: input.quantidade,
-    previsao_chegada: input.previsaoChegada,
-    created_by: input.createdBy ?? null,
-    created_by_name: input.createdByName ?? null,
-  });
-
-  if (error) throw new Error(error.message);
 }

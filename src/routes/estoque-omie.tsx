@@ -1,15 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Boxes, Loader2, PackagePlus, RefreshCw, Search, TriangleAlert } from "lucide-react";
+import { Boxes, CalendarClock, Loader2, RefreshCw, Search, TriangleAlert } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   listOmiePurchaseSuggestionsClient,
-  registrarCompraClient,
   type OmiePurchaseSuggestionItem,
 } from "@/features/omie/client";
-import { useAuth } from "@/features/auth/auth-context";
 
 export const Route = createFileRoute("/estoque-omie")({
   head: () => ({
@@ -21,8 +19,10 @@ export const Route = createFileRoute("/estoque-omie")({
   component: EstoqueOmiePage,
 });
 
-function hojeISO() {
-  return new Date().toISOString().slice(0, 10);
+function formatarData(iso: string | null) {
+  if (!iso) return "—";
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}/${y}`;
 }
 
 function formatarNumero(valor: number) {
@@ -57,95 +57,47 @@ function CurvaBadge({ curva }: { curva: OmiePurchaseSuggestionItem["curva"] }) {
   );
 }
 
-function ComprarPopover({
-  item,
-  onSalvo,
-}: {
-  item: OmiePurchaseSuggestionItem;
-  onSalvo: () => void;
-}) {
-  const { profile, hasRole } = useAuth();
-  const podeComprar = hasRole("admin") || hasRole("comprador") || hasRole("almoxarife");
+/** Detalhe (somente leitura) dos pedidos de compra em aberto, vindos direto
+ *  do Omie — clicável, funciona em desktop e celular (diferente de hover). */
+function AguardandoEntregaCell({ item }: { item: OmiePurchaseSuggestionItem }) {
   const [aberto, setAberto] = useState(false);
-  const [quantidade, setQuantidade] = useState("");
-  const [previsao, setPrevisao] = useState(hojeISO());
-  const [saving, setSaving] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-
-  if (!podeComprar) {
-    return item.comprado > 0 ? <span className="tabular-nums">{item.comprado}</span> : <span className="text-muted-foreground">—</span>;
+  if (item.pedidos.length === 0) {
+    return <span className="text-muted-foreground">—</span>;
   }
-
-  const salvar = async () => {
-    const qtd = Number(quantidade);
-    if (!qtd || qtd <= 0) {
-      setErro("Informe uma quantidade válida.");
-      return;
-    }
-    if (!previsao) {
-      setErro("Informe a previsão de chegada.");
-      return;
-    }
-    setSaving(true);
-    setErro(null);
-    try {
-      await registrarCompraClient({
-        codigo: item.codigo,
-        quantidade: qtd,
-        previsaoChegada: previsao,
-        createdBy: profile?.id,
-        createdByName: profile?.full_name ?? undefined,
-      });
-      setQuantidade("");
-      setAberto(false);
-      onSalvo();
-    } catch (err) {
-      setErro(err instanceof Error ? err.message : "Erro ao registrar compra.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <div className="relative flex items-center justify-end gap-1.5">
-      <span className="tabular-nums">{item.comprado || "—"}</span>
       <button
         type="button"
         onClick={() => setAberto((v) => !v)}
-        className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-        title="Registrar compra"
+        className="flex items-center gap-1 rounded px-1.5 py-0.5 text-foreground hover:bg-muted"
+        title="Ver pedidos de compra em aberto"
       >
-        <PackagePlus className="h-3.5 w-3.5" />
+        <CalendarClock className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="tabular-nums">{formatarData(item.proximaPrevisao)}</span>
       </button>
       {aberto && (
-        <div className="absolute right-0 top-7 z-10 w-64 rounded-md border border-border bg-popover p-3 text-left shadow-md">
-          <p className="mb-2 text-xs font-semibold text-foreground">Registrar compra — {item.codigo}</p>
-          <label className="mb-1 block text-[11px] text-muted-foreground">Quantidade comprada</label>
-          <Input
-            type="number"
-            min="0"
-            step="1"
-            value={quantidade}
-            onChange={(e) => setQuantidade(e.target.value)}
-            className="mb-2 h-8 text-sm"
-          />
-          <label className="mb-1 block text-[11px] text-muted-foreground">Previsão de chegada</label>
-          <Input
-            type="date"
-            value={previsao}
-            onChange={(e) => setPrevisao(e.target.value)}
-            className="mb-2 h-8 text-sm"
-          />
-          {erro && <p className="mb-2 text-[11px] text-destructive">{erro}</p>}
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setAberto(false)}>
-              Cancelar
-            </Button>
-            <Button size="sm" className="h-7 px-2 text-xs" onClick={() => void salvar()} disabled={saving}>
-              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Salvar"}
-            </Button>
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setAberto(false)} />
+          <div className="absolute right-0 top-7 z-20 w-80 rounded-md border border-border bg-popover p-3 text-left shadow-lg">
+            <p className="mb-2 text-xs font-semibold text-foreground">
+              {item.codigo} — Aguardando Entrega ({formatarNumero(item.comprado)})
+            </p>
+            <div className="space-y-1.5 max-h-56 overflow-y-auto">
+              {item.pedidos.map((p, i) => (
+                <div key={`${p.numero}-${i}`} className="flex items-center justify-between rounded bg-muted/50 px-2 py-1 text-xs">
+                  <div>
+                    <span className="font-mono font-medium">Pedido {p.numero}</span>
+                    <span className="text-muted-foreground"> · Forn. {p.fornecedor}</span>
+                  </div>
+                  <div className="text-right">
+                    <p className="tabular-nums font-semibold">{formatarNumero(p.aguardando)} {p.unidade}</p>
+                    <p className="text-[10px] text-muted-foreground">chega {formatarData(p.previsao)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
@@ -326,19 +278,20 @@ function EstoqueOmiePage() {
                   <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Estoque Mínimo</th>
                   <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Sugestão de Compra</th>
                   <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Comprado</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Aguardando a Entrega</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">
                       <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
                       Carregando produtos do Omie...
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">
                       Nenhum produto encontrado.
                     </td>
                   </tr>
@@ -357,8 +310,11 @@ function EstoqueOmiePage() {
                         <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{item.estoqueDisponivel}</td>
                         <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueMinimo}</td>
                         <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{item.sugestaoCompra || 0}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">
+                          {item.comprado > 0 ? formatarNumero(item.comprado) : <span className="text-muted-foreground">—</span>}
+                        </td>
                         <td className="px-4 py-2.5 text-right">
-                          <ComprarPopover item={item} onSalvo={() => void load()} />
+                          <AguardandoEntregaCell item={item} />
                         </td>
                       </tr>
                     );
@@ -377,6 +333,7 @@ function EstoqueOmiePage() {
                     <td className="px-4 py-2.5 text-right tabular-nums">{formatarNumero(totais.estoqueMinimo)}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{formatarNumero(totais.sugestaoCompra)}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{formatarNumero(totais.comprado)}</td>
+                    <td className="px-4 py-2.5 text-right"></td>
                   </tr>
                 </tfoot>
               )}
