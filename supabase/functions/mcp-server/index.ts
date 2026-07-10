@@ -22,6 +22,17 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version",
 };
 
+// Constrói a resposta HTML de forma explícita (Headers real + corpo em bytes)
+// e desativa qualquer cache intermediário, para eliminar ambiguidade de
+// content-type/charset entre o runtime e possíveis camadas de CDN na frente.
+function htmlResponse(html: string, status = 200) {
+  const headers = new Headers();
+  headers.set("Content-Type", "text/html; charset=utf-8");
+  headers.set("Cache-Control", "no-store");
+  for (const [key, value] of Object.entries(CORS_HEADERS)) headers.set(key, value);
+  return new Response(new TextEncoder().encode(html), { status, headers });
+}
+
 // ─── Acesso a dados (PostgREST via service_role, mesmo padrão do app) ──────
 
 async function supabaseRest<T>(
@@ -689,10 +700,11 @@ async function handleMessage(msg: Record<string, unknown>) {
 // OAuth novo e independente, cujo hash fica em mcp_oauth_tokens.
 
 function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
-  });
+  const headers = new Headers();
+  headers.set("Content-Type", "application/json; charset=utf-8");
+  headers.set("Cache-Control", "no-store");
+  for (const [key, value] of Object.entries(CORS_HEADERS)) headers.set(key, value);
+  return new Response(new TextEncoder().encode(JSON.stringify(body)), { status, headers });
 }
 
 function handleProtectedResourceMetadata() {
@@ -813,7 +825,7 @@ async function handleAuthorizeGet(url: URL) {
   };
 
   if (!params.client_id || !params.redirect_uri || !params.code_challenge) {
-    return new Response("Requisição de autorização inválida: parâmetros obrigatórios ausentes.", { status: 400 });
+    return htmlResponse("Requisição de autorização inválida: parâmetros obrigatórios ausentes.", 400);
   }
 
   const { data: clients } = await supabaseRest<Array<{ client_id: string; redirect_uris: string[] }>>(
@@ -821,12 +833,10 @@ async function handleAuthorizeGet(url: URL) {
   );
   const client = clients?.[0];
   if (!client || !redirectUriAllowed(client.redirect_uris, params.redirect_uri)) {
-    return new Response("Cliente OAuth desconhecido ou redirect_uri não registrado.", { status: 400 });
+    return htmlResponse("Cliente OAuth desconhecido ou redirect_uri não registrado.", 400);
   }
 
-  return new Response(authorizeForm(params), {
-    headers: { "Content-Type": "text/html; charset=utf-8", ...CORS_HEADERS },
-  });
+  return htmlResponse(authorizeForm(params));
 }
 
 async function handleAuthorizePost(req: Request) {
@@ -847,13 +857,11 @@ async function handleAuthorizePost(req: Request) {
   );
   const client = clients?.[0];
   if (!client || !redirectUriAllowed(client.redirect_uris, params.redirect_uri)) {
-    return new Response("Cliente OAuth desconhecido ou redirect_uri não registrado.", { status: 400 });
+    return htmlResponse("Cliente OAuth desconhecido ou redirect_uri não registrado.", 400);
   }
 
   if (!token || !(await isStaticTokenValid(await sha256Hex(token)))) {
-    return new Response(authorizeForm(params, "Token inválido. Tente novamente."), {
-      headers: { "Content-Type": "text/html; charset=utf-8", ...CORS_HEADERS },
-    });
+    return htmlResponse(authorizeForm(params, "Token inválido. Tente novamente."));
   }
 
   const code = randomOpaqueToken();
@@ -968,32 +976,21 @@ Deno.serve(async (req: Request) => {
     // 404 (não 405) para que descoberta OIDC/OAuth de clientes trate como
     // "variante de well-known não suportada" e siga tentando outra, em vez
     // de abortar o fluxo.
-    return new Response(JSON.stringify({ error: "not_found" }), {
-      status: 404,
-      headers: { "Content-Type": "application/json", ...CORS_HEADERS },
-    });
+    return jsonResponse({ error: "not_found" }, 404);
   }
 
   if (!(await isAuthorized(req))) {
     const resourceMetadataUrl = `${MCP_BASE_URL}/.well-known/oauth-protected-resource`;
-    return new Response(JSON.stringify({ error: "unauthorized" }), {
-      status: 401,
-      headers: {
-        "Content-Type": "application/json",
-        "WWW-Authenticate": `Bearer realm="mcp", resource_metadata="${resourceMetadataUrl}"`,
-        ...CORS_HEADERS,
-      },
-    });
+    const response = jsonResponse({ error: "unauthorized" }, 401);
+    response.headers.set("WWW-Authenticate", `Bearer realm="mcp", resource_metadata="${resourceMetadataUrl}"`);
+    return response;
   }
 
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return new Response(JSON.stringify(rpcError(null, -32700, "Parse error")), {
-      status: 400,
-      headers: { "Content-Type": "application/json", ...CORS_HEADERS },
-    });
+    return jsonResponse(rpcError(null, -32700, "Parse error"), 400);
   }
 
   if (Array.isArray(body)) {
@@ -1001,10 +998,10 @@ Deno.serve(async (req: Request) => {
       (r) => r !== null,
     );
     if (results.length === 0) return new Response(null, { status: 202, headers: CORS_HEADERS });
-    return new Response(JSON.stringify(results), { headers: { "Content-Type": "application/json", ...CORS_HEADERS } });
+    return jsonResponse(results);
   }
 
   const result = await handleMessage(body as Record<string, unknown>);
   if (result === null) return new Response(null, { status: 202, headers: CORS_HEADERS });
-  return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json", ...CORS_HEADERS } });
+  return jsonResponse(result);
 });
