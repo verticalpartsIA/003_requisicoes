@@ -6,6 +6,7 @@ import {
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { parseBRLNumber } from "@/lib/number";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -248,7 +249,7 @@ function ServicesPage() {
       deliverables,
       execution_location: executionLocation,
       measurement_criteria: measurementCriteria,
-      pre_negotiated_price: preNegotiatedPrice ? parseFloat(preNegotiatedPrice.replace(",", ".")) : null,
+      pre_negotiated_price: parseBRLNumber(preNegotiatedPrice),
       milestones: milestones.length > 0 ? milestones : null,
     };
     try {

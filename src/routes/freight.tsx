@@ -7,6 +7,7 @@ import {
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { parseBRLNumber } from "@/lib/number";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -129,7 +130,7 @@ function FreightPage() {
   };
 
   const insuranceCost = useMemo(() => {
-    const val = parseFloat(declaredValue.replace(",", "."));
+    const val = parseBRLNumber(declaredValue) ?? 0;
     return val > 0 ? val * INSURANCE_RATE : 0;
   }, [declaredValue]);
 
@@ -326,7 +327,7 @@ function FreightPage() {
         weight_kg: weight ? parseFloat(weight) : null,
         dimensions,
         fragile,
-        declared_value: declaredValue ? parseFloat(declaredValue.replace(",", ".")) : null,
+        declared_value: parseBRLNumber(declaredValue),
         insurance_cost: insuranceCost || null,
       };
 

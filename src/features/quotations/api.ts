@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseRest } from "@/lib/supabase-rest";
+import { DEFAULT_TIER_THRESHOLDS, getApprovalLevelForValue, type TierThresholds } from "@/lib/approval";
+import { parseBRLNumber } from "@/lib/number";
 
 type WinCriteria = "price" | "deadline" | "price_deadline";
 type QuotationStatus = "pending" | "quoting" | "awaiting_proposals" | "selecting_winner" | "completed";
@@ -98,10 +100,23 @@ const finalizeQuotationSchema = z.object({
   winCriteria: z.enum(["price", "deadline", "price_deadline"]),
 });
 
-function getApprovalLevel(totalValue: number): 1 | 2 | 3 {
-  if (totalValue <= 1500) return 1;
-  if (totalValue <= 3000) return 2;
-  return 3;
+/** Limites de alçada configurados pelo Admin (tabela settings), com fallback
+ *  nos padrões. Antes havia aqui uma cópia local com limites fixos (1500/3000)
+ *  divergente do resto do sistema (1500/3500) — valores entre R$ 3.000,01 e
+ *  R$ 3.500 eram encaminhados incorretamente para o Nível 3. */
+async function fetchTierThresholds(): Promise<TierThresholds> {
+  try {
+    const response = await supabaseRest<{ key: string; value: string }[]>(
+      "settings?select=key,value&key=in.(tier1_max,tier2_max)",
+    );
+    const map = Object.fromEntries(response.data.map((row) => [row.key, Number(row.value)]));
+    return {
+      tier1_max: Number.isFinite(map["tier1_max"]) ? map["tier1_max"] : DEFAULT_TIER_THRESHOLDS.tier1_max,
+      tier2_max: Number.isFinite(map["tier2_max"]) ? map["tier2_max"] : DEFAULT_TIER_THRESHOLDS.tier2_max,
+    };
+  } catch {
+    return DEFAULT_TIER_THRESHOLDS;
+  }
 }
 
 function mapQuotationStatus(requisitionStatus: string, quotationStatus?: QuotationStatus | null): QuotationStatus {
@@ -206,7 +221,7 @@ async function syncSuppliers(quotationId: string, suppliers: SupplierEntry[]) {
     id: supplier.id,
     quotation_id: quotationId,
     supplier_name: supplier.name.trim(),
-    price: supplier.price.trim() ? Number(supplier.price.replace(",", ".")) : null,
+    price: parseBRLNumber(supplier.price),
     deadline: supplier.deadline || null,
     notes: supplier.notes || null,
     proposal_received: supplier.proposalReceived,
@@ -399,6 +414,8 @@ export const finalizeQuotation = createServerFn({ method: "POST" })
       throw new Error("Requisição não encontrada ao finalizar a cotação.");
     }
 
+    const approvalLevel = getApprovalLevelForValue(winner.price, await fetchTierThresholds());
+
     await supabaseRest(
       "approvals?on_conflict=requisition_id",
       {
@@ -410,7 +427,7 @@ export const finalizeQuotation = createServerFn({ method: "POST" })
           {
             requisition_id: data.requisitionId,
             quotation_id: data.quotationId,
-            approval_level: getApprovalLevel(winner.price),
+            approval_level: approvalLevel,
             total_value: winner.price,
             decision: "pending",
           },
@@ -427,7 +444,7 @@ export const finalizeQuotation = createServerFn({ method: "POST" })
     });
 
     await logQuotationEvent(data.requisitionId, requisition.ticket_number, "APPROVAL_REQUESTED", {
-      approval_level: getApprovalLevel(winner.price),
+      approval_level: approvalLevel,
       total_value: winner.price,
     });
 

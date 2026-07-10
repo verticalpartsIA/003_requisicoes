@@ -1,6 +1,7 @@
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import type { QuotationQueueItem, SupplierEntry, TravelItem } from "@/features/quotations/api";
 import { getApprovalLevelForValue } from "@/lib/approval";
+import { parseBRLNumber } from "@/lib/number";
 import { getTierThresholds } from "@/features/admin/api";
 import { friendlySupabaseError } from "@/lib/supabase-error";
 
@@ -237,7 +238,7 @@ async function syncSuppliers(quotationId: string, suppliers: SupplierEntry[]) {
     const row: Record<string, unknown> = {
       quotation_id: quotationId,
       supplier_name: supplier.name.trim(),
-      price: supplier.price.trim() ? Number(supplier.price.replace(",", ".")) : null,
+      price: parseBRLNumber(supplier.price),
       deadline: supplier.deadline || null,
       notes: supplier.notes || null,
       proposal_received: supplier.proposalReceived,
@@ -397,15 +398,21 @@ export async function finalizeQuotationClient(
     .eq("id", requisitionId);
   if (requisitionUpdateError) throw new Error(friendlySupabaseError(requisitionUpdateError));
 
+  // onConflict é obrigatório: requisition_id é UNIQUE em approvals e, sem ele,
+  // re-finalizar a cotação (ex.: trocar o vencedor) viola a unicidade e trava
+  // o fluxo — mesmo padrão já usado em saveM2QuoteClient e no server function.
   const { error: approvalError } = await supabaseBrowser
     .from("approvals")
-    .upsert({
-      requisition_id: requisitionId,
-      quotation_id: quotationId,
-      approval_level: approvalLevel,
-      total_value: winner.price,
-      decision: "pending",
-    })
+    .upsert(
+      {
+        requisition_id: requisitionId,
+        quotation_id: quotationId,
+        approval_level: approvalLevel,
+        total_value: winner.price,
+        decision: "pending",
+      },
+      { onConflict: "requisition_id" },
+    )
     .select("id");
   if (approvalError) throw new Error(friendlySupabaseError(approvalError));
 
