@@ -355,6 +355,7 @@ function EstoqueOmiePage() {
   const [search, setSearch] = useState("");
   const [corFiltro, setCorFiltro] = useState<"todas" | StatusCor>("todas");
   const [curvaFiltro, setCurvaFiltro] = useState<"todas" | OmiePurchaseSuggestionItem["curva"]>("todas");
+  const [compradoFiltro, setCompradoFiltro] = useState<"todos" | "com" | "sem">("todos");
   const [sortBy, setSortBy] = useState<SortKey>("descricao");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
@@ -397,7 +398,10 @@ function EstoqueOmiePage() {
       const combinaTexto = !q || i.codigo.toLowerCase().includes(q) || i.descricao.toLowerCase().includes(q);
       const combinaCor = corFiltro === "todas" || statusDoItem(i) === corFiltro;
       const combinaCurva = curvaFiltro === "todas" || i.curva === curvaFiltro;
-      return combinaTexto && combinaCor && combinaCurva;
+      const combinaComprado =
+        compradoFiltro === "todos" ||
+        (compradoFiltro === "com" ? i.comprado > 0 : i.comprado <= 0);
+      return combinaTexto && combinaCor && combinaCurva && combinaComprado;
     });
 
     result.sort((a, b) => {
@@ -413,7 +417,7 @@ function EstoqueOmiePage() {
     });
 
     return result;
-  }, [items, search, corFiltro, curvaFiltro, sortBy, sortOrder]);
+  }, [items, search, corFiltro, curvaFiltro, compradoFiltro, sortBy, sortOrder]);
 
   const todosFiltradosSelecionados = filtered.length > 0 && filtered.every((i) => selecionados.has(i.codigo));
   const algunsFiltradosSelecionados = filtered.some((i) => selecionados.has(i.codigo));
@@ -543,6 +547,33 @@ function EstoqueOmiePage() {
               }`}
             >
               {opt === "todas" ? "Todas" : opt}
+            </button>
+          ))}
+        </div>
+
+        <div className="h-6 w-px bg-border" />
+
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">Comprado:</span>
+          {(
+            [
+              { value: "todos", label: "Todos" },
+              { value: "com", label: "Com pedido em aberto" },
+              { value: "sem", label: "Sem pedido em aberto" },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setCompradoFiltro(opt.value)}
+              title={opt.label}
+              className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                compradoFiltro === opt.value
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border bg-background text-foreground hover:bg-muted"
+              }`}
+            >
+              {opt.label}
             </button>
           ))}
         </div>
