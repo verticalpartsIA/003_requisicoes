@@ -158,7 +158,7 @@ function SugestaoCell({ item, onSalvo }: { item: OmiePurchaseSuggestionItem; onS
     <div className="relative flex items-center justify-end gap-1.5">
       <span className="tabular-nums font-semibold">{item.sugestaoCompra || 0}</span>
       {precisaRevisar && (
-        <span className="h-1.5 w-1.5 rounded-full bg-orange-500" title="Lote sugerido pelo histórico — revisar" />
+        <span className="h-1.5 w-1.5 rounded-full bg-orange-500" title="Lote sugerido pelo histórico (quantidade recorrente) — revisar e confirmar" />
       )}
       {podeEditar && (
         <button
@@ -177,10 +177,19 @@ function SugestaoCell({ item, onSalvo }: { item: OmiePurchaseSuggestionItem; onS
             <p className="mb-1 text-xs font-semibold text-foreground">Lote de compra — {item.codigo}</p>
             <p className="mb-2 text-[11px] text-muted-foreground">
               Necessidade calculada: <strong>{item.sugestaoBruta}</strong> {item.unidade ?? ""}
-              {item.sugeridoLoteMinimo != null && (
-                <> · histórico sugere lote <strong>{formatarNumero(item.sugeridoLoteMinimo)}</strong></>
-              )}
             </p>
+            {item.sugeridoLoteMinimo != null ? (
+              <p className="mb-2 text-[11px] text-muted-foreground">
+                Histórico sugere lote <strong>{formatarNumero(item.sugeridoLoteMinimo)}</strong> — quantidade se repetiu
+                em {item.historicoModaFrequencia} de {item.historicoTotalPedidos} pedidos já feitos deste produto.
+              </p>
+            ) : (
+              <p className="mb-2 text-[11px] text-muted-foreground">
+                {item.historicoTotalPedidos && item.historicoTotalPedidos > 1
+                  ? `Histórico tem ${item.historicoTotalPedidos} pedidos, mas nenhuma quantidade se repetiu — provavelmente varia por obra/projeto, não é um lote fixo do fornecedor.`
+                  : "Sem histórico suficiente para sugerir lote (produto tem no máximo 1 pedido registrado). Informe abaixo se souber o lote/embalagem do fornecedor."}
+              </p>
+            )}
             <label className="mb-1 block text-[11px] text-muted-foreground">Múltiplo de compra</label>
             <Input type="number" min="0" step="1" value={multiplo} onChange={(e) => setMultiplo(e.target.value)} className="mb-2 h-8 text-sm" placeholder="ex.: 700 (bobina)" />
             <label className="mb-1 block text-[11px] text-muted-foreground">Lote mínimo</label>

@@ -94,6 +94,10 @@ export interface OmiePurchaseSuggestionItem {
   loteConfirmado: boolean;
   sugeridoMultiplo: number | null;
   sugeridoLoteMinimo: number | null;
+  /** Quantos pedidos de compra distintos existem no histórico completo do Omie. */
+  historicoTotalPedidos: number | null;
+  /** Em quantos desses pedidos a quantidade sugerida se repetiu igual (só há sugestão quando >= 2). */
+  historicoModaFrequencia: number | null;
   lotePendenteRevisao: boolean;
   estoqueAtualizadoEm: string | null;
   giroCalculadoEm: string | null;
@@ -109,7 +113,7 @@ export async function listOmiePurchaseSuggestionsClient(): Promise<OmiePurchaseS
   const { data, error } = await supabaseBrowser
     .from("omie_purchase_suggestions")
     .select(
-      "codigo,descricao,unidade,estoque_fisico,estoque_reservado,estoque_disponivel,estoque_minimo,curva,lead_time_dias,cobertura_dias,qtd_pendente,comprado,proxima_previsao,pedidos,sugestao_bruta,sugestao_compra,multiplo_compra,lote_minimo,lote_confirmado,sugerido_multiplo,sugerido_lote_minimo,lote_pendente_revisao,estoque_atualizado_em,giro_calculado_em",
+      "codigo,descricao,unidade,estoque_fisico,estoque_reservado,estoque_disponivel,estoque_minimo,curva,lead_time_dias,cobertura_dias,qtd_pendente,comprado,proxima_previsao,pedidos,sugestao_bruta,sugestao_compra,multiplo_compra,lote_minimo,lote_confirmado,sugerido_multiplo,sugerido_lote_minimo,historico_total_pedidos,historico_moda_frequencia,lote_pendente_revisao,estoque_atualizado_em,giro_calculado_em",
     )
     .order("descricao", { ascending: true });
 
@@ -138,6 +142,8 @@ export async function listOmiePurchaseSuggestionsClient(): Promise<OmiePurchaseS
     loteConfirmado: row.lote_confirmado ?? false,
     sugeridoMultiplo: row.sugerido_multiplo ?? null,
     sugeridoLoteMinimo: row.sugerido_lote_minimo ?? null,
+    historicoTotalPedidos: row.historico_total_pedidos ?? null,
+    historicoModaFrequencia: row.historico_moda_frequencia ?? null,
     lotePendenteRevisao: row.lote_pendente_revisao ?? false,
     estoqueAtualizadoEm: row.estoque_atualizado_em,
     giroCalculadoEm: row.giro_calculado_em,
