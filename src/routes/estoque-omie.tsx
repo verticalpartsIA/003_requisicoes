@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Boxes, CalendarClock, Loader2, PencilRuler, RefreshCw, Search, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowUp, Boxes, CalendarClock, Loader2, PencilRuler, RefreshCw, Search, TriangleAlert } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,45 @@ const LINHA_CLASSES: Record<StatusCor, string> = {
   amarela: "bg-yellow-300 text-black hover:bg-yellow-400/80",
   branca: "bg-white text-black hover:bg-neutral-100",
 };
+
+function SortHeader({
+  label,
+  sortKey,
+  currentSort,
+  currentOrder,
+  onSort,
+  align = "left",
+}: {
+  label: string;
+  sortKey: SortKey;
+  currentSort: SortKey;
+  currentOrder: SortOrder;
+  onSort: (key: SortKey) => void;
+  align?: "left" | "center" | "right";
+}) {
+  const isActive = currentSort === sortKey;
+  const textAlign = align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
+
+  return (
+    <th
+      className={`px-4 py-3 whitespace-nowrap bg-card cursor-pointer hover:bg-muted/50 transition-colors ${textAlign}`}
+      onClick={() => onSort(sortKey)}
+    >
+      <div className={`flex items-center gap-1 ${align === "right" ? "justify-end" : align === "center" ? "justify-center" : "justify-start"}`}>
+        <span>{label}</span>
+        {isActive && (
+          <span className="inline-flex">
+            {currentOrder === "asc" ? (
+              <ArrowUp className="h-3.5 w-3.5 text-vp-yellow-dark" />
+            ) : (
+              <ArrowDown className="h-3.5 w-3.5 text-vp-yellow-dark" />
+            )}
+          </span>
+        )}
+      </div>
+    </th>
+  );
+}
 
 function CurvaBadge({ curva }: { curva: OmiePurchaseSuggestionItem["curva"] }) {
   const cores: Record<string, string> = {
@@ -195,6 +234,9 @@ function AguardandoEntregaCell({ item }: { item: OmiePurchaseSuggestionItem }) {
   );
 }
 
+type SortKey = "codigo" | "descricao" | "curva" | "estoqueFisico" | "estoqueDisponivel" | "sugestaoCompra" | "comprado";
+type SortOrder = "asc" | "desc";
+
 function EstoqueOmiePage() {
   const [items, setItems] = useState<OmiePurchaseSuggestionItem[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
@@ -204,6 +246,17 @@ function EstoqueOmiePage() {
   const [search, setSearch] = useState("");
   const [corFiltro, setCorFiltro] = useState<"todas" | StatusCor>("todas");
   const [curvaFiltro, setCurvaFiltro] = useState<"todas" | OmiePurchaseSuggestionItem["curva"]>("todas");
+  const [sortBy, setSortBy] = useState<SortKey>("descricao");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+
+  const handleSort = (key: SortKey) => {
+    if (sortBy === key) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(key);
+      setSortOrder("asc");
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -227,13 +280,27 @@ function EstoqueOmiePage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return items.filter((i) => {
+    const result = items.filter((i) => {
       const combinaTexto = !q || i.codigo.toLowerCase().includes(q) || i.descricao.toLowerCase().includes(q);
       const combinaCor = corFiltro === "todas" || statusDoItem(i) === corFiltro;
       const combinaCurva = curvaFiltro === "todas" || i.curva === curvaFiltro;
       return combinaTexto && combinaCor && combinaCurva;
     });
-  }, [items, search, corFiltro, curvaFiltro]);
+
+    result.sort((a, b) => {
+      const aVal = a[sortBy];
+      const bVal = b[sortBy];
+      let comparison = 0;
+      if (typeof aVal === "string") {
+        comparison = aVal.localeCompare(bVal as string);
+      } else {
+        comparison = (aVal as number) - (bVal as number);
+      }
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
+
+    return result;
+  }, [items, search, corFiltro, curvaFiltro, sortBy, sortOrder]);
 
   const totais = useMemo(
     () =>
@@ -361,15 +428,28 @@ function EstoqueOmiePage() {
             <table className="min-w-[1200px] w-full text-sm">
               <thead className="sticky top-0 z-20">
                 <tr className="border-b border-border bg-card text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground shadow-sm">
-                  <th className="px-4 py-3 whitespace-nowrap bg-card">Código do Produto</th>
-                  <th className="px-4 py-3 min-w-[280px] bg-card">Descrição do Produto</th>
-                  <th className="px-3 py-3 text-center whitespace-nowrap bg-card">Curva</th>
-                  <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Estoque Físico</th>
+                  <SortHeader label="Código do Produto" sortKey="codigo" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                  <th className="px-4 py-3 min-w-[280px] bg-card cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => handleSort("descricao")}>
+                    <div className="flex items-center gap-1">
+                      <span>Descrição do Produto</span>
+                      {sortBy === "descricao" && (
+                        <span className="inline-flex">
+                          {sortOrder === "asc" ? (
+                            <ArrowUp className="h-3.5 w-3.5 text-vp-yellow-dark" />
+                          ) : (
+                            <ArrowDown className="h-3.5 w-3.5 text-vp-yellow-dark" />
+                          )}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                  <SortHeader label="Curva" sortKey="curva" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} align="center" />
+                  <SortHeader label="Estoque Físico" sortKey="estoqueFisico" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} align="right" />
                   <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Reservado</th>
-                  <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Estoque Disponível</th>
+                  <SortHeader label="Estoque Disponível" sortKey="estoqueDisponivel" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} align="right" />
                   <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Estoque Mínimo</th>
-                  <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Sugestão de Compra</th>
-                  <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Comprado</th>
+                  <SortHeader label="Sugestão de Compra" sortKey="sugestaoCompra" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} align="right" />
+                  <SortHeader label="Comprado" sortKey="comprado" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} align="right" />
                   <th className="px-4 py-3 text-right whitespace-nowrap bg-card">Aguardando a Entrega</th>
                 </tr>
               </thead>
