@@ -11,9 +11,14 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = { name: "vprequisicoes-mcp", version: "1.0.0" };
 
+// Base pública desta função. Usada para montar os endpoints OAuth
+// (descoberta, registro, autorização e token) como sub-rotas dela mesma,
+// já que o domínio do Supabase não roteia /.well-known/* na raiz para cá.
+const MCP_BASE_URL = "https://vvgcrhtmzvssfdazkkzk.supabase.co/functions/v1/mcp-server";
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version",
 };
 
@@ -69,6 +74,46 @@ async function sha256Hex(input: string) {
     .join("");
 }
 
+function base64UrlEncode(bytes: Uint8Array) {
+  let str = btoa(String.fromCharCode(...bytes));
+  return str.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function sha256Base64Url(input: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return base64UrlEncode(new Uint8Array(digest));
+}
+
+function randomOpaqueToken() {
+  return base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)));
+}
+
+function escapeHtml(input: string) {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function isStaticTokenValid(tokenHash: string): Promise<boolean> {
+  const { data } = await supabaseRest<Array<{ id: string }>>(
+    `mcp_api_keys?select=id&token_hash=eq.${tokenHash}&active=eq.true&limit=1`,
+  );
+  return Array.isArray(data) && data.length > 0;
+}
+
+async function isOAuthTokenValid(tokenHash: string): Promise<boolean> {
+  const { data } = await supabaseRest<Array<{ token_hash: string; expires_at: string | null }>>(
+    `mcp_oauth_tokens?select=token_hash,expires_at&token_hash=eq.${tokenHash}&revoked=eq.false&limit=1`,
+  );
+  const row = data?.[0];
+  if (!row) return false;
+  if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) return false;
+  return true;
+}
+
 async function isAuthorized(req: Request): Promise<boolean> {
   const header = req.headers.get("authorization") || "";
   const match = header.match(/^Bearer\s+(.+)$/i);
@@ -77,10 +122,7 @@ async function isAuthorized(req: Request): Promise<boolean> {
   if (!token) return false;
 
   const tokenHash = await sha256Hex(token);
-  const { data } = await supabaseRest<Array<{ id: string }>>(
-    `mcp_api_keys?select=id&token_hash=eq.${tokenHash}&active=eq.true&limit=1`,
-  );
-  return Array.isArray(data) && data.length > 0;
+  return (await isStaticTokenValid(tokenHash)) || (await isOAuthTokenValid(tokenHash));
 }
 
 // ─── Domínio: constantes do app ────────────────────────────────────────────
@@ -639,9 +681,263 @@ async function handleMessage(msg: Record<string, unknown>) {
   return rpcError(id, -32601, `Método não suportado: ${method}`);
 }
 
+// ─── OAuth 2.1 mínimo (metadata, DCR, authorize com senha, token) ─────────
+// Necessário porque o conector personalizado do claude.ai sempre tenta um
+// fluxo OAuth (com Registro Dinâmico de Cliente) antes de aceitar um Bearer
+// token simples. O "login" aqui é colar o mesmo token de acesso já emitido
+// (guardado em mcp_api_keys); a troca código→token gera um access_token
+// OAuth novo e independente, cujo hash fica em mcp_oauth_tokens.
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+  });
+}
+
+function handleProtectedResourceMetadata() {
+  return jsonResponse({
+    resource: MCP_BASE_URL,
+    authorization_servers: [MCP_BASE_URL],
+    bearer_methods_supported: ["header"],
+  });
+}
+
+function handleAuthServerMetadata() {
+  return jsonResponse({
+    issuer: MCP_BASE_URL,
+    authorization_endpoint: `${MCP_BASE_URL}/authorize`,
+    token_endpoint: `${MCP_BASE_URL}/token`,
+    registration_endpoint: `${MCP_BASE_URL}/register`,
+    response_types_supported: ["code"],
+    grant_types_supported: ["authorization_code"],
+    code_challenge_methods_supported: ["S256"],
+    token_endpoint_auth_methods_supported: ["none"],
+    scopes_supported: ["mcp"],
+  });
+}
+
+async function handleRegister(req: Request) {
+  let body: Record<string, unknown>;
+  try {
+    body = (await req.json()) as Record<string, unknown>;
+  } catch {
+    return jsonResponse({ error: "invalid_client_metadata" }, 400);
+  }
+
+  const redirectUris = Array.isArray(body.redirect_uris) ? body.redirect_uris.map(String) : [];
+  if (redirectUris.length === 0) {
+    return jsonResponse({ error: "invalid_client_metadata", error_description: "redirect_uris é obrigatório." }, 400);
+  }
+
+  const clientId = crypto.randomUUID();
+  const clientName = typeof body.client_name === "string" ? body.client_name : "Cliente MCP";
+
+  await supabaseRest("mcp_oauth_clients", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: [{ client_id: clientId, client_name: clientName, redirect_uris: redirectUris }],
+  });
+
+  return jsonResponse(
+    {
+      client_id: clientId,
+      client_name: clientName,
+      redirect_uris: redirectUris,
+      token_endpoint_auth_method: "none",
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+    },
+    201,
+  );
+}
+
+function authorizeForm(params: Record<string, string>, error?: string) {
+  const hidden = Object.entries(params)
+    .map(([k, v]) => `<input type="hidden" name="${escapeHtml(k)}" value="${escapeHtml(v)}">`)
+    .join("\n");
+  return `<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>VPRequisições — Conectar Claude</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+  form { background: #1e293b; padding: 2rem; border-radius: 12px; width: 100%; max-width: 360px; box-shadow: 0 10px 30px rgba(0,0,0,.3); }
+  h1 { font-size: 1.1rem; margin: 0 0 .25rem; }
+  p { color: #94a3b8; font-size: .85rem; margin: 0 0 1.25rem; }
+  input[type=password] { width: 100%; box-sizing: border-box; padding: .6rem .75rem; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font-size: .95rem; }
+  button { margin-top: 1rem; width: 100%; padding: .65rem; border: 0; border-radius: 8px; background: #f4c430; color: #1e293b; font-weight: 600; cursor: pointer; }
+  .error { color: #f87171; font-size: .85rem; margin-top: .75rem; }
+</style></head>
+<body>
+  <form method="POST">
+    <h1>VPRequisições</h1>
+    <p>O Claude está pedindo acesso ao sistema de requisições. Cole o token de acesso fornecido pelo administrador.</p>
+    ${hidden}
+    <input type="password" name="token" placeholder="Token de acesso" autofocus required>
+    <button type="submit">Autorizar acesso</button>
+    ${error ? `<div class="error">${escapeHtml(error)}</div>` : ""}
+  </form>
+</body></html>`;
+}
+
+async function handleAuthorizeGet(url: URL) {
+  const params = {
+    response_type: url.searchParams.get("response_type") || "",
+    client_id: url.searchParams.get("client_id") || "",
+    redirect_uri: url.searchParams.get("redirect_uri") || "",
+    state: url.searchParams.get("state") || "",
+    code_challenge: url.searchParams.get("code_challenge") || "",
+    code_challenge_method: url.searchParams.get("code_challenge_method") || "S256",
+    scope: url.searchParams.get("scope") || "",
+  };
+
+  if (!params.client_id || !params.redirect_uri || !params.code_challenge) {
+    return new Response("Requisição de autorização inválida: parâmetros obrigatórios ausentes.", { status: 400 });
+  }
+
+  const { data: clients } = await supabaseRest<Array<{ client_id: string; redirect_uris: string[] }>>(
+    `mcp_oauth_clients?select=client_id,redirect_uris&client_id=eq.${encodeURIComponent(params.client_id)}&limit=1`,
+  );
+  const client = clients?.[0];
+  if (!client || !client.redirect_uris.includes(params.redirect_uri)) {
+    return new Response("Cliente OAuth desconhecido ou redirect_uri não registrado.", { status: 400 });
+  }
+
+  return new Response(authorizeForm(params), {
+    headers: { "Content-Type": "text/html; charset=utf-8", ...CORS_HEADERS },
+  });
+}
+
+async function handleAuthorizePost(req: Request) {
+  const form = await req.formData();
+  const params = {
+    response_type: String(form.get("response_type") || ""),
+    client_id: String(form.get("client_id") || ""),
+    redirect_uri: String(form.get("redirect_uri") || ""),
+    state: String(form.get("state") || ""),
+    code_challenge: String(form.get("code_challenge") || ""),
+    code_challenge_method: String(form.get("code_challenge_method") || "S256"),
+    scope: String(form.get("scope") || ""),
+  };
+  const token = String(form.get("token") || "").trim();
+
+  const { data: clients } = await supabaseRest<Array<{ client_id: string; redirect_uris: string[] }>>(
+    `mcp_oauth_clients?select=client_id,redirect_uris&client_id=eq.${encodeURIComponent(params.client_id)}&limit=1`,
+  );
+  const client = clients?.[0];
+  if (!client || !client.redirect_uris.includes(params.redirect_uri)) {
+    return new Response("Cliente OAuth desconhecido ou redirect_uri não registrado.", { status: 400 });
+  }
+
+  if (!token || !(await isStaticTokenValid(await sha256Hex(token)))) {
+    return new Response(authorizeForm(params, "Token inválido. Tente novamente."), {
+      headers: { "Content-Type": "text/html; charset=utf-8", ...CORS_HEADERS },
+    });
+  }
+
+  const code = randomOpaqueToken();
+  await supabaseRest("mcp_oauth_codes", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: [
+      {
+        code,
+        client_id: params.client_id,
+        redirect_uri: params.redirect_uri,
+        code_challenge: params.code_challenge,
+        code_challenge_method: params.code_challenge_method,
+        expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      },
+    ],
+  });
+
+  const redirect = new URL(params.redirect_uri);
+  redirect.searchParams.set("code", code);
+  if (params.state) redirect.searchParams.set("state", params.state);
+  return new Response(null, { status: 302, headers: { Location: redirect.toString(), ...CORS_HEADERS } });
+}
+
+async function handleTokenExchange(req: Request) {
+  const form = await req.formData();
+  const grantType = String(form.get("grant_type") || "");
+  if (grantType !== "authorization_code") {
+    return jsonResponse({ error: "unsupported_grant_type" }, 400);
+  }
+
+  const code = String(form.get("code") || "");
+  const redirectUri = String(form.get("redirect_uri") || "");
+  const clientId = String(form.get("client_id") || "");
+  const codeVerifier = String(form.get("code_verifier") || "");
+
+  const { data: codes } = await supabaseRest<
+    Array<{ code: string; client_id: string; redirect_uri: string; code_challenge: string; expires_at: string; used: boolean }>
+  >(`mcp_oauth_codes?select=*&code=eq.${encodeURIComponent(code)}&limit=1`);
+  const codeRow = codes?.[0];
+
+  if (
+    !codeRow ||
+    codeRow.used ||
+    codeRow.client_id !== clientId ||
+    codeRow.redirect_uri !== redirectUri ||
+    new Date(codeRow.expires_at).getTime() < Date.now()
+  ) {
+    return jsonResponse({ error: "invalid_grant" }, 400);
+  }
+
+  const verifierChallenge = codeVerifier ? await sha256Base64Url(codeVerifier) : "";
+  if (!codeVerifier || verifierChallenge !== codeRow.code_challenge) {
+    return jsonResponse({ error: "invalid_grant", error_description: "PKCE code_verifier inválido." }, 400);
+  }
+
+  await supabaseRest(`mcp_oauth_codes?code=eq.${encodeURIComponent(code)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: { used: true },
+  });
+
+  const accessToken = randomOpaqueToken();
+  const tokenHash = await sha256Hex(accessToken);
+  const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+
+  await supabaseRest("mcp_oauth_tokens", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: [{ token_hash: tokenHash, client_id: clientId, expires_at: expiresAt }],
+  });
+
+  return jsonResponse({
+    access_token: accessToken,
+    token_type: "Bearer",
+    expires_in: 365 * 24 * 60 * 60,
+    scope: "mcp",
+  });
+}
+
 Deno.serve(async (req: Request) => {
+  const url = new URL(req.url);
+  const path = url.pathname;
+
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
+  if (path.endsWith("/.well-known/oauth-protected-resource") && req.method === "GET") {
+    return handleProtectedResourceMetadata();
+  }
+  if (path.endsWith("/.well-known/oauth-authorization-server") && req.method === "GET") {
+    return handleAuthServerMetadata();
+  }
+  if (path.endsWith("/register") && req.method === "POST") {
+    return handleRegister(req);
+  }
+  if (path.endsWith("/authorize") && req.method === "GET") {
+    return handleAuthorizeGet(url);
+  }
+  if (path.endsWith("/authorize") && req.method === "POST") {
+    return handleAuthorizePost(req);
+  }
+  if (path.endsWith("/token") && req.method === "POST") {
+    return handleTokenExchange(req);
   }
 
   if (req.method !== "POST") {
@@ -652,9 +948,14 @@ Deno.serve(async (req: Request) => {
   }
 
   if (!(await isAuthorized(req))) {
+    const resourceMetadataUrl = `${MCP_BASE_URL}/.well-known/oauth-protected-resource`;
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
-      headers: { "Content-Type": "application/json", "WWW-Authenticate": 'Bearer realm="mcp"', ...CORS_HEADERS },
+      headers: {
+        "Content-Type": "application/json",
+        "WWW-Authenticate": `Bearer realm="mcp", resource_metadata="${resourceMetadataUrl}"`,
+        ...CORS_HEADERS,
+      },
     });
   }
 

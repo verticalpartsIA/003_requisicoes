@@ -14,14 +14,31 @@ Código-fonte: `supabase/functions/mcp-server/index.ts`.
 
 ## Autenticação
 
-O endpoint exige um header `Authorization: Bearer <token>`. O token não é uma
-variável de ambiente Deno — ele é validado contra o hash (SHA-256) guardado na
-tabela `public.mcp_api_keys` (migration `database/021_mcp_api_keys.sql`), que
-tem RLS habilitado sem policies (só o `service_role`, usado pela própria
-function, consegue ler).
+O conector personalizado do claude.ai sempre tenta um fluxo **OAuth 2.1**
+(com Registro Dinâmico de Cliente) antes de aceitar qualquer coisa — não dá
+para simplesmente colar um Bearer token no campo de URL. Por isso a function
+implementa também um mini servidor OAuth (migration
+`database/022_mcp_oauth.sql`, tabelas `mcp_oauth_clients`, `mcp_oauth_codes`,
+`mcp_oauth_tokens`):
 
-O valor em texto puro do token **nunca é persistido** em nenhum lugar — nem no
-banco, nem no repositório. Guarde-o em um gerenciador de senhas.
+1. `/.well-known/oauth-protected-resource` e `/.well-known/oauth-authorization-server`
+   — descoberta (RFC9728 / RFC8414), servidos como sub-rota da própria function.
+2. `/register` — Registro Dinâmico de Cliente (RFC7591); claude.ai chama isso
+   sozinho, sem intervenção manual.
+3. `/authorize` — mostra uma tela pedindo o **token de acesso** (a mesma
+   credencial de `mcp_api_keys`) como "senha". Se válido, gera um código de
+   autorização (PKCE, S256) e redireciona de volta pro claude.ai.
+4. `/token` — troca o código por um `access_token` OAuth novo e opaco
+   (armazenado como hash em `mcp_oauth_tokens`, válido por 1 ano).
+
+O endpoint MCP em si (`/functions/v1/mcp-server`) aceita tanto o token
+estático original (`mcp_api_keys`) quanto qualquer token emitido pelo fluxo
+OAuth (`mcp_oauth_tokens`) no header `Authorization: Bearer <token>`.
+
+O valor em texto puro do token de acesso original **nunca é persistido** em
+nenhum lugar — nem no banco, nem no repositório (só o hash SHA-256). Guarde-o
+em um gerenciador de senhas; é ele que você digita na tela `/authorize`
+durante a conexão.
 
 Para gerar um novo token e revogar o antigo:
 
@@ -36,8 +53,11 @@ insert into public.mcp_api_keys (label, token_hash) values ('novo-label', '<sha2
 1. Configurações → Conectores → Adicionar conector → Adicionar conector personalizado.
 2. **Nome:** `VPRequisições`
 3. **URL do servidor MCP remoto:** `https://vvgcrhtmzvssfdazkkzk.supabase.co/functions/v1/mcp-server`
-4. Deixe os campos de OAuth em branco (a autenticação é por Bearer token, não por OAuth).
-5. Depois de adicionar, o Claude perguntará o token na primeira conexão — use o token fornecido pelo administrador do projeto.
+4. Deixe os campos de OAuth Client ID/Secret em branco — o claude.ai se
+   registra sozinho via Dynamic Client Registration (`/register`).
+5. Ao clicar em "Conectar", o claude.ai abre uma tela de login própria do
+   VPRequisições pedindo o **token de acesso** — cole o token fornecido pelo
+   administrador do projeto ali (não no formulário de adicionar conector).
 
 ## Ferramentas disponíveis
 
