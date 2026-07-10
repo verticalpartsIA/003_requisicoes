@@ -752,6 +752,22 @@ async function handleRegister(req: Request) {
   );
 }
 
+function redirectUriAllowed(registered: string[], candidate: string): boolean {
+  if (registered.includes(candidate)) return true;
+  try {
+    const candidateOrigin = new URL(candidate).origin;
+    return registered.some((u) => {
+      try {
+        return new URL(u).origin === candidateOrigin;
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
 function authorizeForm(params: Record<string, string>, error?: string) {
   const hidden = Object.entries(params)
     .map(([k, v]) => `<input type="hidden" name="${escapeHtml(k)}" value="${escapeHtml(v)}">`)
@@ -799,7 +815,7 @@ async function handleAuthorizeGet(url: URL) {
     `mcp_oauth_clients?select=client_id,redirect_uris&client_id=eq.${encodeURIComponent(params.client_id)}&limit=1`,
   );
   const client = clients?.[0];
-  if (!client || !client.redirect_uris.includes(params.redirect_uri)) {
+  if (!client || !redirectUriAllowed(client.redirect_uris, params.redirect_uri)) {
     return new Response("Cliente OAuth desconhecido ou redirect_uri não registrado.", { status: 400 });
   }
 
@@ -825,7 +841,7 @@ async function handleAuthorizePost(req: Request) {
     `mcp_oauth_clients?select=client_id,redirect_uris&client_id=eq.${encodeURIComponent(params.client_id)}&limit=1`,
   );
   const client = clients?.[0];
-  if (!client || !client.redirect_uris.includes(params.redirect_uri)) {
+  if (!client || !redirectUriAllowed(client.redirect_uris, params.redirect_uri)) {
     return new Response("Cliente OAuth desconhecido ou redirect_uri não registrado.", { status: 400 });
   }
 
