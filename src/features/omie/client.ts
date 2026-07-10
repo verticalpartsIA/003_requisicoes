@@ -1,6 +1,12 @@
-import { validateOmieOrder, validateOmieProduct, listOmieActiveStock, getOmieStockPosition } from "@/features/omie/api";
+import {
+  validateOmieOrder,
+  validateOmieProduct,
+  listOmieActiveStock,
+  getOmieStockPosition,
+  criarRequisicaoCompraOmie,
+} from "@/features/omie/api";
 import { supabaseBrowser } from "@/lib/supabase-browser";
-import type { OmieStockItem } from "@/features/omie/api";
+import type { OmieStockItem, CriarRequisicaoCompraItem } from "@/features/omie/api";
 
 export async function validateOmieOrderClient(numeroPedido: string) {
   return validateOmieOrder({ data: { numeroPedido } });
@@ -16,6 +22,12 @@ export async function listOmieActiveStockClient() {
 
 export async function getOmieStockPositionClient(codigoProduto: string) {
   return getOmieStockPosition({ data: { codigoProduto } });
+}
+
+/** Cria uma única Requisição de Compra no Omie com vários produtos de uma vez —
+ *  usada para enviar em massa os itens selecionados na tela de Sugestão de Compra. */
+export async function criarRequisicaoCompraOmieClient(itens: CriarRequisicaoCompraItem[]) {
+  return criarRequisicaoCompraOmie({ data: { itens } });
 }
 
 export interface OmieStockCacheResult {

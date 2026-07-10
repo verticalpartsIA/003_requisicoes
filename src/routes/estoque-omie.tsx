@@ -1,12 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Boxes, CalendarClock, Loader2, PencilRuler, RefreshCw, Search, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowUp, Boxes, CalendarClock, Loader2, PencilRuler, RefreshCw, Search, Send, TriangleAlert, X } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   listOmiePurchaseSuggestionsClient,
   salvarLoteConfigClient,
+  criarRequisicaoCompraOmieClient,
   type OmiePurchaseSuggestionItem,
 } from "@/features/omie/client";
 import { useAuth } from "@/features/auth/auth-context";
@@ -237,6 +248,104 @@ function AguardandoEntregaCell({ item }: { item: OmiePurchaseSuggestionItem }) {
 type SortKey = "codigo" | "descricao" | "curva" | "estoqueFisico" | "estoqueDisponivel" | "sugestaoCompra" | "comprado";
 type SortOrder = "asc" | "desc";
 
+/** Modal de confirmação do envio em massa para o Omie. Mostra os itens que
+ *  serão enviados (sugestão > 0) e avisa sobre os que foram ignorados
+ *  (sugestão zerada) — o comprador confirma antes de qualquer chamada à API. */
+function EnviarRequisicaoDialog({
+  aberto,
+  onOpenChange,
+  itensParaEnviar,
+  itensIgnorados,
+  onEnviado,
+}: {
+  aberto: boolean;
+  onOpenChange: (v: boolean) => void;
+  itensParaEnviar: OmiePurchaseSuggestionItem[];
+  itensIgnorados: OmiePurchaseSuggestionItem[];
+  onEnviado: () => void;
+}) {
+  const [enviando, setEnviando] = useState(false);
+
+  const enviar = async () => {
+    setEnviando(true);
+    try {
+      const resultado = await criarRequisicaoCompraOmieClient(
+        itensParaEnviar.map((item) => ({
+          codigo: item.codigo,
+          descricao: item.descricao,
+          quantidade: item.sugestaoCompra,
+        })),
+      );
+      if (resultado.itensComErro.length > 0) {
+        toast.warning(
+          `Requisição ${resultado.codReqCompra} criada com ${resultado.quantidadeItens} itens. ${resultado.itensComErro.length} não puderam ser incluídos: ${resultado.itensComErro.map((e) => e.codigo).join(", ")}`,
+        );
+      } else {
+        toast.success(`Requisição de compra ${resultado.codReqCompra} criada no Omie com ${resultado.quantidadeItens} itens.`);
+      }
+      onOpenChange(false);
+      onEnviado();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao criar requisição de compra no Omie.");
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <Dialog open={aberto} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Enviar requisição de compra em massa</DialogTitle>
+          <DialogDescription>
+            Será criada 1 requisição de compra no Omie com {itensParaEnviar.length}{" "}
+            {itensParaEnviar.length === 1 ? "item" : "itens"}, usando a Sugestão de Compra de cada produto.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="max-h-64 overflow-y-auto rounded-md border border-border">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-muted">
+              <tr className="text-left text-muted-foreground">
+                <th className="px-3 py-1.5">Código</th>
+                <th className="px-3 py-1.5">Descrição</th>
+                <th className="px-3 py-1.5 text-right">Qtd.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {itensParaEnviar.map((item) => (
+                <tr key={item.codigo} className="border-t border-border">
+                  <td className="px-3 py-1.5 font-mono">{item.codigo}</td>
+                  <td className="px-3 py-1.5">{item.descricao}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{item.sugestaoCompra}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {itensIgnorados.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {itensIgnorados.length} {itensIgnorados.length === 1 ? "item selecionado não tem" : "itens selecionados não têm"}{" "}
+            sugestão de compra (quantidade zero) e {itensIgnorados.length === 1 ? "foi ignorado" : "foram ignorados"}:{" "}
+            {itensIgnorados.map((i) => i.codigo).join(", ")}
+          </p>
+        )}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={enviando}>
+            Cancelar
+          </Button>
+          <Button onClick={() => void enviar()} disabled={enviando || itensParaEnviar.length === 0}>
+            {enviando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+            Confirmar e enviar ao Omie
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function EstoqueOmiePage() {
   const [items, setItems] = useState<OmiePurchaseSuggestionItem[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
@@ -248,6 +357,10 @@ function EstoqueOmiePage() {
   const [curvaFiltro, setCurvaFiltro] = useState<"todas" | OmiePurchaseSuggestionItem["curva"]>("todas");
   const [sortBy, setSortBy] = useState<SortKey>("descricao");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  const [dialogEnvioAberto, setDialogEnvioAberto] = useState(false);
+  const { hasRole } = useAuth();
+  const podeEnviarOmie = hasRole("admin") || hasRole("comprador") || hasRole("almoxarife");
 
   const handleSort = (key: SortKey) => {
     if (sortBy === key) {
@@ -301,6 +414,34 @@ function EstoqueOmiePage() {
 
     return result;
   }, [items, search, corFiltro, curvaFiltro, sortBy, sortOrder]);
+
+  const todosFiltradosSelecionados = filtered.length > 0 && filtered.every((i) => selecionados.has(i.codigo));
+  const algunsFiltradosSelecionados = filtered.some((i) => selecionados.has(i.codigo));
+
+  const toggleSelecionado = (codigo: string) => {
+    setSelecionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(codigo)) next.delete(codigo);
+      else next.add(codigo);
+      return next;
+    });
+  };
+
+  const toggleSelecionarTodos = () => {
+    setSelecionados((prev) => {
+      const next = new Set(prev);
+      if (todosFiltradosSelecionados) {
+        filtered.forEach((i) => next.delete(i.codigo));
+      } else {
+        filtered.forEach((i) => next.add(i.codigo));
+      }
+      return next;
+    });
+  };
+
+  const itensSelecionados = items.filter((i) => selecionados.has(i.codigo));
+  const itensParaEnviar = itensSelecionados.filter((i) => i.sugestaoCompra > 0);
+  const itensIgnorados = itensSelecionados.filter((i) => i.sugestaoCompra <= 0);
 
   const totais = useMemo(
     () =>
@@ -411,6 +552,26 @@ function EstoqueOmiePage() {
         <span className="rounded-md border border-border bg-muted px-2.5 py-1.5 text-xs font-semibold text-foreground">
           {filtered.length} {filtered.length === 1 ? "linha" : "linhas"}
         </span>
+
+        {podeEnviarOmie && selecionados.size > 0 && (
+          <div className="flex items-center gap-2 rounded-md border border-vp-yellow-dark/40 bg-vp-yellow-dark/10 px-2.5 py-1.5">
+            <span className="text-xs font-semibold text-foreground">
+              {selecionados.size} {selecionados.size === 1 ? "produto selecionado" : "produtos selecionados"}
+            </span>
+            <Button size="sm" className="h-7 px-2 text-xs" onClick={() => setDialogEnvioAberto(true)}>
+              <Send className="h-3.5 w-3.5 mr-1.5" />
+              Enviar para Omie
+            </Button>
+            <button
+              type="button"
+              onClick={() => setSelecionados(new Set())}
+              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="Limpar seleção"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -428,6 +589,16 @@ function EstoqueOmiePage() {
             <table className="min-w-[1200px] w-full text-sm">
               <thead className="sticky top-0 z-20">
                 <tr className="border-b border-border bg-card text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground shadow-sm">
+                  {podeEnviarOmie && (
+                    <th className="w-10 px-4 py-3 bg-card">
+                      <Checkbox
+                        checked={todosFiltradosSelecionados ? true : algunsFiltradosSelecionados ? "indeterminate" : false}
+                        onCheckedChange={() => toggleSelecionarTodos()}
+                        disabled={filtered.length === 0}
+                        aria-label="Selecionar todas as linhas filtradas"
+                      />
+                    </th>
+                  )}
                   <SortHeader label="Código do Produto" sortKey="codigo" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                   <th className="px-4 py-3 min-w-[280px] bg-card cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => handleSort("descricao")}>
                     <div className="flex items-center gap-1">
@@ -456,14 +627,14 @@ function EstoqueOmiePage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={podeEnviarOmie ? 11 : 10} className="px-4 py-12 text-center text-muted-foreground">
                       <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
                       Carregando produtos do Omie...
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={podeEnviarOmie ? 11 : 10} className="px-4 py-12 text-center text-muted-foreground">
                       Nenhum produto encontrado.
                     </td>
                   </tr>
@@ -472,6 +643,15 @@ function EstoqueOmiePage() {
                     const status = statusDoItem(item);
                     return (
                       <tr key={item.codigo} className={`border-b border-border last:border-0 ${LINHA_CLASSES[status]}`}>
+                        {podeEnviarOmie && (
+                          <td className="px-4 py-2.5">
+                            <Checkbox
+                              checked={selecionados.has(item.codigo)}
+                              onCheckedChange={() => toggleSelecionado(item.codigo)}
+                              aria-label={`Selecionar ${item.codigo}`}
+                            />
+                          </td>
+                        )}
                         <td className="px-4 py-2.5 font-mono text-xs">{item.codigo}</td>
                         <td className="px-4 py-2.5">{item.descricao}</td>
                         <td className="px-3 py-2.5 text-center">
@@ -498,7 +678,7 @@ function EstoqueOmiePage() {
               {!loading && filtered.length > 0 && (
                 <tfoot>
                   <tr className="border-t-2 border-border bg-muted/60 font-semibold">
-                    <td className="px-4 py-2.5" colSpan={3}>
+                    <td className="px-4 py-2.5" colSpan={podeEnviarOmie ? 4 : 3}>
                       Total
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{formatarNumero(totais.estoqueFisico)}</td>
@@ -522,6 +702,17 @@ function EstoqueOmiePage() {
           4 meses; Curva D = baixo giro, estoque mínimo fixo.
         </p>
       )}
+
+      <EnviarRequisicaoDialog
+        aberto={dialogEnvioAberto}
+        onOpenChange={setDialogEnvioAberto}
+        itensParaEnviar={itensParaEnviar}
+        itensIgnorados={itensIgnorados}
+        onEnviado={() => {
+          setSelecionados(new Set());
+          void load();
+        }}
+      />
     </div>
   );
 }

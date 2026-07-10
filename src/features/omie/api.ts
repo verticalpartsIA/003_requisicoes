@@ -210,3 +210,87 @@ export const listOmieActiveStock = createServerFn({ method: "GET" }).handler(asy
 
   return items.sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR"));
 });
+
+const PAUSA_ENTRE_ITENS_MS = 350; // evita "consumo redundante" ao resolver vários codProd em sequência
+
+export interface CriarRequisicaoCompraItem {
+  codigo: string;
+  descricao: string;
+  quantidade: number;
+}
+
+export interface CriarRequisicaoCompraResultado {
+  codReqCompra: number;
+  quantidadeItens: number;
+  itensComErro: { codigo: string; motivo: string }[];
+}
+
+export const criarRequisicaoCompraOmie = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      itens: z
+        .array(
+          z.object({
+            codigo: z.string().min(1),
+            descricao: z.string().min(1),
+            quantidade: z.number().positive(),
+          }),
+        )
+        .min(1)
+        .max(200),
+    }),
+  )
+  .handler(async ({ data }): Promise<CriarRequisicaoCompraResultado> => {
+    type ProdutoResp = { codigo_produto: number; codigo: string; descricao: string; inativo: string };
+
+    const itensValidos: { codProd: number; qtde: number; obsItem: string }[] = [];
+    const itensComErro: { codigo: string; motivo: string }[] = [];
+
+    for (let i = 0; i < data.itens.length; i++) {
+      const item = data.itens[i];
+      try {
+        const produto = await omiePost<ProdutoResp>("geral/produtos", "ConsultarProduto", [
+          { codigo: item.codigo },
+        ]);
+        if (!produto.codigo_produto) throw new Error("Produto não encontrado no Omie.");
+        if (produto.inativo === "S") throw new Error("Produto inativo no Omie.");
+        itensValidos.push({
+          codProd: produto.codigo_produto,
+          qtde: item.quantidade,
+          obsItem: "Sugestão automática — VPRequisições (Estoque Omie)",
+        });
+      } catch (e) {
+        itensComErro.push({ codigo: item.codigo, motivo: e instanceof Error ? e.message : "Erro desconhecido" });
+      }
+      if (i < data.itens.length - 1) await sleep(PAUSA_ENTRE_ITENS_MS);
+    }
+
+    if (itensValidos.length === 0) {
+      throw new Error("Nenhum item pôde ser resolvido no Omie. Verifique os códigos selecionados.");
+    }
+
+    const hoje = new Date();
+    const dtSugestao = `${String(hoje.getDate()).padStart(2, "0")}/${String(hoje.getMonth() + 1).padStart(2, "0")}/${hoje.getFullYear()}`;
+
+    type IncluirReqResp = { codReqCompra: number; codIntReqCompra: string; cCodStatus: string; cDesStatus: string };
+    const resp = await omiePost<IncluirReqResp>("produtos/requisicaocompra", "IncluirReq", [
+      {
+        codCateg: "2.01.01", // Compras de Mercadorias para Revenda Nacional (mesma categoria usada nas requisições manuais de reposição de estoque)
+        codIntReqCompra: `VP-EST-${Date.now()}`,
+        dtSugestao,
+        obsIntReqCompra: "Reposição de estoque — gerado via Sugestão de Compra (Estoque Omie)",
+        ItensReqCompra: itensValidos.map((item) => ({
+          codProd: item.codProd,
+          qtde: item.qtde,
+          precoUnit: 0,
+          obsItem: item.obsItem,
+        })),
+      },
+    ]);
+
+    return {
+      codReqCompra: resp.codReqCompra,
+      quantidadeItens: itensValidos.length,
+      itensComErro,
+    };
+  });
