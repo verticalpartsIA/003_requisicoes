@@ -1,13 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Boxes, CalendarClock, Loader2, RefreshCw, Search, TriangleAlert } from "lucide-react";
+import { Boxes, CalendarClock, Loader2, PencilRuler, RefreshCw, Search, TriangleAlert } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   listOmiePurchaseSuggestionsClient,
+  salvarLoteConfigClient,
   type OmiePurchaseSuggestionItem,
 } from "@/features/omie/client";
+import { useAuth } from "@/features/auth/auth-context";
 
 export const Route = createFileRoute("/estoque-omie")({
   head: () => ({
@@ -54,6 +56,96 @@ function CurvaBadge({ curva }: { curva: OmiePurchaseSuggestionItem["curva"] }) {
     <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold ${cores[curva]}`}>
       {curva}
     </span>
+  );
+}
+
+/** Célula da Sugestão de Compra com revisão de lote (múltiplo + lote mínimo).
+ *  Mostra o valor inteiro sugerido; comprador pode abrir, revisar a sugestão
+ *  pré-preenchida pelo histórico, ajustar e confirmar. Após confirmar, a
+ *  sugestão passa a respeitar o lote. */
+function SugestaoCell({ item, onSalvo }: { item: OmiePurchaseSuggestionItem; onSalvo: () => void }) {
+  const { profile, hasRole } = useAuth();
+  const podeEditar = hasRole("admin") || hasRole("comprador") || hasRole("almoxarife");
+  const [aberto, setAberto] = useState(false);
+  const [multiplo, setMultiplo] = useState<string>(
+    String(item.multiploCompra ?? item.sugeridoMultiplo ?? ""),
+  );
+  const [loteMin, setLoteMin] = useState<string>(
+    String(item.loteMinimo ?? item.sugeridoLoteMinimo ?? ""),
+  );
+  const [saving, setSaving] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const precisaRevisar = item.lotePendenteRevisao && item.sugestaoCompra > 0;
+
+  const salvar = async () => {
+    const m = multiplo.trim() ? Number(multiplo) : null;
+    const l = loteMin.trim() ? Number(loteMin) : null;
+    if ((m !== null && (!Number.isFinite(m) || m < 0)) || (l !== null && (!Number.isFinite(l) || l < 0))) {
+      setErro("Valores inválidos.");
+      return;
+    }
+    setSaving(true);
+    setErro(null);
+    try {
+      await salvarLoteConfigClient({
+        codigo: item.codigo,
+        multiploCompra: m,
+        loteMinimo: l,
+        updatedBy: profile?.id,
+        updatedByName: profile?.full_name ?? undefined,
+      });
+      setAberto(false);
+      onSalvo();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao salvar lote.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="relative flex items-center justify-end gap-1.5">
+      <span className="tabular-nums font-semibold">{item.sugestaoCompra || 0}</span>
+      {precisaRevisar && (
+        <span className="h-1.5 w-1.5 rounded-full bg-orange-500" title="Lote sugerido pelo histórico — revisar" />
+      )}
+      {podeEditar && (
+        <button
+          type="button"
+          onClick={() => setAberto((v) => !v)}
+          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Revisar lote de compra"
+        >
+          <PencilRuler className="h-3.5 w-3.5" />
+        </button>
+      )}
+      {aberto && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setAberto(false)} />
+          <div className="absolute right-0 top-7 z-20 w-72 rounded-md border border-border bg-popover p-3 text-left shadow-lg">
+            <p className="mb-1 text-xs font-semibold text-foreground">Lote de compra — {item.codigo}</p>
+            <p className="mb-2 text-[11px] text-muted-foreground">
+              Necessidade calculada: <strong>{item.sugestaoBruta}</strong> {item.unidade ?? ""}
+              {item.sugeridoLoteMinimo != null && (
+                <> · histórico sugere lote <strong>{formatarNumero(item.sugeridoLoteMinimo)}</strong></>
+              )}
+            </p>
+            <label className="mb-1 block text-[11px] text-muted-foreground">Múltiplo de compra</label>
+            <Input type="number" min="0" step="1" value={multiplo} onChange={(e) => setMultiplo(e.target.value)} className="mb-2 h-8 text-sm" placeholder="ex.: 700 (bobina)" />
+            <label className="mb-1 block text-[11px] text-muted-foreground">Lote mínimo</label>
+            <Input type="number" min="0" step="1" value={loteMin} onChange={(e) => setLoteMin(e.target.value)} className="mb-2 h-8 text-sm" placeholder="ex.: 700" />
+            {erro && <p className="mb-2 text-[11px] text-destructive">{erro}</p>}
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setAberto(false)}>Cancelar</Button>
+              <Button size="sm" className="h-7 px-2 text-xs" onClick={() => void salvar()} disabled={saving}>
+                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirmar lote"}
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -309,7 +401,9 @@ function EstoqueOmiePage() {
                         <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueReservado}</td>
                         <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{item.estoqueDisponivel}</td>
                         <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueMinimo}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{item.sugestaoCompra || 0}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <SugestaoCell item={item} onSalvo={() => void load()} />
+                        </td>
                         <td className="px-4 py-2.5 text-right tabular-nums">
                           {item.comprado > 0 ? formatarNumero(item.comprado) : <span className="text-muted-foreground">—</span>}
                         </td>
