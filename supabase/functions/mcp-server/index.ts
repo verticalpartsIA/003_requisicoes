@@ -714,6 +714,11 @@ function handleAuthServerMetadata() {
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none"],
     scopes_supported: ["mcp"],
+    // Campos abaixo só existem para satisfazer clientes que tentam descoberta
+    // OIDC (`/.well-known/openid-configuration`) antes de RFC8414 puro.
+    // Não emitimos id_token de verdade.
+    subject_types_supported: ["public"],
+    id_token_signing_alg_values_supported: ["none"],
   });
 }
 
@@ -943,6 +948,9 @@ Deno.serve(async (req: Request) => {
   if (path.endsWith("/.well-known/oauth-authorization-server") && req.method === "GET") {
     return handleAuthServerMetadata();
   }
+  if (path.endsWith("/.well-known/openid-configuration") && req.method === "GET") {
+    return handleAuthServerMetadata();
+  }
   if (path.endsWith("/register") && req.method === "POST") {
     return handleRegister(req);
   }
@@ -957,8 +965,11 @@ Deno.serve(async (req: Request) => {
   }
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Use POST para o endpoint MCP." }), {
-      status: 405,
+    // 404 (não 405) para que descoberta OIDC/OAuth de clientes trate como
+    // "variante de well-known não suportada" e siga tentando outra, em vez
+    // de abortar o fluxo.
+    return new Response(JSON.stringify({ error: "not_found" }), {
+      status: 404,
       headers: { "Content-Type": "application/json", ...CORS_HEADERS },
     });
   }
