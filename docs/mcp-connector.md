@@ -48,16 +48,28 @@ update public.mcp_api_keys set active = false where label = 'claude-web-connecto
 insert into public.mcp_api_keys (label, token_hash) values ('novo-label', '<sha256-hex-do-novo-token>');
 ```
 
-## Como conectar no claude.ai
+## Como conectar no claude.ai (modo recomendado: chave na URL)
+
+O domínio compartilhado `*.supabase.co` aplica CSP sandbox em respostas HTML
+de Edge Functions, o que impede a tela de login do fluxo OAuth de renderizar
+e submeter o formulário. Por isso o modo recomendado embute o token direto na
+URL do conector (o claude.ai só inicia OAuth quando recebe 401 — com a chave
+válida na URL, o servidor responde 200 e nenhum login é necessário):
 
 1. Configurações → Conectores → Adicionar conector → Adicionar conector personalizado.
 2. **Nome:** `VPRequisições`
-3. **URL do servidor MCP remoto:** `https://vvgcrhtmzvssfdazkkzk.supabase.co/functions/v1/mcp-server`
-4. Deixe os campos de OAuth Client ID/Secret em branco — o claude.ai se
-   registra sozinho via Dynamic Client Registration (`/register`).
-5. Ao clicar em "Conectar", o claude.ai abre uma tela de login própria do
-   VPRequisições pedindo o **token de acesso** — cole o token fornecido pelo
-   administrador do projeto ali (não no formulário de adicionar conector).
+3. **URL do servidor MCP remoto:**
+   `https://vvgcrhtmzvssfdazkkzk.supabase.co/functions/v1/mcp-server?key=<token-de-acesso>`
+4. Deixe os campos de OAuth Client ID/Secret em branco e clique em Adicionar.
+
+A URL passa a conter a credencial — trate-a como senha (não compartilhe
+screenshots da configuração do conector). Para revogar, desative a linha em
+`mcp_api_keys` e gere um novo token.
+
+O fluxo OAuth (`/authorize`, `/token`, DCR) continua implementado e funcional
+para clientes MCP que não dependem de página HTML no domínio do Supabase; a
+tela de login só volta a ser viável se a function for servida por um domínio
+próprio sem o sandbox.
 
 ## Ferramentas disponíveis
 

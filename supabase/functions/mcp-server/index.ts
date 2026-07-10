@@ -125,15 +125,22 @@ async function isOAuthTokenValid(tokenHash: string): Promise<boolean> {
   return true;
 }
 
-async function isAuthorized(req: Request): Promise<boolean> {
+// Aceita o token via header Bearer OU via query string (?key=...).
+// O modo query permite embutir a credencial na URL do conector do claude.ai,
+// dispensando o fluxo OAuth — necessário porque o domínio compartilhado do
+// Supabase aplica CSP sandbox em HTML, quebrando a tela de login do OAuth.
+async function isAuthorized(req: Request, url: URL): Promise<boolean> {
   const header = req.headers.get("authorization") || "";
   const match = header.match(/^Bearer\s+(.+)$/i);
-  if (!match) return false;
-  const token = match[1].trim();
-  if (!token) return false;
+  const bearerToken = match ? match[1].trim() : "";
+  const keyParam = (url.searchParams.get("key") || "").trim();
 
-  const tokenHash = await sha256Hex(token);
-  return (await isStaticTokenValid(tokenHash)) || (await isOAuthTokenValid(tokenHash));
+  for (const token of [bearerToken, keyParam]) {
+    if (!token) continue;
+    const tokenHash = await sha256Hex(token);
+    if ((await isStaticTokenValid(tokenHash)) || (await isOAuthTokenValid(tokenHash))) return true;
+  }
+  return false;
 }
 
 // ─── Domínio: constantes do app ────────────────────────────────────────────
@@ -979,7 +986,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "not_found" }, 404);
   }
 
-  if (!(await isAuthorized(req))) {
+  if (!(await isAuthorized(req, url))) {
     const resourceMetadataUrl = `${MCP_BASE_URL}/.well-known/oauth-protected-resource`;
     const response = jsonResponse({ error: "unauthorized" }, 401);
     response.headers.set("WWW-Authenticate", `Bearer realm="mcp", resource_metadata="${resourceMetadataUrl}"`);
