@@ -513,6 +513,12 @@ function AnalyticsPage() {
         </Card>
       </div>
 
+      {/* Conteúdo específico de cada aba — só o KPI Row acima é comum a todas.
+          Antes, estes gráficos ficavam visíveis o tempo todo e só o bloco de
+          Qualidade/Eficiência/Top Compradores mudava, então trocar de aba
+          praticamente não alterava a tela. */}
+      {activeTab === "executive" && (
+      <>
       {/* Volume Trend + SLA Gauge */}
       <div className="grid lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2 card-hover-yellow">
@@ -722,8 +728,7 @@ function AnalyticsPage() {
         </Card>
       </div>
 
-      {/* Quality + Efficiency + Top Buyers (Executive) */}
-      {activeTab === "executive" && (
+      {/* Quality + Efficiency + Top Buyers */}
       <div className="grid lg:grid-cols-3 gap-4">
         <Card className="card-hover-yellow">
           <CardHeader className="pb-2">
@@ -796,6 +801,7 @@ function AnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+      </>
       )}
 
       {/* ═══ SLA TAB ═══ */}
