@@ -4,7 +4,7 @@ import {
   Plane, Plus, ChevronRight, ChevronLeft, MapPin, Hotel,
   CalendarIcon, Target, AlertTriangle, Users, UserPlus, Trash2, Upload, ImageIcon,
 } from "lucide-react";
-import { format, differenceInCalendarDays } from "date-fns";
+import { format, differenceInCalendarDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -810,7 +810,7 @@ function TripsPage() {
                           if (returnDate && d && returnDate < d) setReturnDate(undefined);
                           setDepartureDateOpen(false);
                         }}
-                        disabled={(d) => d < new Date()}
+                        disabled={(d) => d < startOfDay(new Date())}
                         initialFocus
                         className="p-3 pointer-events-auto"
                         locale={ptBR}
@@ -835,7 +835,7 @@ function TripsPage() {
                         mode="single"
                         selected={returnDate}
                         onSelect={(d) => { setReturnDate(d); setReturnDateOpen(false); }}
-                        disabled={(d) => d < (departureDate ?? new Date())}
+                        disabled={(d) => d < startOfDay(departureDate ?? new Date())}
                         initialFocus
                         className="p-3 pointer-events-auto"
                         locale={ptBR}

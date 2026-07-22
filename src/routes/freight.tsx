@@ -4,7 +4,7 @@ import {
   Truck, Plus, ChevronRight, ChevronLeft, MapPin, Package, CalendarIcon, ClipboardList, ShieldCheck,
   ImageIcon, Upload,
 } from "lucide-react";
-import { format, addDays } from "date-fns";
+import { format, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { parseBRLNumber } from "@/lib/number";
@@ -667,7 +667,7 @@ function FreightPage() {
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar mode="single" selected={pickupDate} onSelect={(d) => { setPickupDate(d); setPickupDateOpen(false); }}
-                      disabled={(d) => d < addDays(new Date(), 1)} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
+                      disabled={(d) => d < startOfDay(new Date())} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
                   </PopoverContent>
                 </Popover>
               </div>
@@ -685,7 +685,7 @@ function FreightPage() {
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar mode="single" selected={unloadingDate} onSelect={(d) => { setUnloadingDate(d); setUnloadingDateOpen(false); }}
-                        disabled={(d) => d < (pickupDate ?? addDays(new Date(), 1))} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
+                        disabled={(d) => d < startOfDay(pickupDate ?? new Date())} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
                     </PopoverContent>
                   </Popover>
                 </div>

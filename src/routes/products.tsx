@@ -6,7 +6,7 @@ import {
   Link2, X, CalendarIcon, ImageIcon, Upload, Pencil, Trash2,
   CheckCircle2, ChevronDown, ChevronUp, Loader2, Tag, Boxes,
 } from "lucide-react";
-import { format, addDays } from "date-fns";
+import { format, addDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -567,7 +567,7 @@ function ProductsPage() {
     }
   };
 
-  const minDate = addDays(new Date(), 3);
+  const minDate = addDays(startOfDay(new Date()), 3);
   const formActive = showAddForm || editingIdx !== null;
 
   return (

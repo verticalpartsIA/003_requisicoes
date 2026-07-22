@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import {
   Wrench, Plus, ChevronRight, ChevronLeft, FileText, CalendarIcon, ClipboardList, Trash2,
 } from "lucide-react";
-import { format, addDays } from "date-fns";
+import { format, addDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { parseBRLNumber } from "@/lib/number";
@@ -321,7 +321,7 @@ function ServicesPage() {
     }
   };
 
-  const minDate = addDays(new Date(), 3);
+  const minDate = addDays(startOfDay(new Date()), 3);
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">

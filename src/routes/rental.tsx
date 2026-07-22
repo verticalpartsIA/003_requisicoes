@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import {
   Key, Plus, ChevronRight, ChevronLeft, CalendarIcon, Cog, ClipboardList, AlertTriangle,
 } from "lucide-react";
-import { format, differenceInCalendarDays } from "date-fns";
+import { format, differenceInCalendarDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -505,7 +505,7 @@ function RentalPage() {
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar mode="single" selected={startDate} onSelect={(d) => { setStartDate(d); setStartDateOpen(false); }}
-                        disabled={(d) => d < new Date()} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
+                        disabled={(d) => d < startOfDay(new Date())} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
                     </PopoverContent>
                   </Popover>
                 </div>
@@ -520,7 +520,7 @@ function RentalPage() {
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar mode="single" selected={endDate} onSelect={(d) => { setEndDate(d); setEndDateOpen(false); }}
-                        disabled={(d) => d < (startDate || new Date())} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
+                        disabled={(d) => d < startOfDay(startDate || new Date())} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
                     </PopoverContent>
                   </Popover>
                 </div>
