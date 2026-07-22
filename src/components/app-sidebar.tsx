@@ -16,6 +16,7 @@ import {
   Shield,
   Boxes,
   Settings2,
+  Timer,
 } from "lucide-react";
 import {
   Sidebar,
@@ -56,7 +57,8 @@ const workflows = [
 const system = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
-  { title: "Logs", url: "/logs", icon: ScrollText },
+  { title: "Monitor SLA", url: "/logs", icon: Timer },
+  { title: "Movimentações", url: "/movimentacoes", icon: ScrollText },
   { title: "Admin", url: "/admin", icon: Shield },
 ];
 
@@ -98,7 +100,7 @@ export function AppSidebar() {
   const visibleSystem = system.filter((item) => {
     if (item.url === "/") return true;
     if (item.url === "/analytics") return hasRole("admin") || hasRole("comprador") || hasRole("aprovador");
-    if (item.url === "/logs") return hasRole("admin");
+    if (item.url === "/logs" || item.url === "/movimentacoes") return hasRole("admin");
     if (item.url === "/admin") return hasRole("admin");
     return false;
   });

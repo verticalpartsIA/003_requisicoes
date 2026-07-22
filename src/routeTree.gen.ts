@@ -17,6 +17,7 @@ import { Route as ReceiptRouteImport } from './routes/receipt'
 import { Route as QuotingRouteImport } from './routes/quoting'
 import { Route as PurchasingRouteImport } from './routes/purchasing'
 import { Route as ProductsRouteImport } from './routes/products'
+import { Route as MovimentacoesRouteImport } from './routes/movimentacoes'
 import { Route as MaintenanceRouteImport } from './routes/maintenance'
 import { Route as LogsRouteImport } from './routes/logs'
 import { Route as LoginRouteImport } from './routes/login'
@@ -68,6 +69,11 @@ const PurchasingRoute = PurchasingRouteImport.update({
 const ProductsRoute = ProductsRouteImport.update({
   id: '/products',
   path: '/products',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MovimentacoesRoute = MovimentacoesRouteImport.update({
+  id: '/movimentacoes',
+  path: '/movimentacoes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MaintenanceRoute = MaintenanceRouteImport.update({
@@ -143,6 +149,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/maintenance': typeof MaintenanceRoute
+  '/movimentacoes': typeof MovimentacoesRoute
   '/products': typeof ProductsRoute
   '/purchasing': typeof PurchasingRoute
   '/quoting': typeof QuotingRoute
@@ -165,6 +172,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/maintenance': typeof MaintenanceRoute
+  '/movimentacoes': typeof MovimentacoesRoute
   '/products': typeof ProductsRoute
   '/purchasing': typeof PurchasingRoute
   '/quoting': typeof QuotingRoute
@@ -188,6 +196,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/maintenance': typeof MaintenanceRoute
+  '/movimentacoes': typeof MovimentacoesRoute
   '/products': typeof ProductsRoute
   '/purchasing': typeof PurchasingRoute
   '/quoting': typeof QuotingRoute
@@ -212,6 +221,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/logs'
     | '/maintenance'
+    | '/movimentacoes'
     | '/products'
     | '/purchasing'
     | '/quoting'
@@ -234,6 +244,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/logs'
     | '/maintenance'
+    | '/movimentacoes'
     | '/products'
     | '/purchasing'
     | '/quoting'
@@ -256,6 +267,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/logs'
     | '/maintenance'
+    | '/movimentacoes'
     | '/products'
     | '/purchasing'
     | '/quoting'
@@ -279,6 +291,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   LogsRoute: typeof LogsRoute
   MaintenanceRoute: typeof MaintenanceRoute
+  MovimentacoesRoute: typeof MovimentacoesRoute
   ProductsRoute: typeof ProductsRoute
   PurchasingRoute: typeof PurchasingRoute
   QuotingRoute: typeof QuotingRoute
@@ -346,6 +359,13 @@ declare module '@tanstack/react-router' {
       path: '/products'
       fullPath: '/products'
       preLoaderRoute: typeof ProductsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/movimentacoes': {
+      id: '/movimentacoes'
+      path: '/movimentacoes'
+      fullPath: '/movimentacoes'
+      preLoaderRoute: typeof MovimentacoesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/maintenance': {
@@ -447,6 +467,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   LogsRoute: LogsRoute,
   MaintenanceRoute: MaintenanceRoute,
+  MovimentacoesRoute: MovimentacoesRoute,
   ProductsRoute: ProductsRoute,
   PurchasingRoute: PurchasingRoute,
   QuotingRoute: QuotingRoute,
