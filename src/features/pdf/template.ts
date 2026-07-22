@@ -86,11 +86,18 @@ export function buildHtml(d: BuildInput): string {
 
   // ─ V1 Requisição ───────────────────────────────────────────────────────────
 
+  // M1 multi-itens grava req.description como um resumo concatenado
+  // ("Produto A: desc | Produto B: desc | ..."), útil só como fallback de
+  // busca — a tabela de itens (mdSection abaixo) já mostra os dados por
+  // linha, então repetir o texto corrido aqui só reintroduz a "parede de
+  // texto" que esta correção existe para eliminar.
+  const m1MultiItems = module === "M1" && Array.isArray(moduleData.items) && (moduleData.items as unknown[]).length > 0;
+
   const v1 = `
   ${sectionHead("V1", "#dbeafe", "#1d4ed8", "Requisição")}
   ${card(`
     <div style="font-size:14px;font-weight:700;margin-bottom:5px;">${f(req.title)}</div>
-    <div style="font-size:11.5px;color:#6b7280;margin-bottom:8px;">${f(req.description)}</div>
+    ${m1MultiItems ? "" : `<div style="font-size:11.5px;color:#6b7280;margin-bottom:8px;">${f(req.description)}</div>`}
     ${req.justification ? `<div style="background:#fff;border:1px solid #e5e7eb;border-radius:5px;padding:7px 10px;font-size:11px;margin-bottom:8px;"><strong>Justificativa:</strong> ${f(req.justification)}</div>` : ""}
     ${grid2(fld("Requisitante", f(req.requester_name)), fld("E-mail", f(req.requester_email)))}
     ${grid2(fld("Departamento", f(req.requester_department)), fld("Módulo", modLabel))}
@@ -102,15 +109,50 @@ export function buildHtml(d: BuildInput): string {
 
   let mdContent = "";
   if (module === "M1") {
-    mdContent += grid2(fld("Quantidade", f(moduleData.quantity)), fld("Local de Entrega", f(moduleData.delivery_location)));
-    if (moduleData.technical_specs) mdContent += fld("Especificações Técnicas", f(moduleData.technical_specs));
-    if (moduleData.brand_preference || moduleData.model_reference)
-      mdContent += grid2(fld("Marca Preferida", f(moduleData.brand_preference)), fld("Ref. Modelo", f(moduleData.model_reference)));
-    if (moduleData.online_purchase_suggestion)
-      mdContent += fld("Sugestão de Compra Online", f(moduleData.online_purchase_suggestion));
-    const rl = moduleData.reference_links as string[] | undefined;
-    if (rl?.length) mdContent += fld("Links de Referência", rl.join("<br/>"));
-    if (d.imageUrls.photo) mdContent += imgBox(d.imageUrls.photo, "Foto do Produto");
+    const items = (moduleData.items ?? []) as Array<Record<string, unknown>>;
+    if (items.length > 0) {
+      // Multi-itens: uma linha por produto — antes isso virava um parágrafo
+      // concatenado com "|" (req.description), ilegível para 20+ itens.
+      if (moduleData.delivery_location) mdContent += fld("Local de Entrega", f(moduleData.delivery_location));
+      const rows = items.map((it, i) => {
+        const details = [
+          it.technical_specs ? `Espec.: ${f(it.technical_specs)}` : "",
+          it.brand_preference ? `Marca: ${f(it.brand_preference)}` : "",
+          it.model_reference ? `Ref.: ${f(it.model_reference)}` : "",
+        ].filter(Boolean).join(" · ");
+        return `<tr style="background:${i % 2 === 0 ? "#ffffff" : "#f9fafb"};">
+          <td style="padding:5px 6px;border:1px solid #e5e7eb;font-size:10px;color:#6b7280;text-align:center;">${i + 1}</td>
+          <td style="padding:5px 6px;border:1px solid #e5e7eb;font-size:10px;font-family:monospace;">${f(it.product_code)}</td>
+          <td style="padding:5px 6px;border:1px solid #e5e7eb;font-size:10.5px;font-weight:600;">${f(it.product_name)}</td>
+          <td style="padding:5px 6px;border:1px solid #e5e7eb;font-size:10px;color:#374151;">${f(it.description)}${details ? `<br/><span style="color:#9ca3af;">${details}</span>` : ""}</td>
+          <td style="padding:5px 6px;border:1px solid #e5e7eb;font-size:10.5px;font-weight:600;text-align:right;">${f(it.quantity)}</td>
+        </tr>`;
+      }).join("");
+      mdContent += `<table style="width:100%;border-collapse:collapse;margin-top:6px;">
+        <thead><tr style="background:#f3f4f6;">
+          <th style="padding:5px 6px;border:1px solid #e5e7eb;font-size:9px;color:#6b7280;text-transform:uppercase;">#</th>
+          <th style="padding:5px 6px;border:1px solid #e5e7eb;font-size:9px;color:#6b7280;text-transform:uppercase;">Código</th>
+          <th style="padding:5px 6px;border:1px solid #e5e7eb;font-size:9px;color:#6b7280;text-transform:uppercase;text-align:left;">Produto</th>
+          <th style="padding:5px 6px;border:1px solid #e5e7eb;font-size:9px;color:#6b7280;text-transform:uppercase;text-align:left;">Descrição</th>
+          <th style="padding:5px 6px;border:1px solid #e5e7eb;font-size:9px;color:#6b7280;text-transform:uppercase;text-align:right;">Qtd.</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+      items.forEach((it, i) => {
+        const url = d.imageUrls[`item_${i}`];
+        if (url) mdContent += imgBox(url, `Foto — ${f(it.product_name)}`);
+      });
+    } else {
+      mdContent += grid2(fld("Quantidade", f(moduleData.quantity)), fld("Local de Entrega", f(moduleData.delivery_location)));
+      if (moduleData.technical_specs) mdContent += fld("Especificações Técnicas", f(moduleData.technical_specs));
+      if (moduleData.brand_preference || moduleData.model_reference)
+        mdContent += grid2(fld("Marca Preferida", f(moduleData.brand_preference)), fld("Ref. Modelo", f(moduleData.model_reference)));
+      if (moduleData.online_purchase_suggestion)
+        mdContent += fld("Sugestão de Compra Online", f(moduleData.online_purchase_suggestion));
+      const rl = moduleData.reference_links as string[] | undefined;
+      if (rl?.length) mdContent += fld("Links de Referência", rl.join("<br/>"));
+      if (d.imageUrls.photo) mdContent += imgBox(d.imageUrls.photo, "Foto do Produto");
+    }
   } else if (module === "M2") {
     const travelers = (moduleData.travelers ?? []) as Array<Record<string, unknown>>;
     if (travelers.length) {

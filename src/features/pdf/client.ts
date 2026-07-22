@@ -57,9 +57,20 @@ async function fetchRequisitionPdfData(ticketNumber: string): Promise<BuildInput
   const moduleData = (req.module_data ?? {}) as Record<string, unknown>;
   const imageUrls: Record<string, string> = {};
 
-  if (req.module === "M1" && moduleData.photo_path) {
-    const url = await signedImageUrl(String(moduleData.photo_path));
-    if (url) imageUrls.photo = url;
+  if (req.module === "M1") {
+    const items = (moduleData.items ?? []) as Array<Record<string, unknown>>;
+    if (items.length > 0) {
+      for (let i = 0; i < items.length; i++) {
+        const photoPath = items[i].photo_path as string | undefined;
+        if (photoPath) {
+          const url = await signedImageUrl(photoPath);
+          if (url) imageUrls[`item_${i}`] = url;
+        }
+      }
+    } else if (moduleData.photo_path) {
+      const url = await signedImageUrl(String(moduleData.photo_path));
+      if (url) imageUrls.photo = url;
+    }
   }
   if (req.module === "M5" && moduleData.cargo_photo_path) {
     const url = await signedImageUrl(String(moduleData.cargo_photo_path));

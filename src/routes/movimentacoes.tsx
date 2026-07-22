@@ -333,6 +333,68 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
   const rows: Array<{ label: string; value: string; full?: boolean }> = [];
 
   if (module === "M1") {
+    const items = Array.isArray(data.items) ? (data.items as Array<Record<string, unknown>>) : [];
+    if (items.length > 0) {
+      // Multi-itens: antes o resumo (req.description) concatenava tudo com
+      // "|" num parágrafo só — aqui cada produto vira uma linha da tabela.
+      return (
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-gray-100 text-gray-600 text-[9px] font-bold">
+              M
+            </span>
+            {MODULE_LABELS[module] ?? module} — {items.length} item{items.length !== 1 ? "ns" : ""}
+          </h3>
+          {data.delivery_location != null && data.delivery_location !== "" && (
+            <p className="text-[11px] text-muted-foreground">
+              Local de Entrega: <span className="font-medium text-foreground">{f(data.delivery_location)}</span>
+            </p>
+          )}
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/40">
+                      <th className="text-left p-2 font-medium text-muted-foreground w-8">#</th>
+                      <th className="text-left p-2 font-medium text-muted-foreground">Código</th>
+                      <th className="text-left p-2 font-medium text-muted-foreground">Produto</th>
+                      <th className="text-left p-2 font-medium text-muted-foreground">Descrição</th>
+                      <th className="text-right p-2 font-medium text-muted-foreground">Qtd.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((it, i) => {
+                      const details = [
+                        it.technical_specs ? `Espec.: ${f(it.technical_specs)}` : null,
+                        it.brand_preference ? `Marca: ${f(it.brand_preference)}` : null,
+                        it.model_reference ? `Ref.: ${f(it.model_reference)}` : null,
+                      ].filter(Boolean).join(" · ");
+                      return (
+                        <tr key={i} className={`border-b border-border last:border-0 ${i % 2 === 1 ? "bg-muted/20" : ""}`}>
+                          <td className="p-2 text-muted-foreground align-top">{i + 1}</td>
+                          <td className="p-2 font-mono text-foreground align-top">{f(it.product_code)}</td>
+                          <td className="p-2 font-medium text-foreground align-top">{f(it.product_name)}</td>
+                          <td className="p-2 text-foreground align-top">
+                            {f(it.description)}
+                            {details && <p className="text-[10px] text-muted-foreground mt-0.5">{details}</p>}
+                            {typeof it.photo_path === "string" && it.photo_path && (
+                              <StoragePhoto path={it.photo_path} alt={`Foto — ${f(it.product_name)}`} />
+                            )}
+                          </td>
+                          <td className="p-2 text-right font-semibold text-foreground align-top">{f(it.quantity)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     if (data.quantity) rows.push({ label: "Quantidade", value: f(data.quantity) });
     if (data.delivery_location)
       rows.push({ label: "Local de Entrega", value: f(data.delivery_location) });
@@ -1547,7 +1609,9 @@ function MovimentacoesPage() {
                   <Card>
                     <CardContent className="p-4 space-y-2">
                       <p className="text-sm font-semibold text-foreground">{liveDetail.title}</p>
-                      <p className="text-xs text-muted-foreground">{liveDetail.description}</p>
+                      {!(liveDetail.module === "M1" && Array.isArray((liveDetail.module_data as Record<string, unknown> | null)?.items) && ((liveDetail.module_data as Record<string, unknown>).items as unknown[]).length > 0) && (
+                        <p className="text-xs text-muted-foreground">{liveDetail.description}</p>
+                      )}
                       {liveDetail.justification && (
                         <p className="text-xs bg-muted/50 rounded px-2 py-1 text-muted-foreground">
                           <span className="font-medium text-foreground">Justificativa:</span>{" "}
