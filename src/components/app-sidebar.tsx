@@ -33,6 +33,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/features/auth/auth-context";
 import { toast } from "sonner";
+import { BUILD_TIME } from "@/lib/build-info.generated";
+import { formatBuildTimeShort } from "@/lib/version-check";
 
 const modules = [
   { title: "M1 - Produtos", url: "/products", icon: Package },
@@ -188,6 +190,11 @@ export function AppSidebar() {
               Sair
             </Button>
           </div>
+        )}
+        {!collapsed && formatBuildTimeShort(BUILD_TIME) && (
+          <p className="text-center text-[10px] text-sidebar-foreground/40 pt-2">
+            Última atualização: {formatBuildTimeShort(BUILD_TIME)}
+          </p>
         )}
       </SidebarFooter>
     </Sidebar>
