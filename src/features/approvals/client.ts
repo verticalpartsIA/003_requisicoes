@@ -69,23 +69,41 @@ export async function listPendingApprovalsClient() {
     suppliersByQuotation.set(supplier.quotation_id, current);
   });
 
-  // Fetch approval_items for M2 approvals
-  const m2ApprovalIds = filteredApprovals
-    .filter((a) => (requisitionById.get(a.requisition_id))?.module === "M2")
+  // Aprovações por item: nasceu no M2 (voo/hotel/carro), estendido ao M1
+  // multi-itens ('produto') para permitir cortar itens individualmente.
+  const itemApprovalIds = filteredApprovals
+    .filter((a) => {
+      const mod = requisitionById.get(a.requisition_id)?.module;
+      return mod === "M2" || mod === "M1";
+    })
     .map((a) => a.id);
 
   const travelItemsByApproval = new Map<string, ApprovalTravelItem[]>();
-  if (m2ApprovalIds.length > 0) {
+  if (itemApprovalIds.length > 0) {
     const { data: approvalItemRows } = await supabaseBrowser
       .from("approval_items")
       .select("id,approval_id,item_id,item_type,supplier_name,price,decision,notes")
-      .in("approval_id", m2ApprovalIds);
+      .in("approval_id", itemApprovalIds);
+
+    const requisitionItemIds = (approvalItemRows || []).map((row) => row.item_id);
+    const requisitionItemById = new Map<string, { product_code: string | null; description: string | null; quantity: number | null }>();
+    if (requisitionItemIds.length > 0) {
+      const { data: requisitionItemRows } = await supabaseBrowser
+        .from("requisition_items")
+        .select("id,product_code,description,quantity")
+        .in("id", requisitionItemIds);
+      (requisitionItemRows || []).forEach((row) => requisitionItemById.set(row.id, row));
+    }
 
     (approvalItemRows || []).forEach((row) => {
+      const requisitionItem = requisitionItemById.get(row.item_id);
       const item: ApprovalTravelItem = {
         approvalItemId: row.id,
         itemId: row.item_id,
         itemType: row.item_type as ApprovalTravelItem["itemType"],
+        productCode: requisitionItem?.product_code ?? null,
+        quantity: requisitionItem?.quantity ?? null,
+        description: requisitionItem?.description ?? null,
         supplierName: row.supplier_name || "",
         price: row.price || 0,
         decision: row.decision as ApprovalTravelItem["decision"],
@@ -103,7 +121,7 @@ export async function listPendingApprovalsClient() {
       if (!requisition) return null;
       const quotation = quotationByRequisition.get(requisition.id);
       const approvalSuppliers = quotation ? suppliersByQuotation.get(quotation.id) || [] : [];
-      const isM2 = requisition.module === "M2";
+      const hasItemApprovals = requisition.module === "M2" || requisition.module === "M1";
 
       return {
         requisitionId: requisition.id,
@@ -126,7 +144,9 @@ export async function listPendingApprovalsClient() {
           isWinner: supplier.is_winner,
         })),
         createdAt: new Date(requisition.created_at).toLocaleDateString("pt-BR"),
-        travelItems: isM2 ? (travelItemsByApproval.get(approval.id) || []) : undefined,
+        travelItems: hasItemApprovals && (travelItemsByApproval.get(approval.id) || []).length > 0
+          ? travelItemsByApproval.get(approval.id)
+          : undefined,
       };
     })
     .filter(Boolean) as ApprovalRequestItem[];

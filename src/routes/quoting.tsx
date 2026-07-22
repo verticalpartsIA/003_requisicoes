@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { FileSearch, Plus, Trash2, Trophy, DollarSign, Clock, Scale, CheckCircle2, ArrowRight, Plane, Hotel, Car } from "lucide-react";
+import { FileSearch, Plus, Trash2, Trophy, DollarSign, Clock, Scale, CheckCircle2, ArrowRight, Plane, Hotel, Car, Package, CopyPlus } from "lucide-react";
 import { useState } from "react";
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,6 +33,7 @@ import {
   saveQuotationProposalsClient,
   saveQuotationSuppliersClient,
   saveM2QuoteClient,
+  saveM1ItemQuotesClient,
   type M2ItemQuote,
 } from "@/features/quotations/client";
 import { useAuth } from "@/features/auth/auth-context";
@@ -125,7 +126,9 @@ function QuotingPage() {
   }, [session]);
 
   const openQuotation = (item: QuotationQueueItem) => {
-    if (item.module === "M2") {
+    // M2 (voo/hotel/carro) e M1 multi-itens (2+ produtos) cotam por item —
+    // cada um com seu próprio fornecedor, permitindo fracionar entre vários.
+    if (item.module === "M2" || (item.travelItems && item.travelItems.length > 0)) {
       // Inicializa campos com dados já salvos, se houver
       const initial: Record<string, Omit<M2ItemQuote, "itemId" | "itemType">> = {};
       (item.travelItems || []).forEach((ti) => {
@@ -285,12 +288,37 @@ function QuotingPage() {
     }
   };
 
+  const isM1Fractioned = m2Item?.module !== "M2";
+
+  const itemLabel = (ti: TravelItem) =>
+    ti.itemType === "produto"
+      ? ti.description || ti.productCode || "Item"
+      : travelItemLabels[ti.itemType]?.label ?? ti.itemType;
+
+  // Copia o fornecedor/valor de um item para todos os demais ainda sem
+  // fornecedor definido — atalho para quando o mesmo fornecedor cobre
+  // vários produtos, sem impedir que os demais sejam fracionados depois.
+  const applySupplierToAll = (sourceId: string) => {
+    const source = m2Quotes[sourceId];
+    if (!source?.supplierName?.trim()) return;
+    const travelItems = m2Item?.travelItems || [];
+    setM2Quotes((prev) => {
+      const next = { ...prev };
+      travelItems.forEach((ti) => {
+        if (ti.id === sourceId) return;
+        if (next[ti.id]?.supplierName?.trim()) return;
+        next[ti.id] = { ...source };
+      });
+      return next;
+    });
+  };
+
   const handleM2Submit = async () => {
     if (!m2Item) return;
 
     const travelItems = m2Item.travelItems || [];
     if (travelItems.length === 0) {
-      toast.error("Nenhum item de viagem encontrado para esta requisição.");
+      toast.error("Nenhum item encontrado para esta requisição.");
       return;
     }
 
@@ -298,11 +326,11 @@ function QuotingPage() {
     for (const ti of travelItems) {
       const q = m2Quotes[ti.id];
       if (!q?.supplierName?.trim()) {
-        toast.error(`Informe o fornecedor para: ${travelItemLabels[ti.itemType]?.label ?? ti.itemType}`);
+        toast.error(`Informe o fornecedor para: ${itemLabel(ti)}`);
         return;
       }
       if (!q.price || q.price <= 0) {
-        toast.error(`Informe o valor para: ${travelItemLabels[ti.itemType]?.label ?? ti.itemType}`);
+        toast.error(`Informe o valor para: ${itemLabel(ti)}`);
         return;
       }
     }
@@ -318,21 +346,29 @@ function QuotingPage() {
         notes: m2Quotes[ti.id]?.notes || "",
       }));
 
-      await saveM2QuoteClient(m2Item.requisitionId, itemQuotes);
-      toast.success("Cotação de viagem finalizada e enviada para aprovação.");
+      if (isM1Fractioned) {
+        await saveM1ItemQuotesClient(m2Item.requisitionId, itemQuotes);
+      } else {
+        await saveM2QuoteClient(m2Item.requisitionId, itemQuotes);
+      }
+      toast.success(
+        isM1Fractioned
+          ? "Cotação fracionada finalizada e enviada para aprovação."
+          : "Cotação de viagem finalizada e enviada para aprovação.",
+      );
       void notifyVpClickClient({
         stage: "V2",
         requisitionId: m2Item.requisitionId,
         ticketNumber: m2Item.ticketNumber,
         title: m2Item.title,
-        module: "M2",
+        module: m2Item.module,
         requesterName: "",
       }).catch(console.warn);
       closeM2Dialog();
       setQueue(await listQuotationQueueClient());
       await router.invalidate();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível finalizar a cotação de viagem.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível finalizar a cotação.");
     } finally {
       setIsM2Saving(false);
     }
@@ -605,8 +641,8 @@ function QuotingPage() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-lg flex items-center gap-2">
-              <Plane className="h-5 w-5 text-vp-yellow-dark" />
-              Cotação de Viagem — {m2Item?.ticketNumber}
+              {isM1Fractioned ? <Package className="h-5 w-5 text-vp-yellow-dark" /> : <Plane className="h-5 w-5 text-vp-yellow-dark" />}
+              {isM1Fractioned ? "Cotação Fracionada" : "Cotação de Viagem"} — {m2Item?.ticketNumber}
             </DialogTitle>
             <DialogDescription>{m2Item?.title}</DialogDescription>
           </DialogHeader>
@@ -619,15 +655,80 @@ function QuotingPage() {
           )}
 
           <p className="text-sm text-muted-foreground">
-            Atribua um fornecedor para cada item de viagem abaixo.
+            {isM1Fractioned
+              ? "Atribua um fornecedor e valor para cada produto. Você pode usar fornecedores diferentes por item para fracionar a compra."
+              : "Atribua um fornecedor para cada item de viagem abaixo."}
           </p>
 
-          <div className="space-y-4">
+          <div className={isM1Fractioned ? "space-y-2" : "space-y-4"}>
             {(m2Item?.travelItems || []).map((ti) => {
               const cfg = travelItemLabels[ti.itemType] ?? { label: ti.itemType, icon: null };
               const q = m2Quotes[ti.id] ?? { supplierName: "", price: 0, deadline: "", notes: "" };
               const update = (field: string, value: string | number) =>
                 setM2Quotes((prev) => ({ ...prev, [ti.id]: { ...prev[ti.id], [field]: value } }));
+
+              if (isM1Fractioned) {
+                return (
+                  <div key={ti.id} className="rounded-lg border border-border p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-xs">
+                        {ti.productCode && (
+                          <span className="font-mono text-muted-foreground mr-1">[{ti.productCode}]</span>
+                        )}
+                        <span className="font-semibold text-foreground">{ti.description || "Item"}</span>
+                        {ti.quantity != null && (
+                          <span className="text-muted-foreground"> — qtd. {ti.quantity}</span>
+                        )}
+                      </div>
+                      {q.supplierName?.trim() && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-[10px] text-muted-foreground shrink-0"
+                          title="Aplicar este fornecedor aos itens ainda sem fornecedor"
+                          onClick={() => applySupplierToAll(ti.id)}
+                        >
+                          <CopyPlus className="h-3 w-3 mr-1" />
+                          Aplicar a todos
+                        </Button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Fornecedor *</Label>
+                        <Input
+                          className="h-8 text-sm"
+                          placeholder="Fornecedor"
+                          value={q.supplierName}
+                          onChange={(e) => update("supplierName", e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Valor (R$) *</Label>
+                        <Input
+                          className="h-8 text-sm"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="0,00"
+                          value={q.price || ""}
+                          onChange={(e) => update("price", parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Prazo</Label>
+                        <Input
+                          className="h-8 text-sm"
+                          type="date"
+                          value={q.deadline}
+                          onChange={(e) => update("deadline", e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
 
               return (
                 <Card key={ti.id} className="border border-border">
@@ -681,10 +782,19 @@ function QuotingPage() {
 
             {(m2Item?.travelItems || []).length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-4">
-                Nenhum item de viagem encontrado. A requisição pode ter sido criada antes desta funcionalidade.
+                Nenhum item encontrado. A requisição pode ter sido criada antes desta funcionalidade.
               </p>
             )}
           </div>
+
+          {isM1Fractioned && (m2Item?.travelItems?.length ?? 0) > 0 && (
+            <div className="rounded-lg bg-accent/50 p-3 text-xs text-muted-foreground">
+              Fornecedores distintos nesta cotação:{" "}
+              <strong className="text-foreground">
+                {new Set(Object.values(m2Quotes).map((q) => q.supplierName?.trim()).filter(Boolean)).size || 0}
+              </strong>
+            </div>
+          )}
 
           <div className="rounded-lg bg-accent/50 p-3 text-xs text-muted-foreground">
             Valor total estimado:{" "}
@@ -701,7 +811,7 @@ function QuotingPage() {
               onClick={handleM2Submit}
             >
               <CheckCircle2 className="h-4 w-4 mr-1" />
-              {isM2Saving ? "Salvando..." : "Finalizar Cotação de Viagem"}
+              {isM2Saving ? "Salvando..." : isM1Fractioned ? "Finalizar Cotação Fracionada" : "Finalizar Cotação de Viagem"}
             </Button>
           </DialogFooter>
         </DialogContent>

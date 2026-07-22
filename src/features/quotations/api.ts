@@ -36,12 +36,17 @@ interface SupplierRow {
   is_winner: boolean;
 }
 
+/** Item cotável individualmente. Nasceu no M2 (voo/hotel/carro) e foi
+ *  estendido ao M1 multi-itens ('produto') — cada produto pode ter seu
+ *  próprio fornecedor/preço, permitindo fracionar a cotação. */
 export interface TravelItem {
   id: string;
-  itemType: 'voo' | 'hotel' | 'carro';
+  itemType: 'voo' | 'hotel' | 'carro' | 'produto';
   description: string | null;
   status: string;
   sortOrder: number;
+  productCode?: string | null;
+  quantity?: number | null;
   supplierId?: string;
   supplierName?: string;
   supplierPrice?: string;

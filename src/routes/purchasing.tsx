@@ -160,23 +160,17 @@ function PurchasingPage() {
     if (!selected) return;
     setDialogError(null);
 
-    // Para M2 usa os itens aprovados como referência de fornecedor/valor
-    const isM2 = selected.moduleCode === "M2";
+    // Compras por item (M2 viagem, M1 fracionado) usam os itens aprovados
+    // como referência de fornecedor/valor, em vez de um único vencedor.
     const approvedItems = selected.approvedTravelItems || [];
+    const hasApprovedItems = approvedItems.length > 0;
 
     // ── Validações antes de chamar o backend ──────────────────────────
-    const winner = isM2 ? null : selected.suppliers.find((supplier) => supplier.isWinner);
-    if (!isM2 && !winner) {
+    const winner = hasApprovedItems ? null : selected.suppliers.find((supplier) => supplier.isWinner);
+    if (!hasApprovedItems && !winner) {
       setDialogError({
         message: "Nenhum fornecedor vencedor definido nesta cotação.",
         action: "Volte à etapa V2 — Cotação, abra este ticket e marque o fornecedor vencedor antes de finalizar a compra.",
-      });
-      return;
-    }
-    if (isM2 && approvedItems.length === 0) {
-      setDialogError({
-        message: "Nenhum item de viagem aprovado encontrado.",
-        action: "Verifique a etapa V3 — Aprovação para garantir que ao menos um item foi aprovado.",
       });
       return;
     }
@@ -197,11 +191,11 @@ function PurchasingPage() {
       return;
     }
 
-    // Consolida supplier/price para M2
-    const supplierNameFinal = isM2
-      ? approvedItems.map((i) => i.supplierName).filter(Boolean).join(", ")
+    // Consolida supplier/price quando a compra foi fracionada por item
+    const supplierNameFinal = hasApprovedItems
+      ? Array.from(new Set(approvedItems.map((i) => i.supplierName).filter(Boolean))).join(", ")
       : winner!.name;
-    const supplierPriceFinal = isM2
+    const supplierPriceFinal = hasApprovedItems
       ? approvedItems.reduce((sum, i) => sum + i.price, 0)
       : winner!.price;
 
@@ -298,8 +292,8 @@ function PurchasingPage() {
         <div className="space-y-3">
           <p className="text-sm font-semibold text-foreground">Compras Pendentes</p>
           {pending.map((item) => {
-            const isM2Item = item.moduleCode === "M2";
-            const winner = isM2Item ? null : item.suppliers.find((s) => s.isWinner);
+            const hasApprovedItems = (item.approvedTravelItems || []).length > 0;
+            const winner = hasApprovedItems ? null : item.suppliers.find((s) => s.isWinner);
             const cat = categoryConfig[item.category];
 
             return (
@@ -328,9 +322,9 @@ function PurchasingPage() {
                     </div>
                   </div>
                   <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                    {isM2Item ? (
+                    {hasApprovedItems ? (
                       <>
-                        <Plane className="h-3.5 w-3.5 text-vp-yellow-dark" />
+                        {item.moduleCode === "M1" ? <Package className="h-3.5 w-3.5 text-vp-yellow-dark" /> : <Plane className="h-3.5 w-3.5 text-vp-yellow-dark" />}
                         <span className="font-medium text-foreground">
                           {(item.approvedTravelItems || []).length} item(s) aprovado(s)
                         </span>
@@ -358,9 +352,9 @@ function PurchasingPage() {
       <Dialog open={!!selected} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           {selected && (() => {
-            const isM2 = selected.moduleCode === "M2";
             const approvedItems = selected.approvedTravelItems || [];
-            const winner = isM2 ? null : selected.suppliers.find((s) => s.isWinner);
+            const hasApprovedItems = approvedItems.length > 0;
+            const winner = hasApprovedItems ? null : selected.suppliers.find((s) => s.isWinner);
             const cat = categoryConfig[selected.category];
 
             return (
@@ -393,7 +387,7 @@ function PurchasingPage() {
                   </CardContent>
                 </Card>
 
-                {!isM2 && (
+                {!hasApprovedItems && (
                   <div className="flex items-center gap-2 rounded-lg bg-accent/50 p-3">
                     {winCriteriaIcon[selected.winCriteria]}
                     <span className="text-sm font-semibold text-foreground">
@@ -402,34 +396,44 @@ function PurchasingPage() {
                   </div>
                 )}
 
-                {isM2 ? (
+                {hasApprovedItems ? (
                   <div className="space-y-3">
                     <p className="text-sm font-semibold text-foreground">
-                      Itens de Viagem Aprovados ({approvedItems.length})
+                      {selected.moduleCode === "M1" ? "Itens Aprovados" : "Itens de Viagem Aprovados"} ({approvedItems.length})
                     </p>
                     {approvedItems.map((item, i) => {
                       const travelIcon =
                         item.itemType === "voo" ? <Plane className="h-4 w-4" />
                         : item.itemType === "hotel" ? <Hotel className="h-4 w-4" />
-                        : <Car className="h-4 w-4" />;
+                        : item.itemType === "carro" ? <Car className="h-4 w-4" />
+                        : <Package className="h-4 w-4" />;
                       const travelLabel =
                         item.itemType === "voo" ? "Passagem Aérea"
                         : item.itemType === "hotel" ? "Hospedagem"
-                        : "Locação de Carro";
+                        : item.itemType === "carro" ? "Locação de Carro"
+                        : item.description || "Produto";
                       return (
                         <Card key={i} className="border border-green-300 bg-green-50/30">
                           <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
                                 {travelIcon}
-                                <span className="text-sm font-semibold text-foreground">{travelLabel}</span>
+                                <span className="text-sm font-semibold text-foreground">
+                                  {travelLabel}
+                                  {item.itemType === "produto" && item.quantity != null && (
+                                    <span className="text-muted-foreground font-normal"> — qtd. {item.quantity}</span>
+                                  )}
+                                </span>
                                 <Badge className="bg-green-100 text-green-700 border-green-300 text-[10px]">Aprovado</Badge>
                               </div>
                               <span className="font-mono text-sm font-bold text-foreground">
                                 R$ {item.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                               </span>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">{item.supplierName}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {item.itemType === "produto" && item.productCode ? `[${item.productCode}] ` : ""}
+                              {item.supplierName}
+                            </p>
                           </CardContent>
                         </Card>
                       );

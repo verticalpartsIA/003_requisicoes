@@ -12,6 +12,7 @@ import {
   Plane,
   Hotel,
   Car,
+  Package,
   UserCheck,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -79,6 +80,7 @@ const travelItemConfig: Record<string, { label: string; icon: React.ReactNode }>
   voo: { label: "Passagem Aérea", icon: <Plane className="h-4 w-4" /> },
   hotel: { label: "Hospedagem", icon: <Hotel className="h-4 w-4" /> },
   carro: { label: "Locação de Carro", icon: <Car className="h-4 w-4" /> },
+  produto: { label: "Produto", icon: <Package className="h-4 w-4" /> },
 };
 
 // ─── Seção Gestor ──────────────────────────────────────────────────────────────
@@ -308,7 +310,7 @@ function ApprovalPage() {
   const openApproval = (request: ApprovalRequestItem) => {
     setSelected(request);
     setJustification("");
-    if (request.moduleCode === "M2" && request.travelItems) {
+    if (request.travelItems && request.travelItems.length > 0) {
       const initial: Record<string, "approved" | "rejected"> = {};
       request.travelItems.forEach((ti) => {
         if (ti.decision === "approved" || ti.decision === "rejected") {
@@ -438,9 +440,9 @@ function ApprovalPage() {
     }
   };
 
-  const isM2 = selected?.moduleCode === "M2";
+  const hasItemDecisions = (selected?.travelItems || []).length > 0;
   const m2AllDecided =
-    isM2 &&
+    hasItemDecisions &&
     (selected?.travelItems || []).every((ti) => m2Decisions[ti.approvalItemId] !== undefined);
 
   if (!deptsLoaded) {
@@ -546,6 +548,22 @@ function ApprovalPage() {
                             })}
                           </span>
                         </>
+                      ) : request.moduleCode === "M1" && (request.travelItems || []).length > 0 ? (
+                        <>
+                          <Package className="h-3.5 w-3.5 text-vp-yellow-dark" />
+                          <span className="font-medium text-foreground">
+                            {(request.travelItems || []).length} item(s) — {
+                              new Set((request.travelItems || []).map((ti) => ti.supplierName)).size
+                            } fornecedor(es)
+                          </span>
+                          <span>•</span>
+                          <span>
+                            R${" "}
+                            {request.totalValue.toLocaleString("pt-BR", {
+                              minimumFractionDigits: 2,
+                            })}
+                          </span>
+                        </>
                       ) : (
                         <>
                           <Trophy className="h-3.5 w-3.5 text-vp-yellow-dark" />
@@ -602,17 +620,20 @@ function ApprovalPage() {
                     </CardContent>
                   </Card>
 
-                  {/* M2 — per-item approval UI */}
-                  {isM2 && (selected.travelItems || []).length > 0 ? (
+                  {/* Aprovação por item — M2 (viagem) e M1 multi-itens (produtos) */}
+                  {hasItemDecisions ? (
                     <div className="space-y-3">
                       <p className="text-sm font-semibold text-foreground">
-                        Itens de Viagem — decida cada item individualmente
+                        {selected.moduleCode === "M1"
+                          ? "Itens do Pedido — decida cada item individualmente"
+                          : "Itens de Viagem — decida cada item individualmente"}
                       </p>
                       {(selected.travelItems || []).map((ti: ApprovalTravelItem) => {
                         const cfg = travelItemConfig[ti.itemType] ?? {
                           label: ti.itemType,
                           icon: null,
                         };
+                        const label = ti.itemType === "produto" ? (ti.description || cfg.label) : cfg.label;
                         const decision = m2Decisions[ti.approvalItemId];
                         return (
                           <Card
@@ -630,7 +651,10 @@ function ApprovalPage() {
                                 <div className="flex items-center gap-2">
                                   {cfg.icon}
                                   <span className="text-sm font-semibold text-foreground">
-                                    {cfg.label}
+                                    {label}
+                                    {ti.itemType === "produto" && ti.quantity != null && (
+                                      <span className="text-muted-foreground font-normal"> — qtd. {ti.quantity}</span>
+                                    )}
                                   </span>
                                 </div>
                                 <span className="font-mono text-sm font-bold text-foreground">
@@ -639,6 +663,7 @@ function ApprovalPage() {
                                 </span>
                               </div>
                               <p className="text-xs text-muted-foreground mt-1">
+                                {ti.itemType === "produto" && ti.productCode ? `[${ti.productCode}] ` : ""}
                                 {ti.supplierName}
                               </p>
                               <div className="flex gap-2 mt-3">

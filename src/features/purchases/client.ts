@@ -64,24 +64,41 @@ export async function listPendingPurchasesClient() {
     suppliersByQuotation.set(supplier.quotation_id, current);
   });
 
-  // Fetch approved approval_items for M2 approvals
-  const m2ApprovalIds = approvals
-    .filter((a) => (requisitionById.get(a.requisition_id))?.module === "M2")
+  // Itens aprovados por item — M2 (viagem) e M1 multi-itens (produto)
+  const itemApprovalIds = approvals
+    .filter((a) => {
+      const mod = requisitionById.get(a.requisition_id)?.module;
+      return mod === "M2" || mod === "M1";
+    })
     .map((a) => a.id);
 
   const approvedTravelItemsByApproval = new Map<string, PurchaseTravelItem[]>();
-  if (m2ApprovalIds.length > 0) {
+  if (itemApprovalIds.length > 0) {
     const { data: approvalItemRows } = await supabaseBrowser
       .from("approval_items")
       .select("id,approval_id,item_id,item_type,supplier_name,price")
-      .in("approval_id", m2ApprovalIds)
+      .in("approval_id", itemApprovalIds)
       .eq("decision", "approved");
 
+    const requisitionItemIds = (approvalItemRows || []).map((row) => row.item_id);
+    const requisitionItemById = new Map<string, { product_code: string | null; description: string | null; quantity: number | null }>();
+    if (requisitionItemIds.length > 0) {
+      const { data: requisitionItemRows } = await supabaseBrowser
+        .from("requisition_items")
+        .select("id,product_code,description,quantity")
+        .in("id", requisitionItemIds);
+      (requisitionItemRows || []).forEach((row) => requisitionItemById.set(row.id, row));
+    }
+
     (approvalItemRows || []).forEach((row) => {
+      const requisitionItem = requisitionItemById.get(row.item_id);
       const item: PurchaseTravelItem = {
         approvalItemId: row.id,
         itemId: row.item_id,
         itemType: row.item_type as PurchaseTravelItem["itemType"],
+        productCode: requisitionItem?.product_code ?? null,
+        quantity: requisitionItem?.quantity ?? null,
+        description: requisitionItem?.description ?? null,
         supplierName: row.supplier_name || "",
         price: row.price || 0,
       };
@@ -97,7 +114,7 @@ export async function listPendingPurchasesClient() {
       if (!requisition) return null;
       const quotation = quotationByRequisition.get(requisition.id);
       const quotationSuppliers = quotation ? suppliersByQuotation.get(quotation.id) || [] : [];
-      const isM2 = requisition.module === "M2";
+      const hasItemApprovals = requisition.module === "M2" || requisition.module === "M1";
 
       return {
         requisitionId: requisition.id,
@@ -124,7 +141,9 @@ export async function listPendingPurchasesClient() {
           isWinner: supplier.is_winner,
         })),
         status: "pendente" as const,
-        approvedTravelItems: isM2 ? (approvedTravelItemsByApproval.get(approval.id) || []) : undefined,
+        approvedTravelItems: hasItemApprovals && (approvedTravelItemsByApproval.get(approval.id) || []).length > 0
+          ? approvedTravelItemsByApproval.get(approval.id)
+          : undefined,
       };
     })
     .filter(Boolean) as PurchaseItem[];

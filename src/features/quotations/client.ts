@@ -66,21 +66,28 @@ export async function listQuotationQueueClient() {
     suppliersByQuotation.set(supplier.quotation_id, current);
   });
 
-  // Fetch travel items for M2 requisitions (auto-create from module_data if missing)
+  // Itens cotáveis individualmente: M2 (voo/hotel/carro) e M1 multi-itens
+  // ('produto' — cada produto do formulário vira um item com fornecedor
+  // próprio, permitindo fracionar a cotação entre vários fornecedores).
   const m2Requisitions = requisitions.filter((r) => r.module === "M2");
-  const m2RequisitionIds = m2Requisitions.map((r) => r.id);
+  const m1MultiItens = (r: (typeof requisitions)[number]) => {
+    const md = (r.module_data as Record<string, unknown> | null) ?? {};
+    return Array.isArray(md.items) && md.items.length >= 2 ? (md.items as Record<string, unknown>[]) : null;
+  };
+  const m1Requisitions = requisitions.filter((r) => r.module === "M1" && m1MultiItens(r));
+  const itemRequisitionIds = [...m2Requisitions, ...m1Requisitions].map((r) => r.id);
   const travelItemsByRequisition = new Map<string, TravelItem[]>();
 
-  if (m2RequisitionIds.length > 0) {
+  if (itemRequisitionIds.length > 0) {
     const { data: fetchedItems } = await supabaseBrowser
       .from("requisition_items")
-      .select("id,requisition_id,item_type,description,status,sort_order")
-      .in("requisition_id", m2RequisitionIds)
+      .select("id,requisition_id,item_type,description,status,sort_order,product_code,quantity")
+      .in("requisition_id", itemRequisitionIds)
       .order("sort_order", { ascending: true });
 
     const travelItemRows = [...(fetchedItems || [])];
 
-    // Auto-heal: cria itens que ainda não existem, comparando tipo a tipo
+    // Auto-heal M2: cria itens que ainda não existem, comparando tipo a tipo
     for (const req of m2Requisitions) {
       const md = (req.module_data as Record<string, unknown> | null) ?? {};
       const existingTypes = new Set(
@@ -98,40 +105,94 @@ export async function listQuotationQueueClient() {
       const { data: inserted } = await supabaseBrowser
         .from("requisition_items")
         .insert(toInsert)
-        .select("id,requisition_id,item_type,description,status,sort_order");
+        .select("id,requisition_id,item_type,description,status,sort_order,product_code,quantity");
       if (inserted) travelItemRows.push(...inserted);
     }
 
-    // Also fetch quotation_suppliers with item_id for M2
-    const m2QuotationIds = (quotations || [])
-      .filter((q) => m2RequisitionIds.includes(q.requisition_id))
+    // Sync M1: espelha module_data.items em requisition_items. Insere os que
+    // faltam e remove os PENDENTES que saíram da lista (ex.: gestor removeu
+    // um item na 2ª edição) — itens já cotados/aprovados nunca são apagados.
+    for (const req of m1Requisitions) {
+      const mdItems = m1MultiItens(req)!;
+      const keyOf = (code: unknown, desc: unknown, idx: number) =>
+        `${String(code ?? "").trim() || `#${idx}`}::${String(desc ?? "").trim()}`;
+      const expected = mdItems.map((it, idx) => ({
+        key: keyOf(it.product_code, it.product_name, idx),
+        product_code: (it.product_code as string | null) ?? null,
+        description: (it.product_name as string | null) ?? null,
+        quantity: typeof it.quantity === "number" ? it.quantity : Number(it.quantity) || 1,
+        sort_order: idx,
+      }));
+      const existingRows = travelItemRows.filter(
+        (r) => r.requisition_id === req.id && r.item_type === "produto",
+      );
+      const existingKeys = new Set(
+        existingRows.map((r, idx) => keyOf(r.product_code, r.description, idx)),
+      );
+      const expectedKeys = new Set(expected.map((e) => e.key));
+
+      const toInsert = expected
+        .filter((e) => !existingKeys.has(e.key))
+        .map((e) => ({
+          requisition_id: req.id,
+          item_type: "produto",
+          description: e.description,
+          product_code: e.product_code,
+          quantity: e.quantity,
+          sort_order: e.sort_order,
+        }));
+      if (toInsert.length > 0) {
+        const { data: inserted } = await supabaseBrowser
+          .from("requisition_items")
+          .insert(toInsert)
+          .select("id,requisition_id,item_type,description,status,sort_order,product_code,quantity");
+        if (inserted) travelItemRows.push(...inserted);
+      }
+
+      const staleIds = existingRows
+        .filter((r, idx) => r.status === "pending" && !expectedKeys.has(keyOf(r.product_code, r.description, idx)))
+        .map((r) => r.id);
+      if (staleIds.length > 0) {
+        await supabaseBrowser.from("requisition_items").delete().in("id", staleIds);
+        for (const id of staleIds) {
+          const pos = travelItemRows.findIndex((r) => r.id === id);
+          if (pos >= 0) travelItemRows.splice(pos, 1);
+        }
+      }
+    }
+
+    // Also fetch quotation_suppliers with item_id
+    const itemQuotationIds = (quotations || [])
+      .filter((q) => itemRequisitionIds.includes(q.requisition_id))
       .map((q) => q.id);
 
-    const m2SuppliersByItem = new Map<
+    const itemSuppliersByItem = new Map<
       string,
       (typeof suppliers extends Array<infer T> ? T : never) & { item_id: string | null }
     >();
-    if (m2QuotationIds.length > 0) {
-      const { data: m2Suppliers } = await supabaseBrowser
+    if (itemQuotationIds.length > 0) {
+      const { data: itemSuppliers } = await supabaseBrowser
         .from("quotation_suppliers")
         .select(
           "id,quotation_id,supplier_name,price,deadline,notes,proposal_received,item_id,is_winner",
         )
-        .in("quotation_id", m2QuotationIds);
+        .in("quotation_id", itemQuotationIds);
 
-      (m2Suppliers || []).forEach((s) => {
-        if (s.item_id) m2SuppliersByItem.set(s.item_id, s as typeof s & { item_id: string });
+      (itemSuppliers || []).forEach((s) => {
+        if (s.item_id) itemSuppliersByItem.set(s.item_id, s as typeof s & { item_id: string });
       });
     }
 
     (travelItemRows || []).forEach((row) => {
-      const sup = m2SuppliersByItem.get(row.id);
+      const sup = itemSuppliersByItem.get(row.id);
       const item: TravelItem = {
         id: row.id,
         itemType: row.item_type as TravelItem["itemType"],
         description: row.description,
         status: row.status,
         sortOrder: row.sort_order,
+        productCode: row.product_code ?? null,
+        quantity: row.quantity ?? null,
         supplierId: sup?.id,
         supplierName: sup?.supplier_name,
         supplierPrice: sup?.price?.toString(),
@@ -142,6 +203,9 @@ export async function listQuotationQueueClient() {
       current.push(item);
       travelItemsByRequisition.set(row.requisition_id, current);
     });
+    for (const list of travelItemsByRequisition.values()) {
+      list.sort((a, b) => a.sortOrder - b.sortOrder);
+    }
   }
 
   return requisitions.map((requisition) => {
@@ -170,7 +234,9 @@ export async function listQuotationQueueClient() {
       travelItems:
         requisition.module === "M2"
           ? travelItemsByRequisition.get(requisition.id) || []
-          : undefined,
+          : travelItemsByRequisition.has(requisition.id)
+            ? travelItemsByRequisition.get(requisition.id)
+            : undefined,
     };
   });
 }
@@ -449,14 +515,26 @@ export async function finalizeQuotationClient(
 
 export interface M2ItemQuote {
   itemId: string;
-  itemType: "voo" | "hotel" | "carro";
+  itemType: "voo" | "hotel" | "carro" | "produto";
   supplierName: string;
   price: number;
   deadline: string;
   notes: string;
 }
 
+/** Cotação por item do M2 (voo/hotel/carro). */
 export async function saveM2QuoteClient(requisitionId: string, itemQuotes: M2ItemQuote[]) {
+  return saveItemQuotes(requisitionId, itemQuotes, "M2_QUOTE_COMPLETED");
+}
+
+/** Cotação fracionada do M1 multi-itens: cada produto com seu fornecedor
+ *  (ex.: 20 itens divididos entre 4 fornecedores). A aprovação é uma só —
+ *  alçada pelo valor TOTAL — e o aprovador pode cortar itens individualmente. */
+export async function saveM1ItemQuotesClient(requisitionId: string, itemQuotes: M2ItemQuote[]) {
+  return saveItemQuotes(requisitionId, itemQuotes, "M1_ITEMS_QUOTE_COMPLETED");
+}
+
+async function saveItemQuotes(requisitionId: string, itemQuotes: M2ItemQuote[], auditAction: string) {
   // 1. Cria ou busca cotação
   const quotationId = await ensureQuotation(requisitionId, "completed");
 
@@ -547,7 +625,7 @@ export async function saveM2QuoteClient(requisitionId: string, itemQuotes: M2Ite
   const { error: logError } = await supabaseBrowser.from("audit_logs").insert({
     requisition_id: requisitionId,
     ticket_number: requisition.ticket_number,
-    action: "M2_QUOTE_COMPLETED",
+    action: auditAction,
     old_status: requisition.status,
     new_status: "APROVAÇÃO",
     details: {
@@ -560,5 +638,5 @@ export async function saveM2QuoteClient(requisitionId: string, itemQuotes: M2Ite
       })),
     },
   });
-  if (logError) console.warn("[audit_logs] M2_QUOTE_COMPLETED failed:", logError.message);
+  if (logError) console.warn(`[audit_logs] ${auditAction} failed:`, logError.message);
 }

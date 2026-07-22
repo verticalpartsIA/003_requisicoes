@@ -51,7 +51,10 @@ interface ApprovalSupplierQuote {
 export interface ApprovalTravelItem {
   approvalItemId: string;
   itemId: string;
-  itemType: 'voo' | 'hotel' | 'carro';
+  itemType: 'voo' | 'hotel' | 'carro' | 'produto';
+  productCode?: string | null;
+  quantity?: number | null;
+  description?: string | null;
   supplierName: string;
   price: number;
   decision: 'pending' | 'approved' | 'rejected';
