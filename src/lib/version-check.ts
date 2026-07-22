@@ -11,6 +11,30 @@ import { BUILD_TIME } from "@/lib/build-info.generated";
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
 const FIRST_CHECK_DELAY_MS = 15 * 1000; // dá um tempo antes da primeira checagem
 
+// Guarda no localStorage (compartilhado entre abas da mesma origem, e
+// sobrevive a um remount acidental do componente) qual buildTime já foi
+// avisado — sem isso, quem tem mais de uma aba aberta do site vê o mesmo
+// aviso "loopar" de aba em aba (cada aba tem sua própria variável `notified`
+// em memória, mas todas comparam contra o mesmo version.json).
+const NOTIFIED_BUILD_KEY = "vp_version_notified_build";
+
+function alreadyNotified(buildTime: string): boolean {
+  try {
+    return localStorage.getItem(NOTIFIED_BUILD_KEY) === buildTime;
+  } catch {
+    return false;
+  }
+}
+
+function markNotified(buildTime: string): void {
+  try {
+    localStorage.setItem(NOTIFIED_BUILD_KEY, buildTime);
+  } catch {
+    // localStorage indisponível (modo privado etc.) — sem persistência,
+    // mas a checagem desta aba continua funcionando normalmente.
+  }
+}
+
 interface VersionInfo {
   buildTime: string;
   commit: string;
@@ -46,7 +70,12 @@ export function startVersionCheck(): () => void {
       if (!res.ok) return;
       const info: VersionInfo = await res.json();
       if (info.buildTime && info.buildTime !== BUILD_TIME) {
+        if (alreadyNotified(info.buildTime)) {
+          notified = true;
+          return;
+        }
         notified = true;
+        markNotified(info.buildTime);
         toast.message(formatUpdateMessage(info.buildTime), {
           description: "Atualize a página para usar a versão mais recente.",
           duration: Infinity,
