@@ -158,21 +158,27 @@ export const getAnalytics = createServerFn({ method: "POST" })
       cmpStart = new Date(start); cmpStart.setFullYear(cmpStart.getFullYear() - 1);
       cmpEnd = new Date(now); cmpEnd.setFullYear(cmpEnd.getFullYear() - 1);
     }
-    const fetchFrom = cmpStart && cmpStart < start ? cmpStart : start;
 
     const moduleFilter = data.module !== "Todos" ? `&module=eq.${data.module}` : "";
 
+    // requisitions/approvals/purchases NÃO são filtradas por created_at aqui —
+    // um ticket criado antes do período pode ter sido aprovado, comprado ou
+    // editado DENTRO do período selecionado, e essas ações é que precisam
+    // cair na janela (via inWindow abaixo), não a criação do ticket. Filtrar
+    // a busca por created_at>=fetchFrom fazia esse histórico "sumir" (tudo
+    // zerado/vazio) sempre que o ticket era mais antigo que o período — a
+    // base de tickets é pequena, então buscar tudo não pesa.
     const [reqsResp, approvalsResp, quotationsResp, suppliersResp, purchasesResp, logsResp, profilesResp] = await Promise.all([
       supabaseRest<Requisition[]>(
-        `requisitions?select=id,ticket_number,module,status,urgency,requester_name,created_at,completed_at&created_at=gte.${fetchFrom.toISOString()}${moduleFilter}&order=created_at.asc&limit=10000`,
+        `requisitions?select=id,ticket_number,module,status,urgency,requester_name,created_at,completed_at${moduleFilter}&order=created_at.asc&limit=10000`,
       ),
       supabaseRest<Approval[]>(
-        `approvals?select=requisition_id,approval_level,total_value,decision,decided_at,created_at&created_at=gte.${fetchFrom.toISOString()}&limit=10000`,
+        `approvals?select=requisition_id,approval_level,total_value,decision,decided_at,created_at&limit=10000`,
       ),
       supabaseRest<Quotation[]>(`quotations?select=id,requisition_id,started_at,completed_at&limit=10000`),
       supabaseRest<QuotationSupplier[]>(`quotation_suppliers?select=quotation_id,supplier_name,price,is_winner&limit=10000`),
       supabaseRest<Purchase[]>(
-        `purchases?select=requisition_id,supplier_name,supplier_price,buyer_id,created_at&created_at=gte.${fetchFrom.toISOString()}&limit=10000`,
+        `purchases?select=requisition_id,supplier_name,supplier_price,buyer_id,created_at&limit=10000`,
       ),
       supabaseRest<AuditLog[]>(
         `audit_logs?select=requisition_id,ticket_number,action,actor_name,created_at,new_status&order=created_at.desc&limit=5000`,
@@ -361,7 +367,7 @@ export const getAnalytics = createServerFn({ method: "POST" })
     /* ── Qualidade ── */
     const editedCount = logs.filter(
       (l) => l.action === "REQUISITION_EDITED" && inWindow(l.created_at, start, now)
-        && moduleAllowed(reqById.get(l.requisition_id ?? "")?.module ?? (data.module === "Todos" ? "M1" : "")),
+        && moduleAllowed(reqById.get(l.requisition_id ?? "")?.module ?? ""),
     ).length;
     const quality = {
       approvalRate: approvalRateNow,
