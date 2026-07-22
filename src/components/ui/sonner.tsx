@@ -6,6 +6,12 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       className="toaster group"
+      // Radix Dialog seta pointer-events:none no <body> enquanto um modal
+      // está aberto (só o próprio DialogContent recebe pointer-events:auto).
+      // O Toaster do sonner é portado direto pro body, fora do DialogContent,
+      // então herdava esse "none" e o botão de ação (ex.: "Atualizar agora")
+      // ficava visível mas inclicável com qualquer modal aberto por cima.
+      style={{ pointerEvents: "auto" }}
       toastOptions={{
         classNames: {
           toast:
