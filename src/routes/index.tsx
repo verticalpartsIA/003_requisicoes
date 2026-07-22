@@ -9,7 +9,6 @@ import {
   Clock,
   CheckCircle2,
   AlertTriangle,
-  TrendingUp,
   ArrowRight,
 } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -67,7 +66,6 @@ function Index() {
     void getDashboardDataClient().then(setData);
   }, [session]);
 
-  const stats = data?.stats || [];
   const modules = data?.modules || [];
   const recentTickets = data?.recentTickets || [];
   const moduleIcons = {
@@ -78,7 +76,6 @@ function Index() {
     M5: Truck,
     M6: Key,
   } as const;
-  const statIcons = [Clock, AlertTriangle, CheckCircle2, TrendingUp] as const;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -88,30 +85,8 @@ function Index() {
         <p className="text-muted-foreground mt-1">Acompanhe suas requisições e fluxos de compra.</p>
       </div>
 
-      {/* Stats */}
-      <div
-        className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in-up"
-        style={{ animationDelay: "0.1s" }}
-      >
-        {stats.map((s, index) => {
-          const Icon = statIcons[index] || Clock;
-
-          return (
-            <Card key={s.label} className="card-hover-yellow">
-              <CardContent className="p-4 flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent">
-                  <Icon className="h-5 w-5 text-vp-yellow-dark" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-foreground">{s.value}</p>
-                  <p className="text-xs text-muted-foreground">{s.label}</p>
-                  <p className="text-[10px] text-vp-yellow-dark font-medium mt-0.5">{s.trend}</p>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      {/* Stats — números clicáveis e filtráveis vivem em Movimentações agora,
+          não duplicados aqui como contagem estática. */}
 
       {/* Modules */}
       <div className="animate-fade-in-up" style={{ animationDelay: "0.2s" }}>

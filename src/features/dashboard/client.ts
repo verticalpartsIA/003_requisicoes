@@ -28,19 +28,6 @@ export async function getDashboardDataClient() {
   if (error) throw error;
 
   const rows = (data || []) as RequisitionRow[];
-  const totalOpen = rows.filter(
-    (item) => item.status !== "CONCLUÍDO" && item.status !== "CANCELADO",
-  ).length;
-  const urgent = rows.filter((item) => item.urgency === "URGENT").length;
-  const completed = rows.filter((item) => item.status === "CONCLUÍDO").length;
-  const approvals = rows.filter((item) => item.status === "APROVAÇÃO").length;
-
-  const stats = [
-    { label: "Em aberto", value: totalOpen, trend: "Fluxos ativos" },
-    { label: "Urgentes", value: urgent, trend: "Prioridade máxima" },
-    { label: "Concluídos", value: completed, trend: "Ciclos encerrados" },
-    { label: "Em aprovação", value: approvals, trend: "Aguardando decisão" },
-  ];
 
   const modules = (Object.keys(moduleMeta) as Array<keyof typeof moduleMeta>).map((tag) => ({
     tag,
@@ -60,5 +47,5 @@ export async function getDashboardDataClient() {
     date: new Date(item.created_at).toLocaleDateString("pt-BR"),
   }));
 
-  return { stats, modules, recentTickets };
+  return { modules, recentTickets };
 }

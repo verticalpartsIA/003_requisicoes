@@ -60,7 +60,7 @@ import { deleteRequisitionClient } from "@/features/requisitions/client";
 import { getLogsOverview, type LogsPayload, type LogsEntry } from "@/features/logs/api";
 import { useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { pendencyOf, PENDENCY_TONE_CLASS, MODULE_ROUTES } from "@/lib/requisitions";
+import { pendencyOf, PENDENCY_TONE_CLASS, MODULE_ROUTES, OPEN_STATUSES } from "@/lib/requisitions";
 
 /* ── Export types ── */
 
@@ -197,6 +197,23 @@ function metricColor(status: SlaStatus) {
 const moduleOptions = ["Todos", "M1", "M2", "M3", "M4", "M5", "M6"];
 const stageOptions = ["Todos", "GESTOR", "COTAÇÃO", "APROVAÇÃO", "COMPRA", "RECEBIMENTO"];
 const slaOptions = ["Todos", "ok", "warning", "breach"];
+
+/* Cards de resumo — vieram do Dashboard, que duplicava esses números sem
+ * poder filtrar a lista abaixo. Aqui clicar num card filtra os tickets pelo
+ * status atual, ao invés de só mostrar uma contagem estática. */
+type StatusQuickFilter = "Todos" | "OPEN" | "COTAÇÃO" | "APROVAÇÃO" | "CONCLUÍDO";
+const OPEN_STATUS_SET = new Set<string>(OPEN_STATUSES);
+const quickFilterCards: { key: StatusQuickFilter; label: string; icon: React.ReactNode }[] = [
+  { key: "OPEN", label: "Tickets Abertos", icon: <Clock className="h-5 w-5 text-vp-yellow-dark" /> },
+  { key: "COTAÇÃO", label: "Em Cotação", icon: <FileText className="h-5 w-5 text-vp-yellow-dark" /> },
+  { key: "APROVAÇÃO", label: "Em Aprovação", icon: <AlertTriangle className="h-5 w-5 text-vp-yellow-dark" /> },
+  { key: "CONCLUÍDO", label: "Concluídos", icon: <CheckCircle2 className="h-5 w-5 text-vp-yellow-dark" /> },
+];
+function matchesQuickFilter(status: string, filter: StatusQuickFilter): boolean {
+  if (filter === "Todos") return true;
+  if (filter === "OPEN") return OPEN_STATUS_SET.has(status);
+  return status === filter;
+}
 
 function mapActionToDescription(action: string, details: Record<string, unknown>): string {
   const map: Record<string, string> = {
@@ -617,6 +634,7 @@ function MovimentacoesPage() {
   const [moduleFilter, setModuleFilter] = useState("Todos");
   const [stageFilter, setStageFilter] = useState("Todos");
   const [slaFilter, setSlaFilter] = useState("Todos");
+  const [statusQuickFilter, setStatusQuickFilter] = useState<StatusQuickFilter>("Todos");
   const [expandedTicket, setExpandedTicket] = useState<string | null>(null);
   const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
   const [overview, setOverview] = useState<LogsPayload | null>(null);
@@ -1076,7 +1094,20 @@ function MovimentacoesPage() {
     return acc;
   }, {});
 
-  const ticketIds = Object.keys(grouped);
+  const ticketIds = Object.keys(grouped).filter((id) =>
+    matchesQuickFilter(ticketMeta[id]?.status ?? "", statusQuickFilter),
+  );
+
+  // Contagens do conjunto completo de tickets (não só os eventos carregados)
+  // pros cards de resumo — os mesmos números que antes só existiam, estáticos,
+  // no Dashboard.
+  const quickFilterCounts: Record<StatusQuickFilter, number> = { Todos: 0, OPEN: 0, COTAÇÃO: 0, APROVAÇÃO: 0, CONCLUÍDO: 0 };
+  Object.values(ticketMeta).forEach((meta) => {
+    if (OPEN_STATUS_SET.has(meta.status)) quickFilterCounts.OPEN++;
+    if (meta.status === "COTAÇÃO") quickFilterCounts["COTAÇÃO"]++;
+    if (meta.status === "APROVAÇÃO") quickFilterCounts["APROVAÇÃO"]++;
+    if (meta.status === "CONCLUÍDO") quickFilterCounts["CONCLUÍDO"]++;
+  });
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -1096,6 +1127,37 @@ function MovimentacoesPage() {
       {logsLoading && !overview && (
         <div className="flex items-center justify-center py-16">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-vp-yellow border-t-transparent" />
+        </div>
+      )}
+
+      {/* Resumo — clicável, filtra a lista abaixo pelo status atual do ticket */}
+      {overview && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {quickFilterCards.map((c) => {
+            const active = statusQuickFilter === c.key;
+            return (
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => setStatusQuickFilter(active ? "Todos" : c.key)}
+                className="text-left"
+              >
+                <Card
+                  className={`card-hover-yellow transition-colors ${active ? "border-vp-yellow ring-1 ring-vp-yellow" : ""}`}
+                >
+                  <CardContent className="p-4 flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent">
+                      {c.icon}
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-foreground">{quickFilterCounts[c.key]}</p>
+                      <p className="text-xs text-muted-foreground">{c.label}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </button>
+            );
+          })}
         </div>
       )}
 
