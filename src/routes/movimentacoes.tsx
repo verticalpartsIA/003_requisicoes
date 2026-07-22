@@ -60,6 +60,7 @@ import { deleteRequisitionClient } from "@/features/requisitions/client";
 import { getLogsOverview, type LogsPayload, type LogsEntry } from "@/features/logs/api";
 import { useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { pendencyOf, PENDENCY_TONE_CLASS, MODULE_ROUTES } from "@/lib/requisitions";
 
 /* ── Export types ── */
 
@@ -214,7 +215,13 @@ function mapActionToDescription(action: string, details: Record<string, unknown>
   const base = map[action] ?? action.replace(/_/g, " ").toLowerCase();
   const suppliersCount =
     typeof details.suppliers_count === "number" ? ` — ${details.suppliers_count} fornecedores` : "";
-  return base + suppliersCount;
+  const reason =
+    action === "GESTOR_REJECTED" && typeof details.reason === "string"
+      ? ` — motivo: ${details.reason}`
+      : action === "APPROVAL_REJECTED" && typeof details.justification === "string" && details.justification
+        ? ` — motivo: ${details.justification}`
+        : "";
+  return base + suppliersCount + reason;
 }
 
 const MODULE_LABELS: Record<string, string> = {
@@ -817,19 +824,27 @@ function MovimentacoesPage() {
 
   const handleNavigateEdit = () => {
     if (!liveDetail) return;
-    const moduleRoutes: Record<string, string> = {
-      M1: "/products",
-      M2: "/trips",
-      M3: "/services",
-      M4: "/maintenance",
-      M5: "/freight",
-      M6: "/rental",
-    };
-    const route = moduleRoutes[liveDetail.module];
+    const route = MODULE_ROUTES[liveDetail.module];
     if (!route) return;
     setSelectedTicket(null);
     void router.navigate({ to: route, search: { edit: liveDetail.ticket_id } });
   };
+
+  /** Motivo da recusa — busca no histórico o evento de reprovação (gestor ou
+   * alçada) para o requisitante entender o que precisa corrigir antes de
+   * reenviar. GESTOR_REJECTED guarda o motivo em details.reason; a reprovação
+   * de alçada (V3) já vem em approval_justification. */
+  const rejectionEvent = liveDetail?.ticket_audit_logs.find((l) => l.action === "GESTOR_REJECTED");
+  const rejectionReason =
+    liveDetail?.status === "REJEITADO"
+      ? liveDetail.approval_justification ||
+        (typeof rejectionEvent?.details.reason === "string" ? rejectionEvent.details.reason : null)
+      : null;
+  const rejectedBy = rejectionEvent
+    ? rejectionEvent.actor_name
+    : liveDetail?.approval_decision === "rejected"
+      ? "Aprovador da alçada"
+      : null;
 
   const handleExport = async () => {
     if (!exportTicketId) return;
@@ -1208,13 +1223,32 @@ function MovimentacoesPage() {
                       {slaBadge(worstSla)}
                     </div>
                     {meta && (
-                      <p className="text-sm text-foreground font-medium truncate mt-0.5">
-                        {meta.title}
-                        <span className="text-muted-foreground font-normal">
-                          {" "}
-                          — {meta.requester}
-                        </span>
-                      </p>
+                      <>
+                        <p className="text-sm text-foreground font-medium truncate mt-0.5">
+                          {meta.title}
+                          <span className="text-muted-foreground font-normal">
+                            {" "}
+                            — {meta.requester}
+                          </span>
+                        </p>
+                        {(() => {
+                          const pendency = pendencyOf(meta.status, meta.module);
+                          return (
+                            <span
+                              className={`inline-flex items-center gap-1 text-[11px] font-medium mt-0.5 ${PENDENCY_TONE_CLASS[pendency.tone]}`}
+                            >
+                              {pendency.tone === "action" && <Clock className="h-3 w-3 shrink-0" />}
+                              {pendency.tone === "done" && (
+                                <CheckCircle2 className="h-3 w-3 shrink-0" />
+                              )}
+                              {pendency.tone === "blocked" && (
+                                <AlertTriangle className="h-3 w-3 shrink-0" />
+                              )}
+                              {pendency.label}
+                            </span>
+                          );
+                        })()}
+                      </>
                     )}
                     <div className="flex items-center gap-3 mt-0.5">
                       <p className="text-xs text-muted-foreground truncate">
@@ -1364,7 +1398,9 @@ function MovimentacoesPage() {
                     className={`text-[10px] ${
                       ["CONCLUÍDO", "RECEBIMENTO"].includes(liveDetail.status)
                         ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-                        : "bg-blue-100 text-blue-700 border-blue-200"
+                        : ["REJEITADO", "CANCELADO"].includes(liveDetail.status)
+                          ? "bg-red-100 text-red-700 border-red-200"
+                          : "bg-blue-100 text-blue-700 border-blue-200"
                     }`}
                   >
                     {liveDetail.status}
@@ -1381,6 +1417,30 @@ function MovimentacoesPage() {
               </SheetHeader>
 
               <div className="space-y-5 mt-6">
+                {/* Recusa — por que parou e o que fazer pra reenviar */}
+                {liveDetail.status === "REJEITADO" && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-2">
+                    <div className="flex items-center gap-2 text-red-700 font-semibold text-sm">
+                      <AlertTriangle className="h-4 w-4 shrink-0" />
+                      Requisição reprovada{rejectedBy ? ` por ${rejectedBy}` : ""}
+                    </div>
+                    <p className="text-xs text-red-900">
+                      {rejectionReason || "Nenhum motivo foi registrado para esta reprovação."}
+                    </p>
+                    {MODULE_ROUTES[liveDetail.module] && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 border-red-300 text-red-700 hover:bg-red-100 hover:text-red-800"
+                        onClick={handleNavigateEdit}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Corrigir a pendência e reenviar
+                      </Button>
+                    )}
+                  </div>
+                )}
+
                 {/* Action Buttons */}
                 <div className="flex gap-2">
                   <Button

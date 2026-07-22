@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getDashboardDataClient } from "@/features/dashboard/client";
 import { useAuth } from "@/features/auth/auth-context";
+import { pendencyOf, PENDENCY_TONE_CLASS } from "@/lib/requisitions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -56,66 +57,8 @@ function statusColor(s: string) {
   return "bg-muted text-muted-foreground";
 }
 
-/** O que falta para o ticket andar e onde isso se resolve. */
-const MODULE_ROUTES: Record<string, string> = {
-  M1: "/products",
-  M2: "/trips",
-  M3: "/services",
-  M4: "/maintenance",
-  M5: "/freight",
-  M6: "/rental",
-};
-
-function pendencyOf(
-  status: string,
-  module: string,
-): { label: string; route: string; tone: "action" | "done" | "blocked" } {
-  switch (status) {
-    case "GESTOR":
-      return { label: "Falta aprovação do gestor", route: "/approval", tone: "action" };
-    case "ABERTO":
-      return { label: "Falta iniciar a cotação", route: "/quoting", tone: "action" };
-    case "COTAÇÃO":
-      return { label: "Falta concluir a cotação", route: "/quoting", tone: "action" };
-    case "APROVAÇÃO":
-      return { label: "Falta aprovação da alçada", route: "/approval", tone: "action" };
-    case "COMPRA":
-      return { label: "Falta efetivar a compra", route: "/purchasing", tone: "action" };
-    case "RECEBIMENTO":
-      return { label: "Falta receber o material", route: "/receipt", tone: "action" };
-    case "REJEITADO":
-      return {
-        label: "Reprovada — revisar e reenviar",
-        route: MODULE_ROUTES[module] ?? "/",
-        tone: "blocked",
-      };
-    case "CANCELADO":
-      return { label: "Cancelada", route: MODULE_ROUTES[module] ?? "/", tone: "blocked" };
-    case "RASCUNHO":
-      return {
-        label: "Falta enviar a requisição",
-        route: MODULE_ROUTES[module] ?? "/",
-        tone: "action",
-      };
-    case "CONCLUÍDO":
-      return {
-        label: "Concluído — nada pendente",
-        route: MODULE_ROUTES[module] ?? "/",
-        tone: "done",
-      };
-    default:
-      return { label: status, route: MODULE_ROUTES[module] ?? "/", tone: "action" };
-  }
-}
-
-const pendencyTone: Record<"action" | "done" | "blocked", string> = {
-  action: "text-amber-700",
-  done: "text-emerald-600",
-  blocked: "text-red-600",
-};
-
 function Index() {
-  const { session, hasRole } = useAuth();
+  const { session } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState<Awaited<ReturnType<typeof getDashboardDataClient>> | null>(null);
 
@@ -204,109 +147,65 @@ function Index() {
         </div>
       </div>
 
-      {/* Recent Tickets */}
+      {/* Recent Tickets — resumo rápido; status, histórico e motivo de recusa
+          ficam em Movimentações (busca, timeline completa e resolução de
+          pendências vivem lá, não aqui). */}
       <div className="animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold text-foreground">Tickets Recentes</h2>
-          {hasRole("admin") && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs text-muted-foreground"
-              onClick={() => void navigate({ to: "/logs" })}
-            >
-              Ver todos <ArrowRight className="h-3 w-3 ml-1" />
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground"
+            onClick={() => void navigate({ to: "/movimentacoes", search: { ticket: undefined } })}
+          >
+            Ver tudo em Movimentações <ArrowRight className="h-3 w-3 ml-1" />
+          </Button>
         </div>
         <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground">
-                      Ticket
-                    </th>
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground">
-                      Descrição
-                    </th>
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground">
-                      Urgência
-                    </th>
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground">
-                      Status
-                    </th>
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground">
-                      Pendência
-                    </th>
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground">
-                      Data
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentTickets.map((t) => {
-                    const pendency = pendencyOf(t.status, t.module);
-                    return (
-                      <tr
-                        key={t.id}
-                        className="border-b border-border last:border-0 hover:bg-accent/50 transition-colors cursor-pointer"
-                        title={`Ir para: ${pendency.route}`}
-                        onClick={() => void navigate({ to: pendency.route })}
-                      >
-                        <td className="p-3 font-mono text-xs font-semibold text-foreground">
-                          {t.id}
-                        </td>
-                        <td className="p-3">
-                          <p className="text-foreground">{t.title}</p>
-                          <p className="text-[11px] text-muted-foreground">{t.requester}</p>
-                        </td>
-                        <td className="p-3">
-                          <span
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${urgencyColor(t.urgency)}`}
-                          >
-                            {urgencyLabel[t.urgency] || t.urgency}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusColor(t.status)}`}
-                          >
-                            {t.status}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span
-                            className={`inline-flex items-center gap-1 text-xs font-medium ${pendencyTone[pendency.tone]}`}
-                          >
-                            {pendency.tone === "action" && <Clock className="h-3 w-3 shrink-0" />}
-                            {pendency.tone === "done" && (
-                              <CheckCircle2 className="h-3 w-3 shrink-0" />
-                            )}
-                            {pendency.tone === "blocked" && (
-                              <AlertTriangle className="h-3 w-3 shrink-0" />
-                            )}
-                            {pendency.label}
-                            {pendency.tone === "action" && (
-                              <ArrowRight className="h-3 w-3 shrink-0 opacity-50" />
-                            )}
-                          </span>
-                        </td>
-                        <td className="p-3 text-muted-foreground text-xs">{t.date}</td>
-                      </tr>
-                    );
-                  })}
-                  {recentTickets.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="p-6 text-center text-sm text-muted-foreground">
-                        Nenhum ticket encontrado ainda.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+          <CardContent className="p-0 divide-y divide-border">
+            {recentTickets.map((t) => {
+              const pendency = pendencyOf(t.status, t.module);
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-accent/50 transition-colors"
+                  onClick={() => void navigate({ to: "/movimentacoes", search: { ticket: t.id } })}
+                >
+                  <span className="font-mono text-xs font-semibold text-foreground shrink-0">
+                    {t.id}
+                  </span>
+                  <span className="flex-1 min-w-0 truncate text-sm text-foreground">{t.title}</span>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border shrink-0 ${urgencyColor(t.urgency)}`}
+                  >
+                    {urgencyLabel[t.urgency] || t.urgency}
+                  </span>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold shrink-0 ${statusColor(t.status)}`}
+                  >
+                    {t.status}
+                  </span>
+                  <span
+                    className={`hidden sm:inline-flex items-center gap-1 text-xs font-medium shrink-0 ${PENDENCY_TONE_CLASS[pendency.tone]}`}
+                  >
+                    {pendency.tone === "action" && <Clock className="h-3 w-3 shrink-0" />}
+                    {pendency.tone === "done" && <CheckCircle2 className="h-3 w-3 shrink-0" />}
+                    {pendency.tone === "blocked" && (
+                      <AlertTriangle className="h-3 w-3 shrink-0" />
+                    )}
+                    {pendency.label}
+                  </span>
+                  <span className="text-muted-foreground text-xs shrink-0">{t.date}</span>
+                </button>
+              );
+            })}
+            {recentTickets.length === 0 && (
+              <p className="p-6 text-center text-sm text-muted-foreground">
+                Nenhum ticket encontrado ainda.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>

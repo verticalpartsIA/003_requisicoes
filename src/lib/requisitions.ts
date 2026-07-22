@@ -102,3 +102,71 @@ export interface DashboardRecentTicket {
   status: RequisitionStatus;
   date: string;
 }
+
+/** Rota do formulário de cada módulo — usada para editar/reenviar uma requisição. */
+export const MODULE_ROUTES: Record<string, string> = {
+  M1: "/products",
+  M2: "/trips",
+  M3: "/services",
+  M4: "/maintenance",
+  M5: "/freight",
+  M6: "/rental",
+};
+
+export type PendencyTone = "action" | "done" | "blocked";
+
+export interface Pendency {
+  label: string;
+  route: string;
+  tone: PendencyTone;
+}
+
+/**
+ * O que falta para o ticket andar e onde isso se resolve — usada no Dashboard
+ * e em Movimentações para que requisitante e decisores vejam, sem precisar
+ * abrir o ticket, onde ele está parado e o que fazer a respeito.
+ */
+export function pendencyOf(status: string, module: string): Pendency {
+  switch (status) {
+    case "GESTOR":
+      return { label: "Falta aprovação do gestor", route: "/approval", tone: "action" };
+    case "ABERTO":
+      return { label: "Falta iniciar a cotação", route: "/quoting", tone: "action" };
+    case "COTAÇÃO":
+      return { label: "Falta concluir a cotação", route: "/quoting", tone: "action" };
+    case "APROVAÇÃO":
+      return { label: "Falta aprovação da alçada", route: "/approval", tone: "action" };
+    case "COMPRA":
+      return { label: "Falta efetivar a compra", route: "/purchasing", tone: "action" };
+    case "RECEBIMENTO":
+      return { label: "Falta receber o material", route: "/receipt", tone: "action" };
+    case "REJEITADO":
+      return {
+        label: "Reprovada — revisar e reenviar",
+        route: MODULE_ROUTES[module] ?? "/",
+        tone: "blocked",
+      };
+    case "CANCELADO":
+      return { label: "Cancelada", route: MODULE_ROUTES[module] ?? "/", tone: "blocked" };
+    case "RASCUNHO":
+      return {
+        label: "Falta enviar a requisição",
+        route: MODULE_ROUTES[module] ?? "/",
+        tone: "action",
+      };
+    case "CONCLUÍDO":
+      return {
+        label: "Concluído — nada pendente",
+        route: MODULE_ROUTES[module] ?? "/",
+        tone: "done",
+      };
+    default:
+      return { label: status, route: MODULE_ROUTES[module] ?? "/", tone: "action" };
+  }
+}
+
+export const PENDENCY_TONE_CLASS: Record<PendencyTone, string> = {
+  action: "text-amber-700",
+  done: "text-emerald-600",
+  blocked: "text-red-600",
+};
