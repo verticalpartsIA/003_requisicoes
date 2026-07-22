@@ -1,8 +1,10 @@
+import { useEffect, useState } from "react";
 import { Outlet, Link, Navigate, createRootRoute, HeadContent, Scripts, useRouterState } from "@tanstack/react-router";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/features/auth/auth-context";
+import { startVersionCheck } from "@/lib/version-check";
 
 import appCss from "../styles.css?url";
 
@@ -68,6 +70,8 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
+  useEffect(() => startVersionCheck(), []);
+
   return (
     <AuthProvider>
       <ProtectedApp />
@@ -81,12 +85,35 @@ function ProtectedApp() {
     select: (state) => state.location.pathname,
   });
 
-  if (isLoading) {
+  const [bootVideoEnded, setBootVideoEnded] = useState(false);
+  useEffect(() => {
+    const fallback = setTimeout(() => setBootVideoEnded(true), 12000);
+    return () => clearTimeout(fallback);
+  }, []);
+
+  if (isLoading || !bootVideoEnded) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="text-center">
-          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-vp-yellow/30 border-t-vp-yellow" />
-          <p className="mt-4 text-sm text-muted-foreground">Validando acesso...</p>
+          <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-3">
+            Requisições
+          </p>
+          <video
+            src="/boot-video.mp4"
+            autoPlay
+            muted
+            playsInline
+            onEnded={() => setBootVideoEnded(true)}
+            onError={() => setBootVideoEnded(true)}
+            className="w-full max-w-sm mx-auto rounded-xl shadow-lg"
+          />
+          <p className="font-light text-xl tracking-wide mt-4 text-vp-yellow">
+            vprequisicoes.vpsistema.com
+          </p>
+          <div className="flex items-center justify-center gap-2 mt-4">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-vp-yellow/30 border-t-vp-yellow" />
+            <p className="text-xs text-muted-foreground">Carregando...</p>
+          </div>
         </div>
       </div>
     );
