@@ -457,8 +457,12 @@ function ComandoPage() {
               )}
               {!loading && filteredPedidos.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-8">
-                    Nenhum pedido encontrado.
+                  <TableCell colSpan={6} className="text-center py-12">
+                    <ClipboardList className="h-8 w-8 mx-auto text-muted-foreground/40 mb-2" />
+                    <p className="text-sm text-muted-foreground">Nenhum pedido encontrado.</p>
+                    <p className="text-sm text-muted-foreground/60 mt-1">
+                      Clique em &quot;Novo Pedido&quot; para começar.
+                    </p>
                   </TableCell>
                 </TableRow>
               )}

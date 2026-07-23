@@ -10,6 +10,7 @@ import { format, addDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { excelTable } from "@/lib/excel-table";
+import { Stepper } from "@/components/ui/stepper";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -712,32 +713,7 @@ function ProductsPage() {
           {(editMode || triageCompleted) && (
             <>
           {/* Stepper */}
-          <div className="flex items-center justify-between mb-2">
-            {STEPS.map((s, i) => {
-              const Icon = s.icon;
-              const active = i === step;
-              const done = i < step;
-              return (
-                <button
-                  key={s.label}
-                  type="button"
-                  onClick={() => { if (i < step) setStep(i); }}
-                  className={cn(
-                    "flex flex-col items-center gap-1 text-[10px] font-medium transition-colors flex-1",
-                    active ? "text-vp-yellow-dark" : done ? "text-green-600" : "text-muted-foreground",
-                  )}
-                >
-                  <div className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors",
-                    active ? "border-vp-yellow bg-amber-50" : done ? "border-green-500 bg-green-50" : "border-border",
-                  )}>
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  {s.label}
-                </button>
-              );
-            })}
-          </div>
+          <Stepper steps={STEPS} currentStep={step} onStepClick={setStep} />
 
           {/* ── Step 0: Produtos ── */}
           {step === 0 && (
