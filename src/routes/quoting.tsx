@@ -478,7 +478,7 @@ function QuotingPage() {
                 </span>
                 <Link
                   to="/movimentacoes"
-                  search={{ ticket: item.ticketNumber }}
+                  search={{ ticket: item.ticketNumber, module: undefined }}
                   target="_blank"
                   title="Ver histórico completo do ticket"
                   className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-vp-yellow transition-colors"

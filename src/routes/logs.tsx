@@ -96,7 +96,7 @@ function LogsPage() {
   }, [session]);
 
   const abrirMovimentacoes = (ticket: string) => {
-    void router.navigate({ to: "/movimentacoes", search: { ticket } });
+    void router.navigate({ to: "/movimentacoes", search: { ticket, module: undefined } });
   };
 
   const filteredActive = (overview?.activeTickets ?? []).filter(

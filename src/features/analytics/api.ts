@@ -61,7 +61,7 @@ export interface AnalyticsPayload {
     approvalRateDelta: number | null;
   };
   volumeTrend: Record<string, string | number>[];
-  moduleDist: { name: string; value: number; fill: string }[];
+  moduleDist: { key: string; name: string; value: number; fill: string }[];
   stageDuration: { stage: string; label: string; avg: number; median: number; p95: number; target: number; count: number }[];
   slaByModule: { module: string; label: string; compliance: number | null }[];
   slaBreakdown: { onTime: number; atRisk: number; exceeded: number };
@@ -296,6 +296,7 @@ export const getAnalytics = createServerFn({ method: "POST" })
 
     /* ── Distribuição por módulo ── */
     const moduleDist = MODULE_META.filter((m) => moduleAllowed(m.key)).map((m) => ({
+      key: m.key,
       name: m.name,
       value: reqs.filter((r) => r.module === m.key).length,
       fill: m.fill,

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/features/auth/auth-context";
 import { getAnalytics, type AnalyticsPayload } from "@/features/analytics/api";
@@ -212,6 +212,7 @@ const FEED_META: Record<string, { label: string; icon: typeof Package; bg: strin
 
 function AnalyticsPage() {
   const { session } = useAuth();
+  const navigate = useNavigate();
   const [period, setPeriod] = useState<"30d" | "3m" | "6m" | "12m">("3m");
   const [moduleFilter, setModuleFilter] = useState("Todos");
   const [compareMode, setCompareMode] = useState<"none" | "previous_period" | "same_period_last_year">("none");
@@ -256,6 +257,16 @@ function AnalyticsPage() {
   const compareLabel = compareMode === "previous_period"
     ? "vs período anterior"
     : compareMode === "same_period_last_year" ? "vs ano anterior" : null;
+
+  // Drill-down: leva da métrica agregada até os tickets que a compõem, em
+  // Movimentações — sem isso, cada número do Analytics era um beco sem
+  // saída, sem como chegar aos tickets de origem.
+  const goToModule = (moduleCode: string) => {
+    void navigate({ to: "/movimentacoes", search: { ticket: undefined, module: moduleCode } });
+  };
+  const goToTicket = (ticket: string) => {
+    void navigate({ to: "/movimentacoes", search: { ticket, module: undefined } });
+  };
 
   /* ── Export com dados reais ── */
   const buildRows = useCallback((): { header: string[]; rows: (string | number)[][]; title: string } => {
@@ -458,18 +469,24 @@ function AnalyticsPage() {
 
       {/* KPI Row — always visible */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="card-hover-yellow">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground font-medium">Total Requisições</p>
-              <Package className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <p className="text-2xl font-bold text-foreground mt-1">
-              {kpis.totalReqs.toLocaleString("pt-BR")}
-            </p>
-            <DeltaLine delta={kpis.totalReqsDelta} unit="%" compareLabel={compareLabel} />
-          </CardContent>
-        </Card>
+        <Link
+          to="/movimentacoes"
+          search={{ ticket: undefined, module: moduleFilter !== "Todos" ? moduleFilter : undefined }}
+          title="Ver os tickets deste total em Movimentações"
+        >
+          <Card className="card-hover-yellow cursor-pointer h-full">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground font-medium">Total Requisições</p>
+                <Package className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <p className="text-2xl font-bold text-foreground mt-1">
+                {kpis.totalReqs.toLocaleString("pt-BR")}
+              </p>
+              <DeltaLine delta={kpis.totalReqsDelta} unit="%" compareLabel={compareLabel} />
+            </CardContent>
+          </Card>
+        </Link>
 
         <Card className="card-hover-yellow">
           <CardContent className="p-4">
@@ -595,6 +612,7 @@ function AnalyticsPage() {
                 Sem requisições no período
               </div>
             ) : (
+              <>
               <ChartContainer config={pieChartConfig} className="h-[250px] w-full">
                 <PieChart>
                   <ChartTooltip content={<ChartTooltipContent />} />
@@ -609,6 +627,8 @@ function AnalyticsPage() {
                     nameKey="name"
                     label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                     labelLine={false}
+                    onClick={(entry) => goToModule((entry as unknown as { key: string }).key)}
+                    className="cursor-pointer"
                   >
                     {data.moduleDist.filter((m) => m.value > 0).map((entry) => (
                       <Cell key={entry.name} fill={entry.fill} />
@@ -616,6 +636,21 @@ function AnalyticsPage() {
                   </Pie>
                 </PieChart>
               </ChartContainer>
+              <div className="flex flex-wrap gap-1.5 justify-center -mt-2">
+                {data.moduleDist.filter((m) => m.value > 0).map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => goToModule(m.key)}
+                    className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground hover:border-vp-yellow hover:text-foreground transition-colors"
+                    title={`Ver tickets de ${m.name} em Movimentações`}
+                  >
+                    <span className="h-2 w-2 rounded-full" style={{ background: m.fill }} />
+                    {m.name} ({m.value})
+                  </button>
+                ))}
+              </div>
+              </>
             )}
           </CardContent>
         </Card>
@@ -661,13 +696,19 @@ function AnalyticsPage() {
             {data.slaByModule.map((mod) => {
               if (mod.compliance == null) {
                 return (
-                  <div key={mod.module} className="space-y-1">
+                  <button
+                    key={mod.module}
+                    type="button"
+                    onClick={() => goToModule(mod.module)}
+                    className="w-full space-y-1 text-left"
+                    title={`Ver tickets de ${mod.label} em Movimentações`}
+                  >
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">{mod.module} — {mod.label}</span>
+                      <span className="text-muted-foreground hover:text-foreground transition-colors">{mod.module} — {mod.label}</span>
                       <span className="text-muted-foreground">sem dados</span>
                     </div>
                     <Progress value={0} className="h-2" />
-                  </div>
+                  </button>
                 );
               }
               const color =
@@ -679,15 +720,21 @@ function AnalyticsPage() {
                     ? "[&>div]:bg-amber-500"
                     : "[&>div]:bg-red-500";
               return (
-                <div key={mod.module} className="space-y-1">
+                <button
+                  key={mod.module}
+                  type="button"
+                  onClick={() => goToModule(mod.module)}
+                  className="w-full space-y-1 text-left"
+                  title={`Ver tickets de ${mod.label} em Movimentações`}
+                >
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">
+                    <span className="text-muted-foreground hover:text-foreground transition-colors">
                       {mod.module} — {mod.label}
                     </span>
                     <span className={`font-semibold ${color}`}>{mod.compliance}%</span>
                   </div>
                   <Progress value={mod.compliance} className={`h-2 ${bg}`} />
-                </div>
+                </button>
               );
             })}
           </CardContent>
@@ -863,7 +910,13 @@ function AnalyticsPage() {
                   <p className="text-xs text-muted-foreground italic">Nenhum gargalo ativo. 🎉</p>
                 )}
                 {data.bottlenecks.map((b) => (
-                  <div key={b.ticket} className="rounded-lg border p-3 space-y-1">
+                  <button
+                    key={b.ticket}
+                    type="button"
+                    onClick={() => goToTicket(b.ticket)}
+                    className="w-full rounded-lg border p-3 space-y-1 text-left hover:border-vp-yellow transition-colors"
+                    title="Ver histórico completo do ticket"
+                  >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-mono font-bold text-foreground">{b.ticket}</span>
                       <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200">
@@ -872,7 +925,7 @@ function AnalyticsPage() {
                     </div>
                     <p className="text-[10px] text-muted-foreground">{b.stage} · Solicitante: {b.requester}</p>
                     <Progress value={Math.min((b.hours / b.target) * 100, 100)} className="h-1 [&>div]:bg-red-500" />
-                  </div>
+                  </button>
                 ))}
               </CardContent>
             </Card>
@@ -1032,7 +1085,13 @@ function AnalyticsPage() {
                   <p className="text-xs text-muted-foreground italic">Nenhum gargalo ativo. 🎉</p>
                 )}
                 {data.bottlenecks.map((b) => (
-                  <div key={b.ticket} className="rounded-lg border p-3 space-y-1">
+                  <button
+                    key={b.ticket}
+                    type="button"
+                    onClick={() => goToTicket(b.ticket)}
+                    className="w-full rounded-lg border p-3 space-y-1 text-left hover:border-vp-yellow transition-colors"
+                    title="Ver histórico completo do ticket"
+                  >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-mono font-bold text-foreground">{b.ticket}</span>
                       <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200">
@@ -1040,7 +1099,7 @@ function AnalyticsPage() {
                       </Badge>
                     </div>
                     <p className="text-[10px] text-muted-foreground">{b.stage} · {b.requester} · {b.hours}h no estágio</p>
-                  </div>
+                  </button>
                 ))}
               </CardContent>
             </Card>

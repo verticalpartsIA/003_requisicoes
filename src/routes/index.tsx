@@ -132,7 +132,7 @@ function Index() {
             variant="ghost"
             size="sm"
             className="text-xs text-muted-foreground"
-            onClick={() => void navigate({ to: "/movimentacoes", search: { ticket: undefined } })}
+            onClick={() => void navigate({ to: "/movimentacoes", search: { ticket: undefined, module: undefined } })}
           >
             Ver tudo em Movimentações <ArrowRight className="h-3 w-3 ml-1" />
           </Button>
@@ -146,7 +146,7 @@ function Index() {
                   key={t.id}
                   type="button"
                   className="w-full flex items-center gap-3 p-3 text-left hover:bg-accent/50 transition-colors"
-                  onClick={() => void navigate({ to: "/movimentacoes", search: { ticket: t.id } })}
+                  onClick={() => void navigate({ to: "/movimentacoes", search: { ticket: t.id, module: undefined } })}
                 >
                   <span className="font-mono text-xs font-semibold text-foreground shrink-0">
                     {t.id}

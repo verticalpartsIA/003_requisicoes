@@ -76,6 +76,7 @@ interface ExportResponse {
 export const Route = createFileRoute("/movimentacoes")({
   validateSearch: (search: Record<string, unknown>) => ({
     ticket: typeof search.ticket === "string" ? search.ticket : undefined,
+    module: typeof search.module === "string" ? search.module : undefined,
   }),
   head: () => ({
     meta: [
@@ -704,7 +705,7 @@ function MovimentacoesPage() {
   const [logsLoading, setLogsLoading] = useState(true);
   const [liveDetail, setLiveDetail] = useState<LiveTicketDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const { ticket: ticketParam } = Route.useSearch();
+  const { ticket: ticketParam, module: moduleParam } = Route.useSearch();
 
   // Deep-link: /movimentacoes?ticket=M1-000105 chega com a busca já preenchida
   // e o detalhe do ticket aberto (usado pelo Monitor SLA e por outras telas).
@@ -713,6 +714,13 @@ function MovimentacoesPage() {
     setSearch(ticketParam);
     setSelectedTicket(ticketParam);
   }, [ticketParam]);
+
+  // Deep-link: /movimentacoes?module=M1 chega com o filtro de módulo já
+  // aplicado — usado pelo drill-down do Analytics (métrica → tickets).
+  useEffect(() => {
+    if (!moduleParam) return;
+    setModuleFilter(moduleParam);
+  }, [moduleParam]);
 
   useEffect(() => {
     if (!session) return;
