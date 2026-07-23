@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp, Boxes, CalendarClock, Loader2, PencilRuler, RefreshCw, Search, Send, TriangleAlert, X } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
@@ -361,6 +362,7 @@ function EstoqueOmiePage() {
   const [lastVelocitySyncedAt, setLastVelocitySyncedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [corFiltro, setCorFiltro] = useState<"todas" | StatusCor>("todas");
   const [curvaFiltro, setCurvaFiltro] = useState<"todas" | OmiePurchaseSuggestionItem["curva"]>("todas");
@@ -401,6 +403,13 @@ function EstoqueOmiePage() {
     void load();
   }, []);
 
+  // Debounce: recalcular o filtro sobre ~1000 itens a cada tecla travava a
+  // digitação. Só refiltra 250ms depois de parar de digitar.
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 250);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const result = items.filter((i) => {
@@ -428,8 +437,14 @@ function EstoqueOmiePage() {
     return result;
   }, [items, search, corFiltro, curvaFiltro, compradoFiltro, sortBy, sortOrder]);
 
-  const todosFiltradosSelecionados = filtered.length > 0 && filtered.every((i) => selecionados.has(i.codigo));
-  const algunsFiltradosSelecionados = filtered.some((i) => selecionados.has(i.codigo));
+  const todosFiltradosSelecionados = useMemo(
+    () => filtered.length > 0 && filtered.every((i) => selecionados.has(i.codigo)),
+    [filtered, selecionados],
+  );
+  const algunsFiltradosSelecionados = useMemo(
+    () => filtered.some((i) => selecionados.has(i.codigo)),
+    [filtered, selecionados],
+  );
 
   const toggleSelecionado = (codigo: string) => {
     setSelecionados((prev) => {
@@ -452,9 +467,26 @@ function EstoqueOmiePage() {
     });
   };
 
-  const itensSelecionados = items.filter((i) => selecionados.has(i.codigo));
-  const itensParaEnviar = itensSelecionados.filter((i) => i.sugestaoCompra > 0);
-  const itensIgnorados = itensSelecionados.filter((i) => i.sugestaoCompra <= 0);
+  const itensSelecionados = useMemo(
+    () => items.filter((i) => selecionados.has(i.codigo)),
+    [items, selecionados],
+  );
+  const itensParaEnviar = useMemo(
+    () => itensSelecionados.filter((i) => i.sugestaoCompra > 0),
+    [itensSelecionados],
+  );
+  const itensIgnorados = useMemo(
+    () => itensSelecionados.filter((i) => i.sugestaoCompra <= 0),
+    [itensSelecionados],
+  );
+
+  const parentRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 45,
+    overscan: 12,
+  });
 
   const totais = useMemo(
     () =>
@@ -509,8 +541,8 @@ function EstoqueOmiePage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por código ou descrição..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="pl-9"
           />
         </div>
@@ -590,13 +622,13 @@ function EstoqueOmiePage() {
         <div className="h-6 w-px bg-border" />
 
         <span className="rounded-md border border-border bg-muted px-2.5 py-1.5 text-xs font-semibold text-foreground">
-          {filtered.length} {filtered.length === 1 ? "linha" : "linhas"}
+          {filtered.length} de {items.length} {items.length === 1 ? "linha" : "linhas"}
         </span>
 
         {podeEnviarOmie && selecionados.size > 0 && (
           <div className="flex items-center gap-2 rounded-md border border-vp-yellow-dark/40 bg-vp-yellow-dark/10 px-2.5 py-1.5">
             <span className="text-xs font-semibold text-foreground">
-              {selecionados.size} {selecionados.size === 1 ? "produto selecionado" : "produtos selecionados"}
+              {selecionados.size} {selecionados.size === 1 ? "selecionado" : "selecionados"} de {filtered.length} filtrado{filtered.length === 1 ? "" : "s"}
             </span>
             <Button size="sm" className="h-7 px-2 text-xs" onClick={() => setDialogEnvioAberto(true)}>
               <Send className="h-3.5 w-3.5 mr-1.5" />
@@ -625,7 +657,7 @@ function EstoqueOmiePage() {
 
       <Card>
         <CardContent className="p-0">
-          <div className="max-h-[70vh] overflow-auto">
+          <div ref={parentRef} className="max-h-[70vh] overflow-auto">
             <table className="min-w-[1200px] w-full text-sm">
               <thead className="sticky top-0 z-20">
                 <tr className="border-b border-border bg-card text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground shadow-sm">
@@ -679,40 +711,61 @@ function EstoqueOmiePage() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((item) => {
-                    const status = statusDoItem(item);
-                    return (
-                      <tr key={item.codigo} className={`border-b border-border last:border-0 ${LINHA_CLASSES[status]}`}>
-                        {podeEnviarOmie && (
-                          <td className="px-4 py-2.5">
-                            <Checkbox
-                              checked={selecionados.has(item.codigo)}
-                              onCheckedChange={() => toggleSelecionado(item.codigo)}
-                              aria-label={`Selecionar ${item.codigo}`}
-                            />
+                  <>
+                    {rowVirtualizer.getVirtualItems().length > 0 && (
+                      <tr style={{ height: rowVirtualizer.getVirtualItems()[0].start }} aria-hidden />
+                    )}
+                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                      const item = filtered[virtualRow.index];
+                      const status = statusDoItem(item);
+                      return (
+                        <tr
+                          key={item.codigo}
+                          data-index={virtualRow.index}
+                          ref={rowVirtualizer.measureElement}
+                          className={`border-b border-border last:border-0 ${LINHA_CLASSES[status]}`}
+                        >
+                          {podeEnviarOmie && (
+                            <td className="px-4 py-2.5">
+                              <Checkbox
+                                checked={selecionados.has(item.codigo)}
+                                onCheckedChange={() => toggleSelecionado(item.codigo)}
+                                aria-label={`Selecionar ${item.codigo}`}
+                              />
+                            </td>
+                          )}
+                          <td className="px-4 py-2.5 font-mono text-xs">{item.codigo}</td>
+                          <td className="px-4 py-2.5 max-w-[360px] truncate" title={item.descricao}>{item.descricao}</td>
+                          <td className="px-3 py-2.5 text-center">
+                            <CurvaBadge curva={item.curva} />
                           </td>
-                        )}
-                        <td className="px-4 py-2.5 font-mono text-xs">{item.codigo}</td>
-                        <td className="px-4 py-2.5">{item.descricao}</td>
-                        <td className="px-3 py-2.5 text-center">
-                          <CurvaBadge curva={item.curva} />
-                        </td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueFisico}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueReservado}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{item.estoqueDisponivel}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueMinimo}</td>
-                        <td className="px-4 py-2.5 text-right">
-                          <SugestaoCell item={item} onSalvo={() => void load()} />
-                        </td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">
-                          {item.comprado > 0 ? formatarNumero(item.comprado) : <span className="text-muted-foreground">—</span>}
-                        </td>
-                        <td className="px-4 py-2.5 text-right">
-                          <AguardandoEntregaCell item={item} />
-                        </td>
-                      </tr>
-                    );
-                  })
+                          <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueFisico}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueReservado}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{item.estoqueDisponivel}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums">{item.estoqueMinimo}</td>
+                          <td className="px-4 py-2.5 text-right">
+                            <SugestaoCell item={item} onSalvo={() => void load()} />
+                          </td>
+                          <td className="px-4 py-2.5 text-right tabular-nums">
+                            {item.comprado > 0 ? formatarNumero(item.comprado) : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <AguardandoEntregaCell item={item} />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {rowVirtualizer.getVirtualItems().length > 0 && (
+                      <tr
+                        style={{
+                          height:
+                            rowVirtualizer.getTotalSize() -
+                            rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end,
+                        }}
+                        aria-hidden
+                      />
+                    )}
+                  </>
                 )}
               </tbody>
               {!loading && filtered.length > 0 && (
