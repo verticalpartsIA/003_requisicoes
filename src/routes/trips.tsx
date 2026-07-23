@@ -9,6 +9,7 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Stepper } from "@/components/ui/stepper";
 import { excelTable } from "@/lib/excel-table";
+import { FIELD_ERROR_CLASS } from "@/lib/field-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -115,6 +116,8 @@ function TripsPage() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const [stepAttempted, setStepAttempted] = useState(false);
+  useEffect(() => { setStepAttempted(false); }, [step]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editReqId, setEditReqId] = useState<string | null>(null);
@@ -441,11 +444,13 @@ function TripsPage() {
     if (validateStep()) {
       toast.dismiss();
       setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    } else {
+      setStepAttempted(true);
     }
   };
 
   const handleSubmit = async () => {
-    if (!validateStep()) return;
+    if (!validateStep()) { setStepAttempted(true); return; }
     setIsSubmitting(true);
     try {
       const travelersWithPaths = await Promise.all(
@@ -645,6 +650,7 @@ function TripsPage() {
                         onChange={(e) => updateTraveler(t.id, "fullName", e.target.value)}
                         className={cn(
                           t.fullName.trim() && !isFullName(t.fullName) ? "border-orange-400" : "",
+                          stepAttempted && !isFullName(t.fullName) && FIELD_ERROR_CLASS,
                         )}
                       />
                       {t.fullName.trim() && !isFullName(t.fullName) && (
@@ -685,6 +691,7 @@ function TripsPage() {
                           }
                           value={t.docNumber}
                           onChange={(e) => updateTraveler(t.id, "docNumber", e.target.value)}
+                          className={cn(stepAttempted && !t.docNumber.trim() && FIELD_ERROR_CLASS)}
                         />
                       </div>
                     </div>
@@ -708,6 +715,7 @@ function TripsPage() {
                           t.docPhotoFile
                             ? "border-green-400 bg-green-50"
                             : "border-border hover:border-muted-foreground/50",
+                          stepAttempted && !t.docPhotoFile && !travelerExistingPaths[t.id] && "border-destructive",
                         )}
                       >
                         {t.docPhotoPreview ? (
@@ -755,6 +763,7 @@ function TripsPage() {
                     placeholder="Ex.: São Paulo, SP"
                     value={originCity}
                     onChange={(e) => setOriginCity(e.target.value)}
+                    className={cn(stepAttempted && !originCity.trim() && FIELD_ERROR_CLASS)}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -763,6 +772,7 @@ function TripsPage() {
                     placeholder="Ex.: Curitiba, PR"
                     value={destinationCity}
                     onChange={(e) => setDestinationCity(e.target.value)}
+                    className={cn(stepAttempted && !destinationCity.trim() && FIELD_ERROR_CLASS)}
                   />
                 </div>
               </div>
@@ -773,7 +783,11 @@ function TripsPage() {
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
-                        className={cn("w-full justify-start text-left font-normal", !departureDate && "text-muted-foreground")}
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !departureDate && "text-muted-foreground",
+                          stepAttempted && !departureDate && FIELD_ERROR_CLASS,
+                        )}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {departureDate ? format(departureDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecione"}
@@ -802,7 +816,11 @@ function TripsPage() {
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
-                        className={cn("w-full justify-start text-left font-normal", !returnDate && "text-muted-foreground")}
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !returnDate && "text-muted-foreground",
+                          stepAttempted && !returnDate && FIELD_ERROR_CLASS,
+                        )}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {returnDate ? format(returnDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecione"}
@@ -838,7 +856,7 @@ function TripsPage() {
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Meio de Transporte *</label>
                 <Select value={transportMode} onValueChange={setTransportMode}>
-                  <SelectTrigger>
+                  <SelectTrigger className={cn(stepAttempted && !transportMode && FIELD_ERROR_CLASS)}>
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
@@ -930,6 +948,7 @@ function TripsPage() {
                     placeholder="0"
                     value={hotelNights}
                     onChange={(e) => setHotelNights(e.target.value)}
+                    className={cn(stepAttempted && (!hotelNights || parseInt(hotelNights) <= 0) && FIELD_ERROR_CLASS)}
                   />
                 </div>
               )}
@@ -949,6 +968,7 @@ function TripsPage() {
                     placeholder="0"
                     value={carRentalDays}
                     onChange={(e) => setCarRentalDays(e.target.value)}
+                    className={cn(stepAttempted && (!carRentalDays || parseInt(carRentalDays) <= 0) && FIELD_ERROR_CLASS)}
                   />
                 </div>
               )}
@@ -961,7 +981,7 @@ function TripsPage() {
                 <label className="text-sm font-medium">
                   Objetivo da Viagem * (selecione um ou mais)
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className={cn("grid grid-cols-2 gap-2 rounded-lg", stepAttempted && purposes.length === 0 && "ring-2 ring-destructive ring-offset-2")}>
                   {PURPOSES.map((p) => (
                     <button
                       key={p.value}
@@ -986,6 +1006,7 @@ function TripsPage() {
                     placeholder="Ex.: 28978"
                     value={projectNumber}
                     onChange={(e) => setProjectNumber(e.target.value)}
+                    className={cn(stepAttempted && !projectNumber.trim() && FIELD_ERROR_CLASS)}
                   />
                 </div>
               )}
@@ -997,6 +1018,7 @@ function TripsPage() {
                   onChange={(e) => setJustification(e.target.value)}
                   rows={3}
                   maxLength={500}
+                  className={cn(stepAttempted && justification.length < 20 && FIELD_ERROR_CLASS)}
                 />
                 <p className="text-[11px] text-muted-foreground">{justification.length}/500</p>
               </div>
@@ -1015,6 +1037,7 @@ function TripsPage() {
                     onChange={(e) => setShortNoticeJustification(e.target.value)}
                     rows={3}
                     maxLength={500}
+                    className={cn(stepAttempted && shortNoticeJustification.length < 50 && FIELD_ERROR_CLASS)}
                   />
                   <p className="text-[11px] text-muted-foreground">
                     {shortNoticeJustification.length}/500

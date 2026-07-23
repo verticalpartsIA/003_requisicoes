@@ -7,6 +7,7 @@ import { format, differenceInCalendarDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Stepper } from "@/components/ui/stepper";
+import { FIELD_ERROR_CLASS } from "@/lib/field-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -87,6 +88,8 @@ function RentalPage() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const [stepAttempted, setStepAttempted] = useState(false);
+  useEffect(() => { setStepAttempted(false); }, [step]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editReqId, setEditReqId] = useState<string | null>(null);
@@ -247,10 +250,13 @@ function RentalPage() {
     return true;
   };
 
-  const handleNext = () => { if (validateStep()) { toast.dismiss(); setStep((s) => Math.min(s + 1, STEPS.length - 1)); } };
+  const handleNext = () => {
+    if (validateStep()) { toast.dismiss(); setStep((s) => Math.min(s + 1, STEPS.length - 1)); }
+    else setStepAttempted(true);
+  };
 
   const handleSubmit = async () => {
-    if (!validateStep()) return;
+    if (!validateStep()) { setStepAttempted(true); return; }
     setIsSubmitting(true);
     try {
       let clientNormPath: string | null = editClientNormPath;
@@ -384,7 +390,7 @@ function RentalPage() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Categoria * (selecione uma ou mais)</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className={cn("grid grid-cols-2 gap-2 rounded-lg", stepAttempted && categories.length === 0 && "ring-2 ring-destructive ring-offset-2")}>
                   {EQUIPMENT_CATEGORIES.map((c) => (
                     <button
                       key={c.value}
@@ -471,7 +477,13 @@ function RentalPage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Quantidade *</label>
-                <Input type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+                <Input
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  className={cn(stepAttempted && (!quantity || parseInt(quantity) <= 0) && FIELD_ERROR_CLASS)}
+                />
               </div>
             </div>
           )}
@@ -483,7 +495,11 @@ function RentalPage() {
                   <label className="text-sm font-medium">Data de Início *</label>
                   <Popover open={startDateOpen} onOpenChange={setStartDateOpen}>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !startDate && "text-muted-foreground")}>
+                      <Button variant="outline" className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !startDate && "text-muted-foreground",
+                        stepAttempted && !startDate && FIELD_ERROR_CLASS,
+                      )}>
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {startDate ? format(startDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecione"}
                       </Button>
@@ -498,7 +514,11 @@ function RentalPage() {
                   <label className="text-sm font-medium">Data de Término *</label>
                   <Popover open={endDateOpen} onOpenChange={setEndDateOpen}>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !endDate && "text-muted-foreground")}>
+                      <Button variant="outline" className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !endDate && "text-muted-foreground",
+                        stepAttempted && !endDate && FIELD_ERROR_CLASS,
+                      )}>
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {endDate ? format(endDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecione"}
                       </Button>
@@ -529,7 +549,12 @@ function RentalPage() {
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Local de Entrega *</label>
-                <Input placeholder="Endereço, obra, setor" value={deliveryLocation} onChange={(e) => setDeliveryLocation(e.target.value)} />
+                <Input
+                  placeholder="Endereço, obra, setor"
+                  value={deliveryLocation}
+                  onChange={(e) => setDeliveryLocation(e.target.value)}
+                  className={cn(stepAttempted && !deliveryLocation.trim() && FIELD_ERROR_CLASS)}
+                />
               </div>
             </div>
           )}
@@ -538,7 +563,7 @@ function RentalPage() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Nível de Urgência *</label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className={cn("grid grid-cols-4 gap-2 rounded-lg", stepAttempted && !urgencyLevel && "ring-2 ring-destructive ring-offset-2")}>
                   {URGENCY.map((u) => (
                     <button key={u.value} type="button" onClick={() => setUrgencyLevel(u.value)}
                       className={cn("rounded-lg border-2 p-2.5 text-xs font-medium text-center transition-all",
@@ -567,6 +592,7 @@ function RentalPage() {
                   onChange={(e) => setJustification(e.target.value)}
                   rows={3}
                   maxLength={500}
+                  className={cn(stepAttempted && (justification.length < 10 || (isLongRental && justification.length < 50)) && FIELD_ERROR_CLASS)}
                 />
                 <p className="text-[11px] text-muted-foreground">{justification.length}/500{isLongRental && " (mín. 50)"}</p>
               </div>

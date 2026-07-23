@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { FIELD_ERROR_CLASS } from "@/lib/field-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -171,6 +172,7 @@ function ComandoPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [createAttempted, setCreateAttempted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [clienteNome, setClienteNome] = useState("");
   const [clienteTelefone, setClienteTelefone] = useState("");
@@ -224,6 +226,7 @@ function ComandoPage() {
     setClienteEmail("");
     setProjetoNumero("");
     setObservacoesInternas("");
+    setCreateAttempted(false);
   };
 
   const openDetail = async (id: string) => {
@@ -258,10 +261,12 @@ function ComandoPage() {
 
   const handleCreate = async () => {
     if (!clienteNome.trim()) {
+      setCreateAttempted(true);
       toast.error("Informe o nome do cliente.");
       return;
     }
     if (!clienteTelefone.trim()) {
+      setCreateAttempted(true);
       toast.error("Informe o telefone do cliente.");
       return;
     }
@@ -507,11 +512,21 @@ function ComandoPage() {
           <div className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Nome do Cliente *</label>
-              <Input value={clienteNome} onChange={(e) => setClienteNome(e.target.value)} placeholder="Nome completo ou razão social" />
+              <Input
+                value={clienteNome}
+                onChange={(e) => setClienteNome(e.target.value)}
+                placeholder="Nome completo ou razão social"
+                className={cn(createAttempted && !clienteNome.trim() && FIELD_ERROR_CLASS)}
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Telefone do Cliente (WhatsApp) *</label>
-              <Input value={clienteTelefone} onChange={(e) => setClienteTelefone(e.target.value)} placeholder="(11) 91234-5678" />
+              <Input
+                value={clienteTelefone}
+                onChange={(e) => setClienteTelefone(e.target.value)}
+                placeholder="(11) 91234-5678"
+                className={cn(createAttempted && !clienteTelefone.trim() && FIELD_ERROR_CLASS)}
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">E-mail do Cliente</label>

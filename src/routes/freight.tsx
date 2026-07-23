@@ -8,6 +8,7 @@ import { format, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Stepper } from "@/components/ui/stepper";
+import { FIELD_ERROR_CLASS } from "@/lib/field-error";
 import { parseBRLNumber } from "@/lib/number";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,6 +80,8 @@ function FreightPage() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const [stepAttempted, setStepAttempted] = useState(false);
+  useEffect(() => { setStepAttempted(false); }, [step]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editReqId, setEditReqId] = useState<string | null>(null);
@@ -280,10 +283,13 @@ function FreightPage() {
     return true;
   };
 
-  const handleNext = () => { if (validateStep()) { toast.dismiss(); setStep((s) => Math.min(s + 1, STEPS.length - 1)); } };
+  const handleNext = () => {
+    if (validateStep()) { toast.dismiss(); setStep((s) => Math.min(s + 1, STEPS.length - 1)); }
+    else setStepAttempted(true);
+  };
 
   const handleSubmit = async () => {
-    if (!validateStep()) return;
+    if (!validateStep()) { setStepAttempted(true); return; }
     setIsSubmitting(true);
     try {
       let cargoPhotoPath: string | null = editCargoPhotoPath;
@@ -449,6 +455,7 @@ function FreightPage() {
                   placeholder="Ex.: São Paulo, SP — Rua das Indústrias, 100"
                   value={originAddress}
                   onChange={(e) => setOriginAddress(e.target.value)}
+                  className={cn(stepAttempted && !originAddress.trim() && FIELD_ERROR_CLASS)}
                 />
               </div>
               <div className="space-y-1.5">
@@ -457,12 +464,13 @@ function FreightPage() {
                   placeholder="Ex.: Curitiba, PR — Av. Cândido de Abreu, 200"
                   value={destinationAddress}
                   onChange={(e) => setDestinationAddress(e.target.value)}
+                  className={cn(stepAttempted && !destinationAddress.trim() && FIELD_ERROR_CLASS)}
                 />
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Tipo de Veículo *</label>
                 <Select value={vehicleType} onValueChange={setVehicleType}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectTrigger className={cn(stepAttempted && !vehicleType && FIELD_ERROR_CLASS)}><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     {VEHICLE_TYPES.map((v) => <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>)}
                   </SelectContent>
@@ -475,7 +483,14 @@ function FreightPage() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Descrição da Carga *</label>
-                <Textarea placeholder="O que será transportado? Quantidade, tipo..." value={cargoDescription} onChange={(e) => setCargoDescription(e.target.value)} rows={3} maxLength={500} />
+                <Textarea
+                  placeholder="O que será transportado? Quantidade, tipo..."
+                  value={cargoDescription}
+                  onChange={(e) => setCargoDescription(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  className={cn(stepAttempted && cargoDescription.length < 10 && FIELD_ERROR_CLASS)}
+                />
                 <p className="text-[11px] text-muted-foreground">{cargoDescription.length}/500</p>
               </div>
               <div className="space-y-2 rounded-lg border p-3">
@@ -483,11 +498,21 @@ function FreightPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-xs text-muted-foreground">Nome</label>
-                    <Input placeholder="Nome do responsável" value={receiverName} onChange={(e) => setReceiverName(e.target.value)} />
+                    <Input
+                      placeholder="Nome do responsável"
+                      value={receiverName}
+                      onChange={(e) => setReceiverName(e.target.value)}
+                      className={cn(stepAttempted && !receiverName.trim() && FIELD_ERROR_CLASS)}
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs text-muted-foreground">Telefone</label>
-                    <Input placeholder="(00) 00000-0000" value={receiverPhone} onChange={(e) => setReceiverPhone(e.target.value)} />
+                    <Input
+                      placeholder="(00) 00000-0000"
+                      value={receiverPhone}
+                      onChange={(e) => setReceiverPhone(e.target.value)}
+                      className={cn(stepAttempted && !receiverPhone.trim() && FIELD_ERROR_CLASS)}
+                    />
                   </div>
                 </div>
               </div>
@@ -644,7 +669,11 @@ function FreightPage() {
                 <label className="text-sm font-medium">Data de Coleta *</label>
                 <Popover open={pickupDateOpen} onOpenChange={setPickupDateOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !pickupDate && "text-muted-foreground")}>
+                    <Button variant="outline" className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !pickupDate && "text-muted-foreground",
+                      stepAttempted && !pickupDate && FIELD_ERROR_CLASS,
+                    )}>
                       <CalendarIcon className="mr-2 h-4 w-4" />
                       {pickupDate ? format(pickupDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecione a data"}
                     </Button>
@@ -662,7 +691,11 @@ function FreightPage() {
                   <label className="text-xs text-muted-foreground">Data da descarga</label>
                   <Popover open={unloadingDateOpen} onOpenChange={setUnloadingDateOpen}>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !unloadingDate && "text-muted-foreground")}>
+                      <Button variant="outline" className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !unloadingDate && "text-muted-foreground",
+                        stepAttempted && !unloadingDate && FIELD_ERROR_CLASS,
+                      )}>
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {unloadingDate ? format(unloadingDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecione a data"}
                       </Button>
@@ -701,7 +734,7 @@ function FreightPage() {
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Nível de Urgência *</label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className={cn("grid grid-cols-4 gap-2 rounded-lg", stepAttempted && !urgencyLevel && "ring-2 ring-destructive ring-offset-2")}>
                   {URGENCY.map((u) => (
                     <button key={u.value} type="button" onClick={() => setUrgencyLevel(u.value)}
                       className={cn("rounded-lg border-2 p-2.5 text-xs font-medium text-center transition-all",
@@ -718,7 +751,14 @@ function FreightPage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Justificativa *</label>
-                <Textarea placeholder="Motivo do frete, urgência..." value={justification} onChange={(e) => setJustification(e.target.value)} rows={3} maxLength={500} />
+                <Textarea
+                  placeholder="Motivo do frete, urgência..."
+                  value={justification}
+                  onChange={(e) => setJustification(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  className={cn(stepAttempted && justification.length < 10 && FIELD_ERROR_CLASS)}
+                />
                 <p className="text-[11px] text-muted-foreground">{justification.length}/500</p>
               </div>
             </div>

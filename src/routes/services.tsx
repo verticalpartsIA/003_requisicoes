@@ -7,6 +7,7 @@ import { format, addDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Stepper } from "@/components/ui/stepper";
+import { FIELD_ERROR_CLASS } from "@/lib/field-error";
 import { parseBRLNumber } from "@/lib/number";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,6 +80,8 @@ function ServicesPage() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const [stepAttempted, setStepAttempted] = useState(false);
+  useEffect(() => { setStepAttempted(false); }, [step]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editReqId, setEditReqId] = useState<string | null>(null);
@@ -238,10 +241,13 @@ function ServicesPage() {
     return true;
   };
 
-  const handleNext = () => { if (validateStep()) { toast.dismiss(); setStep((s) => Math.min(s + 1, STEPS.length - 1)); } };
+  const handleNext = () => {
+    if (validateStep()) { toast.dismiss(); setStep((s) => Math.min(s + 1, STEPS.length - 1)); }
+    else setStepAttempted(true);
+  };
 
   const handleSubmit = async () => {
-    if (!validateStep()) return;
+    if (!validateStep()) { setStepAttempted(true); return; }
     setIsSubmitting(true);
     const computedTitle = `${serviceName} (${SERVICE_TYPES.find((t) => t.value === serviceType)?.label ?? serviceType})`;
     const moduleData = {
@@ -364,12 +370,18 @@ function ServicesPage() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Nome do Serviço *</label>
-                <Input placeholder="Ex.: Consultoria ERP Financeiro" value={serviceName} onChange={(e) => setServiceName(e.target.value)} maxLength={200} />
+                <Input
+                  placeholder="Ex.: Consultoria ERP Financeiro"
+                  value={serviceName}
+                  onChange={(e) => setServiceName(e.target.value)}
+                  maxLength={200}
+                  className={cn(stepAttempted && serviceName.length < 5 && FIELD_ERROR_CLASS)}
+                />
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Tipo de Serviço *</label>
                 <Select value={serviceType} onValueChange={setServiceType}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectTrigger className={cn(stepAttempted && !serviceType && FIELD_ERROR_CLASS)}><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     {SERVICE_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
                   </SelectContent>
@@ -377,7 +389,14 @@ function ServicesPage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Descrição Detalhada *</label>
-                <Textarea placeholder="Descreva o serviço, contexto e necessidade..." value={description} onChange={(e) => setDescription(e.target.value)} rows={3} maxLength={1000} />
+                <Textarea
+                  placeholder="Descreva o serviço, contexto e necessidade..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  maxLength={1000}
+                  className={cn(stepAttempted && description.length < 20 && FIELD_ERROR_CLASS)}
+                />
                 <p className="text-[11px] text-muted-foreground">{description.length}/1000</p>
               </div>
               <div className="space-y-1.5">
@@ -399,7 +418,14 @@ function ServicesPage() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Escopo do Trabalho *</label>
-                <Textarea placeholder="O que precisa ser feito? Quais atividades estão incluídas?" value={scopeOfWork} onChange={(e) => setScopeOfWork(e.target.value)} rows={3} maxLength={1000} />
+                <Textarea
+                  placeholder="O que precisa ser feito? Quais atividades estão incluídas?"
+                  value={scopeOfWork}
+                  onChange={(e) => setScopeOfWork(e.target.value)}
+                  rows={3}
+                  maxLength={1000}
+                  className={cn(stepAttempted && scopeOfWork.length < 10 && FIELD_ERROR_CLASS)}
+                />
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Entregáveis Esperados</label>
@@ -429,7 +455,7 @@ function ServicesPage() {
                   {milestones.map((m, idx) => (
                     <div key={idx} className="flex items-center gap-2">
                       <Input
-                        className="flex-1"
+                        className={cn("flex-1", stepAttempted && !m.description.trim() && FIELD_ERROR_CLASS)}
                         placeholder={`Marco ${idx + 1} — Ex.: Entrega do relatório`}
                         value={m.description}
                         onChange={(e) => updateMilestone(idx, "description", e.target.value)}
@@ -470,7 +496,11 @@ function ServicesPage() {
                 <label className="text-sm font-medium">Prazo Desejado *</label>
                 <Popover open={deadlineOpen} onOpenChange={setDeadlineOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !deadline && "text-muted-foreground")}>
+                    <Button variant="outline" className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !deadline && "text-muted-foreground",
+                      stepAttempted && !deadline && FIELD_ERROR_CLASS,
+                    )}>
                       <CalendarIcon className="mr-2 h-4 w-4" />
                       {deadline ? format(deadline, "dd/MM/yyyy", { locale: ptBR }) : "Selecione a data"}
                     </Button>
@@ -483,7 +513,7 @@ function ServicesPage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Nível de Urgência *</label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className={cn("grid grid-cols-4 gap-2 rounded-lg", stepAttempted && !urgencyLevel && "ring-2 ring-destructive ring-offset-2")}>
                   {URGENCY.map((u) => (
                     <button key={u.value} type="button" onClick={() => setUrgencyLevel(u.value)}
                       className={cn("rounded-lg border-2 p-2.5 text-xs font-medium text-center transition-all",
@@ -500,7 +530,14 @@ function ServicesPage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Justificativa *</label>
-                <Textarea placeholder="Por que este serviço é necessário? Qual o impacto de não contratá-lo?" value={justification} onChange={(e) => setJustification(e.target.value)} rows={3} maxLength={500} />
+                <Textarea
+                  placeholder="Por que este serviço é necessário? Qual o impacto de não contratá-lo?"
+                  value={justification}
+                  onChange={(e) => setJustification(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  className={cn(stepAttempted && justification.length < 10 && FIELD_ERROR_CLASS)}
+                />
                 <p className="text-[11px] text-muted-foreground">{justification.length}/500</p>
               </div>
             </div>

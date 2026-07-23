@@ -11,6 +11,7 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { excelTable } from "@/lib/excel-table";
 import { Stepper } from "@/components/ui/stepper";
+import { FIELD_ERROR_CLASS } from "@/lib/field-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -109,6 +110,8 @@ function ProductsPage() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const [stepAttempted, setStepAttempted] = useState(false);
+  useEffect(() => { setStepAttempted(false); }, [step]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editReqId, setEditReqId] = useState<string | null>(null);
@@ -455,13 +458,13 @@ function ProductsPage() {
   };
 
   const handleNext = () => {
-    if (!validateStep()) return;
+    if (!validateStep()) { setStepAttempted(true); return; }
     toast.dismiss();
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
   };
 
   const handleSubmit = async () => {
-    if (!validateStep() || !deliveryDeadline) return;
+    if (!validateStep() || !deliveryDeadline) { setStepAttempted(true); return; }
     setIsSubmitting(true);
 
     try {
@@ -1046,7 +1049,14 @@ function ProductsPage() {
                 <label className="text-sm font-medium">Data Limite para Entrega *</label>
                 <Popover open={deliveryDeadlineOpen} onOpenChange={setDeliveryDeadlineOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !deliveryDeadline && "text-muted-foreground")}>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !deliveryDeadline && "text-muted-foreground",
+                        stepAttempted && !deliveryDeadline && FIELD_ERROR_CLASS,
+                      )}
+                    >
                       <CalendarIcon className="mr-2 h-4 w-4" />
                       {deliveryDeadline ? format(deliveryDeadline, "dd/MM/yyyy", { locale: ptBR }) : "Selecione a data"}
                     </Button>
@@ -1066,11 +1076,16 @@ function ProductsPage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Local de Entrega *</label>
-                <Input placeholder="Endereço, andar, sala, setor" value={deliveryLocation} onChange={(e) => setDeliveryLocation(e.target.value)} />
+                <Input
+                  placeholder="Endereço, andar, sala, setor"
+                  value={deliveryLocation}
+                  onChange={(e) => setDeliveryLocation(e.target.value)}
+                  className={cn(stepAttempted && !deliveryLocation.trim() && FIELD_ERROR_CLASS)}
+                />
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Nível de Urgência *</label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className={cn("grid grid-cols-4 gap-2 rounded-lg", stepAttempted && !urgencyLevel && "ring-2 ring-destructive ring-offset-2")}>
                   {URGENCY.map((u) => (
                     <button
                       key={u.value}
@@ -1093,7 +1108,14 @@ function ProductsPage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Justificativa da Compra *</label>
-                <Textarea placeholder="Por que é necessário? Qual o impacto se não for comprado?" value={justification} onChange={(e) => setJustification(e.target.value)} rows={3} maxLength={500} />
+                <Textarea
+                  placeholder="Por que é necessário? Qual o impacto se não for comprado?"
+                  value={justification}
+                  onChange={(e) => setJustification(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  className={cn(stepAttempted && justification.length < 10 && FIELD_ERROR_CLASS)}
+                />
                 <p className="text-[11px] text-muted-foreground">{justification.length}/500</p>
               </div>
             </div>

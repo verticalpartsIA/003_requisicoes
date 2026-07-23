@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Stepper } from "@/components/ui/stepper";
+import { FIELD_ERROR_CLASS } from "@/lib/field-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -65,6 +66,8 @@ function MaintenancePage() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const [stepAttempted, setStepAttempted] = useState(false);
+  useEffect(() => { setStepAttempted(false); }, [step]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editReqId, setEditReqId] = useState<string | null>(null);
@@ -187,10 +190,13 @@ function MaintenancePage() {
     return true;
   };
 
-  const handleNext = () => { if (validateStep()) { toast.dismiss(); setStep((s) => Math.min(s + 1, STEPS.length - 1)); } };
+  const handleNext = () => {
+    if (validateStep()) { toast.dismiss(); setStep((s) => Math.min(s + 1, STEPS.length - 1)); }
+    else setStepAttempted(true);
+  };
 
   const handleSubmit = async () => {
-    if (!validateStep()) return;
+    if (!validateStep()) { setStepAttempted(true); return; }
     setIsSubmitting(true);
     const computedTitle = `${equipmentName}${equipmentTag ? ` (${equipmentTag})` : ""} — ${maintenanceType}`;
     const moduleData = {
@@ -309,7 +315,13 @@ function MaintenancePage() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Nome do Equipamento *</label>
-                <Input placeholder="Ex.: Prensa Hidráulica 200t" value={equipmentName} onChange={(e) => setEquipmentName(e.target.value)} maxLength={200} />
+                <Input
+                  placeholder="Ex.: Prensa Hidráulica 200t"
+                  value={equipmentName}
+                  onChange={(e) => setEquipmentName(e.target.value)}
+                  maxLength={200}
+                  className={cn(stepAttempted && equipmentName.length < 3 && FIELD_ERROR_CLASS)}
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
@@ -318,7 +330,12 @@ function MaintenancePage() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Setor / Linha *</label>
-                  <Input placeholder="Ex.: Linha 3 — Usinagem" value={sector} onChange={(e) => setSector(e.target.value)} />
+                  <Input
+                    placeholder="Ex.: Linha 3 — Usinagem"
+                    value={sector}
+                    onChange={(e) => setSector(e.target.value)}
+                    className={cn(stepAttempted && !sector.trim() && FIELD_ERROR_CLASS)}
+                  />
                 </div>
               </div>
             </div>
@@ -329,7 +346,7 @@ function MaintenancePage() {
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Tipo de Manutenção *</label>
                 <Select value={maintenanceType} onValueChange={setMaintenanceType}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectTrigger className={cn(stepAttempted && !maintenanceType && FIELD_ERROR_CLASS)}><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     {MAINTENANCE_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
                   </SelectContent>
@@ -337,7 +354,14 @@ function MaintenancePage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Descrição do Problema *</label>
-                <Textarea placeholder="Descreva o defeito, sintoma ou necessidade..." value={problemDescription} onChange={(e) => setProblemDescription(e.target.value)} rows={4} maxLength={1000} />
+                <Textarea
+                  placeholder="Descreva o defeito, sintoma ou necessidade..."
+                  value={problemDescription}
+                  onChange={(e) => setProblemDescription(e.target.value)}
+                  rows={4}
+                  maxLength={1000}
+                  className={cn(stepAttempted && problemDescription.length < 20 && FIELD_ERROR_CLASS)}
+                />
                 <p className="text-[11px] text-muted-foreground">{problemDescription.length}/1000</p>
               </div>
               <div className="flex items-center justify-between rounded-lg border-2 border-red-200 bg-red-50 p-4">
@@ -361,7 +385,7 @@ function MaintenancePage() {
                     </p>
                   </div>
                 )}
-                <div className="grid grid-cols-4 gap-2">
+                <div className={cn("grid grid-cols-4 gap-2 rounded-lg", stepAttempted && !urgencyLevel && "ring-2 ring-destructive ring-offset-2")}>
                   {URGENCY.map((u) => (
                     <button key={u.value} type="button" onClick={() => setUrgencyLevel(u.value)}
                       className={cn("rounded-lg border-2 p-2.5 text-xs font-medium text-center transition-all",
@@ -378,7 +402,14 @@ function MaintenancePage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Justificativa *</label>
-                <Textarea placeholder="Impacto na produção, riscos de segurança..." value={justification} onChange={(e) => setJustification(e.target.value)} rows={3} maxLength={500} />
+                <Textarea
+                  placeholder="Impacto na produção, riscos de segurança..."
+                  value={justification}
+                  onChange={(e) => setJustification(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  className={cn(stepAttempted && justification.length < 10 && FIELD_ERROR_CLASS)}
+                />
                 <p className="text-[11px] text-muted-foreground">{justification.length}/500</p>
               </div>
             </div>
