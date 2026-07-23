@@ -334,3 +334,13 @@ Pendências não bloqueantes mapeadas no próprio projeto:
 O VPRequisições é uma plataforma de operação interna que organiza pedidos corporativos do início ao fim. Ela dá forma ao processo, reduz perda de informação, cria evidência de decisão, melhora governança de compras e entrega à gestão uma visão clara das demandas abertas, gargalos, aprovações, compras e recebimentos.
 
 É um produto com vocação de portal operacional: começa na necessidade de um colaborador, atravessa a cadeia de compras e termina com recebimento, auditoria e inteligência para gestão.
+
+---
+
+## Contributors
+
+- Gelson Simões — criador e responsável pelas soluções VerticalParts
+
+---
+
+**Feito por Gelson Simões**
