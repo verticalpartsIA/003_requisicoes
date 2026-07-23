@@ -513,7 +513,7 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
         full: true,
       });
     if (data.project_number)
-      tripRows.push({ label: "Número do Projeto", value: f(data.project_number) });
+      tripRows.push({ label: "Número da Obra", value: f(data.project_number) });
 
     const tripDetails = tripRows.length > 0 && (
       <div className="space-y-2">
@@ -580,7 +580,7 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
     if (tripDetails) return tripDetails;
     if (data.traveler_name) rows.push({ label: "Viajante", value: f(data.traveler_name) });
   } else if (module === "M5") {
-    if (data.project_number) rows.push({ label: "Nº Projeto", value: f(data.project_number) });
+    if (data.project_number) rows.push({ label: "Número da Obra", value: f(data.project_number) });
     if (data.cargo_description)
       rows.push({ label: "Descrição da Carga", value: f(data.cargo_description), full: true });
     if (data.receiver_name || data.receiver_phone) {
@@ -640,6 +640,7 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
     const cats = data.categories as string[] | undefined;
     if (cats?.length) rows.push({ label: "Categorias", value: cats.join(" + "), full: true });
     if (data.quantity) rows.push({ label: "Quantidade", value: f(data.quantity) });
+    if (data.project_number) rows.push({ label: "Número da Obra", value: f(data.project_number) });
     if (data.rental_days) rows.push({ label: "Dias de Locação", value: f(data.rental_days) });
     if (data.start_date) rows.push({ label: "Início", value: f(data.start_date) });
     if (data.end_date) rows.push({ label: "Término", value: f(data.end_date) });

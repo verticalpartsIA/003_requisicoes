@@ -92,6 +92,7 @@ function FreightPage() {
   const [originAddress, setOriginAddress] = useState("");
   const [destinationAddress, setDestinationAddress] = useState("");
   const [vehicleType, setVehicleType] = useState("");
+  const [isForConstruction, setIsForConstruction] = useState<"" | "sim" | "nao">("");
   const [projectNumber, setProjectNumber] = useState("");
 
   const [cargoDescription, setCargoDescription] = useState("");
@@ -167,6 +168,7 @@ function FreightPage() {
       if (typeof s.originAddress === 'string') setOriginAddress(s.originAddress);
       if (typeof s.destinationAddress === 'string') setDestinationAddress(s.destinationAddress);
       if (typeof s.vehicleType === 'string') setVehicleType(s.vehicleType);
+      if (typeof s.isForConstruction === 'string') setIsForConstruction(s.isForConstruction as "" | "sim" | "nao");
       if (typeof s.projectNumber === 'string') setProjectNumber(s.projectNumber);
       if (typeof s.cargoDescription === 'string') setCargoDescription(s.cargoDescription);
       if (typeof s.receiverName === 'string') setReceiverName(s.receiverName);
@@ -207,6 +209,8 @@ function FreightPage() {
       setOriginAddress((md.origin_address as string | undefined) ?? "");
       setDestinationAddress((md.destination_address as string | undefined) ?? "");
       setVehicleType((md.vehicle_type as string | undefined) ?? "");
+      const wasConstruction = (md.is_construction_site as boolean | undefined) ?? !!(md.project_number as string | undefined);
+      setIsForConstruction(wasConstruction ? "sim" : "nao");
       setProjectNumber((md.project_number as string | undefined) ?? "");
       setCargoDescription((data.description as string) ?? "");
       setReceiverName((md.receiver_name as string | undefined) ?? "");
@@ -233,7 +237,7 @@ function FreightPage() {
     if (!dialogOpen) return;
     try {
       sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
-        open: true, step, originAddress, destinationAddress, vehicleType, projectNumber,
+        open: true, step, originAddress, destinationAddress, vehicleType, isForConstruction, projectNumber,
         cargoDescription, receiverName, receiverPhone, unloadingLocation, cargoPhotoDescription,
         weight, dimensions, fragile, declaredValue,
         pickupDate: pickupDate?.toISOString(),
@@ -242,7 +246,7 @@ function FreightPage() {
         urgencyLevel, justification,
       }));
     } catch { /* ignore */ }
-  }, [dialogOpen, step, originAddress, destinationAddress, vehicleType, projectNumber,
+  }, [dialogOpen, step, originAddress, destinationAddress, vehicleType, isForConstruction, projectNumber,
       cargoDescription, receiverName, receiverPhone, unloadingLocation, cargoPhotoDescription,
       weight, dimensions, fragile, declaredValue,
       pickupDate, unloadingDate, allowedSchedule, accessRestriction, needsCityHallAuthorization,
@@ -251,7 +255,7 @@ function FreightPage() {
   const resetForm = () => {
     sessionStorage.removeItem(DIALOG_KEY);
     setStep(0);
-    setOriginAddress(""); setDestinationAddress(""); setVehicleType(""); setProjectNumber("");
+    setOriginAddress(""); setDestinationAddress(""); setVehicleType(""); setIsForConstruction(""); setProjectNumber("");
     setCargoDescription(""); setReceiverName(""); setReceiverPhone(""); setUnloadingLocation("");
     if (cargoPhotoPreview) URL.revokeObjectURL(cargoPhotoPreview);
     setCargoPhotoFile(null); setCargoPhotoPreview(null); setCargoPhotoDescription("");
@@ -268,6 +272,8 @@ function FreightPage() {
       if (!originAddress.trim()) { toast.error("Informe o endereço de origem."); return false; }
       if (!destinationAddress.trim()) { toast.error("Informe o endereço de destino."); return false; }
       if (!vehicleType) { toast.error("Selecione o tipo de veículo."); return false; }
+      if (!isForConstruction) { toast.error("Informe se é para atender uma obra."); return false; }
+      if (isForConstruction === "sim" && !projectNumber.trim()) { toast.error("Informe o número da obra."); return false; }
     }
     if (step === 1) {
       if (cargoDescription.length < 10) { toast.error("Descrição da carga deve ter pelo menos 10 caracteres."); return false; }
@@ -320,7 +326,8 @@ function FreightPage() {
         origin_address: originAddress,
         destination_address: destinationAddress,
         vehicle_type: vehicleType,
-        project_number: projectNumber || null,
+        is_construction_site: isForConstruction === "sim",
+        project_number: isForConstruction === "sim" ? (projectNumber || null) : null,
         receiver_name: receiverName,
         receiver_phone: receiverPhone,
         unloading_location: unloadingLocation || null,
@@ -442,14 +449,6 @@ function FreightPage() {
           {step === 0 && (
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Nº Projeto</label>
-                <Input
-                  placeholder="Ex.: 28978"
-                  value={projectNumber}
-                  onChange={(e) => setProjectNumber(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
                 <label className="text-sm font-medium">Endereço de Origem *</label>
                 <Input
                   placeholder="Ex.: São Paulo, SP — Rua das Indústrias, 100"
@@ -476,6 +475,37 @@ function FreightPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">É para atender uma obra? *</label>
+                <div className={cn("grid grid-cols-2 gap-2 rounded-lg", stepAttempted && !isForConstruction && "ring-2 ring-destructive ring-offset-2")}>
+                  {(["sim", "nao"] as const).map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setIsForConstruction(opt)}
+                      className={cn(
+                        "rounded-lg border-2 p-2.5 text-xs font-medium text-center transition-all",
+                        isForConstruction === opt
+                          ? "border-vp-yellow bg-amber-50 text-vp-yellow-dark"
+                          : "border-border hover:border-muted-foreground/40",
+                      )}
+                    >
+                      {opt === "sim" ? "Sim" : "Não"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {isForConstruction === "sim" && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Número da Obra *</label>
+                  <Input
+                    placeholder="Ex.: 28978"
+                    value={projectNumber}
+                    onChange={(e) => setProjectNumber(e.target.value)}
+                    className={cn(stepAttempted && !projectNumber.trim() && FIELD_ERROR_CLASS)}
+                  />
+                </div>
+              )}
             </div>
           )}
 

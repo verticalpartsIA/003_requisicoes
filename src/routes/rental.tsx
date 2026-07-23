@@ -98,6 +98,8 @@ function RentalPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [specs, setSpecs] = useState("");
   const [quantity, setQuantity] = useState("1");
+  const [isForConstruction, setIsForConstruction] = useState<"" | "sim" | "nao">("");
+  const [projectNumber, setProjectNumber] = useState("");
 
   const [artStatus, setArtStatus] = useState("EMITIR");
   const [needsSecurityInduction, setNeedsSecurityInduction] = useState(false);
@@ -160,6 +162,8 @@ function RentalPage() {
       else if (typeof s.category === 'string' && s.category) setCategories([s.category as string]);
       if (typeof s.specs === 'string') setSpecs(s.specs);
       if (typeof s.quantity === 'string') setQuantity(s.quantity);
+      if (typeof s.isForConstruction === 'string') setIsForConstruction(s.isForConstruction as "" | "sim" | "nao");
+      if (typeof s.projectNumber === 'string') setProjectNumber(s.projectNumber);
       if (typeof s.artStatus === 'string') setArtStatus(s.artStatus);
       if (typeof s.needsSecurityInduction === 'boolean') setNeedsSecurityInduction(s.needsSecurityInduction);
       if (typeof s.startDate === 'string') setStartDate(new Date(s.startDate));
@@ -190,6 +194,9 @@ function RentalPage() {
       else if (typeof md.category === "string" && md.category) setCategories([md.category as string]);
       if (typeof md.specs === "string") setSpecs(md.specs);
       if (typeof md.quantity === "number") setQuantity(String(md.quantity));
+      const wasConstruction = (md.is_construction_site as boolean | undefined) ?? !!(md.project_number as string | undefined);
+      setIsForConstruction(wasConstruction ? "sim" : "nao");
+      setProjectNumber((md.project_number as string | undefined) ?? "");
       if (typeof md.art_status === "string") setArtStatus(md.art_status);
       if (typeof md.needs_security_induction === "boolean") setNeedsSecurityInduction(md.needs_security_induction);
       setEditClientNormPath((md.client_norm_path as string | null) ?? null);
@@ -208,20 +215,21 @@ function RentalPage() {
     if (!dialogOpen) return;
     try {
       sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
-        open: true, step, categories, specs, quantity,
+        open: true, step, categories, specs, quantity, isForConstruction, projectNumber,
         artStatus, needsSecurityInduction,
         startDate: startDate?.toISOString(),
         endDate: endDate?.toISOString(),
         deliveryLocation, urgencyLevel, justification,
       }));
     } catch { /* ignore */ }
-  }, [dialogOpen, step, categories, specs, quantity, artStatus, needsSecurityInduction,
+  }, [dialogOpen, step, categories, specs, quantity, isForConstruction, projectNumber, artStatus, needsSecurityInduction,
       startDate, endDate, deliveryLocation, urgencyLevel, justification]);
 
   const resetForm = () => {
     sessionStorage.removeItem(DIALOG_KEY);
     setStep(0);
     setCategories([]); setSpecs(""); setQuantity("1");
+    setIsForConstruction(""); setProjectNumber("");
     setArtStatus("EMITIR"); setNeedsSecurityInduction(false);
     setClientNormFile(null); setEditClientNormPath(null);
     setStartDate(undefined); setEndDate(undefined); setDeliveryLocation("");
@@ -233,6 +241,8 @@ function RentalPage() {
     if (step === 0) {
       if (categories.length === 0) { toast.error("Selecione pelo menos uma categoria."); return false; }
       if (!quantity || parseInt(quantity) <= 0) { toast.error("Quantidade deve ser maior que 0."); return false; }
+      if (!isForConstruction) { toast.error("Informe se é para atender uma obra."); return false; }
+      if (isForConstruction === "sim" && !projectNumber.trim()) { toast.error("Informe o número da obra."); return false; }
     }
     if (step === 1) {
       if (!startDate) { toast.error("Informe a data de início."); return false; }
@@ -275,6 +285,8 @@ function RentalPage() {
         category: categories[0] ?? "",
         specs,
         quantity: parseInt(quantity),
+        is_construction_site: isForConstruction === "sim",
+        project_number: isForConstruction === "sim" ? (projectNumber || null) : null,
         needs_art: needsArt,
         art_status: needsArt ? artStatus : null,
         needs_security_induction: needsArt ? needsSecurityInduction : false,
@@ -485,6 +497,37 @@ function RentalPage() {
                   className={cn(stepAttempted && (!quantity || parseInt(quantity) <= 0) && FIELD_ERROR_CLASS)}
                 />
               </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">É para atender uma obra? *</label>
+                <div className={cn("grid grid-cols-2 gap-2 rounded-lg", stepAttempted && !isForConstruction && "ring-2 ring-destructive ring-offset-2")}>
+                  {(["sim", "nao"] as const).map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setIsForConstruction(opt)}
+                      className={cn(
+                        "rounded-lg border-2 p-2.5 text-xs font-medium text-center transition-all",
+                        isForConstruction === opt
+                          ? "border-vp-yellow bg-amber-50 text-vp-yellow-dark"
+                          : "border-border hover:border-muted-foreground/40",
+                      )}
+                    >
+                      {opt === "sim" ? "Sim" : "Não"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {isForConstruction === "sim" && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Número da Obra *</label>
+                  <Input
+                    placeholder="Ex.: 28978"
+                    value={projectNumber}
+                    onChange={(e) => setProjectNumber(e.target.value)}
+                    className={cn(stepAttempted && !projectNumber.trim() && FIELD_ERROR_CLASS)}
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -623,6 +666,12 @@ function RentalPage() {
                   <p className="text-xs text-muted-foreground">Nível de Urgência</p>
                   <p className="text-sm font-medium">{URGENCY.find((u) => u.value === urgencyLevel)?.label ?? "—"}</p>
                 </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Para atender uma obra?</p>
+                <p className="text-sm font-medium">
+                  {isForConstruction === "sim" ? `Sim — Nº ${projectNumber || "—"}` : "Não"}
+                </p>
               </div>
               {specs && (
                 <div className="space-y-1">

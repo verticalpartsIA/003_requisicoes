@@ -1001,7 +1001,7 @@ function TripsPage() {
               </div>
               {purposes.includes("OBRA") && (
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Número do Projeto *</label>
+                  <label className="text-sm font-medium">Número da Obra *</label>
                   <Input
                     placeholder="Ex.: 28978"
                     value={projectNumber}
@@ -1122,6 +1122,12 @@ function TripsPage() {
                   {purposes.length > 0 ? purposes.map((p) => PURPOSES.find((o) => o.value === p)?.label ?? p).join(", ") : "—"}
                 </p>
               </div>
+              {purposes.includes("OBRA") && (
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Número da Obra</p>
+                  <p className="text-sm font-medium">{projectNumber || "—"}</p>
+                </div>
+              )}
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">Justificativa</p>
                 <p className="text-sm">{justification}</p>
