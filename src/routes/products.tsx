@@ -131,6 +131,7 @@ function ProductsPage() {
   const [draftPhotoFile, setDraftPhotoFile] = useState<File | null>(null);
   const [draftPhotoPreview, setDraftPhotoPreview] = useState<string | null>(null);
   const [showDraftTechnical, setShowDraftTechnical] = useState(false);
+  const [draftAttemptedSave, setDraftAttemptedSave] = useState(false);
 
   // Triagem (tela inicial antes do stepper)
   const [triageCompleted, setTriageCompleted] = useState(false);
@@ -288,6 +289,7 @@ function ProductsPage() {
     if (draftPhotoPreview) URL.revokeObjectURL(draftPhotoPreview);
     setDraftPhotoFile(null); setDraftPhotoPreview(null);
     setShowDraftTechnical(false);
+    setDraftAttemptedSave(false);
   };
 
   const openAddForm = () => {
@@ -314,6 +316,7 @@ function ProductsPage() {
     setShowDraftTechnical(false);
     setShowAddForm(false);
     setEditingIdx(idx);
+    setDraftAttemptedSave(false);
   };
 
   const handleValidateProductCode = async () => {
@@ -356,22 +359,25 @@ function ProductsPage() {
 
   const saveDraft = () => {
     if (requiresCodeValidation && !draftCodeValidated) {
+      setDraftAttemptedSave(true);
       toast.error("Verifique o código do produto antes de adicionar.");
       return;
     }
-    if (!draftName.trim()) { toast.error("Informe o nome do produto."); return; }
-    if (!draftQty || parseFloat(draftQty) <= 0) { toast.error("Informe uma quantidade válida."); return; }
+    if (!draftName.trim()) { setDraftAttemptedSave(true); toast.error("Informe o nome do produto."); return; }
+    if (!draftQty || parseFloat(draftQty) <= 0) { setDraftAttemptedSave(true); toast.error("Informe uma quantidade válida."); return; }
     if (requestKind === "estoque") {
-      if (!stockInfo) { toast.error("Verifique o código do produto antes de adicionar."); return; }
+      if (!stockInfo) { setDraftAttemptedSave(true); toast.error("Verifique o código do produto antes de adicionar."); return; }
       if (stockInfo.quantidade_maxima <= 0) {
         toast.error("Este produto já está no estoque mínimo ou acima — não é possível pedir reposição agora.");
         return;
       }
       if (parseFloat(draftQty) > stockInfo.quantidade_maxima) {
+        setDraftAttemptedSave(true);
         toast.error(`Quantidade máxima que pode ser pedida agora: ${stockInfo.quantidade_maxima} (para não passar do estoque mínimo).`);
         return;
       }
     } else if (draftDesc.trim().length < 5) {
+      setDraftAttemptedSave(true);
       toast.error("Descrição deve ter pelo menos 5 caracteres.");
       return;
     }
@@ -745,33 +751,69 @@ function ProductsPage() {
                 </div>
               )}
 
-              {items.map((item, idx) => (
-                <div key={idx} className="flex items-start gap-3 rounded-lg border border-border bg-card p-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-semibold text-foreground">{item.product_name}</span>
-                      {item.product_code && <Badge variant="outline">{item.product_code}</Badge>}
-                      <Badge variant="secondary">Qtd: {item.quantity}</Badge>
-                      {item.stock_snapshot && (
-                        <Badge variant="outline" className="text-muted-foreground">
-                          Disponível: {item.stock_snapshot.estoque_disponivel} · Mínimo: {item.stock_snapshot.estoque_minimo}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                      {item.description.length > 80 ? `${item.description.slice(0, 80)}…` : item.description}
-                    </p>
+              {items.length > 0 && (
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <div className="max-h-[420px] overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 bg-muted/60 backdrop-blur-sm z-10">
+                        <tr className="border-b border-border">
+                          <th className="text-left p-2 font-medium text-muted-foreground w-10">#</th>
+                          <th className="text-left p-2 font-medium text-muted-foreground">Produto</th>
+                          <th className="text-right p-2 font-medium text-muted-foreground w-20">Qtd.</th>
+                          <th className="text-left p-2 font-medium text-muted-foreground">Descrição</th>
+                          <th className="text-right p-2 font-medium text-muted-foreground w-20">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((item, idx) => {
+                          const qtyInvalid = !item.quantity || Number(item.quantity) <= 0;
+                          return (
+                            <tr
+                              key={idx}
+                              className={cn(
+                                "border-b border-border last:border-0",
+                                idx % 2 === 1 && "bg-muted/20",
+                              )}
+                            >
+                              <td className="p-2 align-top text-muted-foreground">{idx + 1}</td>
+                              <td className="p-2 align-top min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-medium text-foreground">{item.product_name}</span>
+                                  {item.product_code && <Badge variant="outline">{item.product_code}</Badge>}
+                                </div>
+                                {item.stock_snapshot && (
+                                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                                    Disponível: {item.stock_snapshot.estoque_disponivel} · Mínimo: {item.stock_snapshot.estoque_minimo}
+                                  </p>
+                                )}
+                              </td>
+                              <td className={cn("p-2 align-top text-right font-semibold", qtyInvalid ? "text-destructive" : "text-foreground")}>
+                                {item.quantity || "—"}
+                              </td>
+                              <td className="p-2 align-top text-muted-foreground">
+                                {item.description.length > 80 ? `${item.description.slice(0, 80)}…` : item.description || "—"}
+                              </td>
+                              <td className="p-2 align-top">
+                                <div className="flex gap-1 justify-end">
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditItem(idx)}>
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeItem(idx)}>
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="flex gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditItem(idx)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeItem(idx)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                  <div className="border-t border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
+                    {items.length} {items.length === 1 ? "item" : "itens"} adicionado{items.length === 1 ? "" : "s"}
                   </div>
                 </div>
-              ))}
+              )}
 
               {/* Formulário inline de item */}
               {formActive && (
@@ -852,6 +894,7 @@ function ProductsPage() {
                       maxLength={200}
                       disabled={requiresCodeValidation}
                       readOnly={requiresCodeValidation}
+                      className={cn(draftAttemptedSave && !draftName.trim() && "border-destructive focus-visible:ring-destructive")}
                     />
                   </div>
                   {requestKind === "estoque" ? (
@@ -866,17 +909,33 @@ function ProductsPage() {
                         value={draftQty}
                         onChange={(e) => setDraftQty(e.target.value)}
                         disabled={!stockInfo || stockInfo.quantidade_maxima <= 0}
+                        className={cn(draftAttemptedSave && (!draftQty || parseFloat(draftQty) <= 0) && "border-destructive focus-visible:ring-destructive")}
                       />
                     </div>
                   ) : (
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1.5 col-span-2">
                       <label className="text-sm font-medium">Descrição *</label>
-                      <Textarea placeholder="Descreva o material e contexto de uso..." value={draftDesc} onChange={(e) => setDraftDesc(e.target.value)} rows={2} maxLength={1000} />
+                      <Textarea
+                        placeholder="Descreva o material e contexto de uso..."
+                        value={draftDesc}
+                        onChange={(e) => setDraftDesc(e.target.value)}
+                        rows={2}
+                        maxLength={1000}
+                        className={cn(draftAttemptedSave && draftDesc.trim().length < 5 && "border-destructive focus-visible:ring-destructive")}
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-sm font-medium">Quantidade *</label>
-                      <Input type="number" min="0" step="0.01" placeholder="0" value={draftQty} onChange={(e) => setDraftQty(e.target.value)} />
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0"
+                        value={draftQty}
+                        onChange={(e) => setDraftQty(e.target.value)}
+                        className={cn(draftAttemptedSave && (!draftQty || parseFloat(draftQty) <= 0) && "border-destructive focus-visible:ring-destructive")}
+                      />
                     </div>
                   </div>
                   )}
