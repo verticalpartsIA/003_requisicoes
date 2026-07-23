@@ -8,6 +8,27 @@ import {
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import type { OmieStockItem, CriarRequisicaoCompraItem } from "@/features/omie/api";
 
+// O PostgREST limita a 1000 linhas por resposta por padrão — sem paginação
+// explícita, tabelas maiores (omie_stock_cache/omie_purchase_suggestions têm
+// ~1800 produtos) voltam truncadas silenciosamente, sem erro, e a tela some
+// com o restante dos produtos. Busca página a página até esgotar os dados.
+async function fetchAllRows<T>(
+  build: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const PAGE_SIZE = 1000;
+  const rows: T[] = [];
+  let offset = 0;
+  for (;;) {
+    const { data, error } = await build(offset, offset + PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+  return rows;
+}
+
 export async function validateOmieOrderClient(numeroPedido: string) {
   return validateOmieOrder({ data: { numeroPedido } });
 }
@@ -36,14 +57,21 @@ export interface OmieStockCacheResult {
 }
 
 export async function listOmieStockFromCacheClient(): Promise<OmieStockCacheResult> {
-  const { data, error } = await supabaseBrowser
-    .from("omie_stock_cache")
-    .select("codigo,descricao,estoque_fisico,estoque_reservado,estoque_disponivel,estoque_minimo,updated_at")
-    .order("descricao", { ascending: true });
-
-  if (error) throw new Error(error.message);
-
-  const rows = data ?? [];
+  const rows = await fetchAllRows<{
+    codigo: string;
+    descricao: string;
+    estoque_fisico: number;
+    estoque_reservado: number;
+    estoque_disponivel: number;
+    estoque_minimo: number;
+    updated_at: string;
+  }>((from, to) =>
+    supabaseBrowser
+      .from("omie_stock_cache")
+      .select("codigo,descricao,estoque_fisico,estoque_reservado,estoque_disponivel,estoque_minimo,updated_at")
+      .order("descricao", { ascending: true })
+      .range(from, to),
+  );
   const items: OmieStockItem[] = rows.map((row) => ({
     codigo: row.codigo,
     descricao: row.descricao,
@@ -109,17 +137,46 @@ export interface OmiePurchaseSuggestionsResult {
   lastVelocitySyncedAt: string | null;
 }
 
+interface OmiePurchaseSuggestionRow {
+  codigo: string;
+  descricao: string;
+  unidade: string | null;
+  estoque_fisico: number;
+  estoque_reservado: number;
+  estoque_disponivel: number;
+  estoque_minimo: number;
+  curva: string;
+  lead_time_dias: number | null;
+  cobertura_dias: number | null;
+  qtd_pendente: number;
+  comprado: number;
+  proxima_previsao: string | null;
+  pedidos: unknown;
+  sugestao_bruta: number;
+  sugestao_compra: number;
+  multiplo_compra: number | null;
+  lote_minimo: number | null;
+  lote_confirmado: boolean | null;
+  sugerido_multiplo: number | null;
+  sugerido_lote_minimo: number | null;
+  historico_total_pedidos: number | null;
+  historico_moda_frequencia: number | null;
+  lote_pendente_revisao: boolean | null;
+  estoque_atualizado_em: string | null;
+  giro_calculado_em: string | null;
+}
+
 export async function listOmiePurchaseSuggestionsClient(): Promise<OmiePurchaseSuggestionsResult> {
-  const { data, error } = await supabaseBrowser
-    .from("omie_purchase_suggestions")
-    .select(
-      "codigo,descricao,unidade,estoque_fisico,estoque_reservado,estoque_disponivel,estoque_minimo,curva,lead_time_dias,cobertura_dias,qtd_pendente,comprado,proxima_previsao,pedidos,sugestao_bruta,sugestao_compra,multiplo_compra,lote_minimo,lote_confirmado,sugerido_multiplo,sugerido_lote_minimo,historico_total_pedidos,historico_moda_frequencia,lote_pendente_revisao,estoque_atualizado_em,giro_calculado_em",
-    )
-    .order("descricao", { ascending: true });
+  const rows = await fetchAllRows<OmiePurchaseSuggestionRow>((from, to) =>
+    supabaseBrowser
+      .from("omie_purchase_suggestions")
+      .select(
+        "codigo,descricao,unidade,estoque_fisico,estoque_reservado,estoque_disponivel,estoque_minimo,curva,lead_time_dias,cobertura_dias,qtd_pendente,comprado,proxima_previsao,pedidos,sugestao_bruta,sugestao_compra,multiplo_compra,lote_minimo,lote_confirmado,sugerido_multiplo,sugerido_lote_minimo,historico_total_pedidos,historico_moda_frequencia,lote_pendente_revisao,estoque_atualizado_em,giro_calculado_em",
+      )
+      .order("descricao", { ascending: true })
+      .range(from, to),
+  );
 
-  if (error) throw new Error(error.message);
-
-  const rows = data ?? [];
   const items: OmiePurchaseSuggestionItem[] = rows.map((row) => ({
     codigo: row.codigo,
     descricao: row.descricao,
