@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/features/auth/auth-context";
 import { friendlySupabaseError } from "@/lib/supabase-error";
 import { toast } from "sonner";
@@ -146,6 +146,9 @@ function LoginPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Recuperar senha</DialogTitle>
+            <DialogDescription>
+              Vamos enviar um link para redefinir sua senha com segurança.
+            </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleForgotPassword}>
             <div className="space-y-1.5">
@@ -160,9 +163,6 @@ function LoginPage() {
                 disabled={isResetSubmitting}
               />
             </div>
-            <p className="text-sm text-muted-foreground">
-              Vamos enviar um link para redefinir sua senha com segurança.
-            </p>
             <Button type="submit" variant="vp" className="w-full" disabled={isResetSubmitting}>
               Enviar link de recuperação
             </Button>

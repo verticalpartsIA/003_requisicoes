@@ -23,6 +23,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -211,9 +212,9 @@ function GestorSection({ gestorName }: { gestorName: string }) {
                   <UserCheck className="h-5 w-5 text-amber-600" />
                   Gestor — {selected.ticketNumber}
                 </DialogTitle>
-                <p className="text-sm text-muted-foreground">
+                <DialogDescription>
                   {selected.title} • {selected.module}
-                </p>
+                </DialogDescription>
               </DialogHeader>
 
               <Card className="border-dashed border-amber-300/60">
@@ -606,9 +607,9 @@ function ApprovalPage() {
                         {levelLabels[selected.approvalLevel]}
                       </span>
                     </DialogTitle>
-                    <p className="text-sm text-muted-foreground">
+                    <DialogDescription>
                       {selected.title} • {selected.module}
-                    </p>
+                    </DialogDescription>
                   </DialogHeader>
 
                   <Card className="border-dashed border-vp-yellow/50">

@@ -1491,6 +1491,18 @@ function MovimentacoesPage() {
       {/* Ticket Detail Sheet */}
       <Sheet open={!!selectedTicket} onOpenChange={(open) => !open && setSelectedTicket(null)}>
         <SheetContent className="sm:max-w-lg overflow-y-auto">
+          {/* Radix exige um título acessível enquanto o Sheet está aberto —
+              nos estados de carregamento/não-encontrado o título "rico" ainda
+              não existe, então um título oculto (só para leitor de tela)
+              cobre esses momentos transitórios. */}
+          {(detailLoading || !liveDetail) && (
+            <SheetHeader className="sr-only">
+              <SheetTitle>
+                {detailLoading ? "Carregando detalhes do ticket" : `Ticket ${selectedTicket} não encontrado`}
+              </SheetTitle>
+            </SheetHeader>
+          )}
+
           {/* Loading state */}
           {detailLoading && (
             <div className="flex items-center justify-center h-48 gap-3 text-muted-foreground">

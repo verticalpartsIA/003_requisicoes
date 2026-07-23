@@ -27,6 +27,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -366,9 +367,9 @@ function PurchasingPage() {
                       {cat?.icon} {cat?.label}
                     </span>
                   </DialogTitle>
-                  <p className="text-sm text-muted-foreground">
+                  <DialogDescription>
                     {selected.title} • {selected.module}
-                  </p>
+                  </DialogDescription>
                 </DialogHeader>
 
                 <div className="rounded-lg bg-green-50 border border-green-200 p-3 flex items-center gap-2">
