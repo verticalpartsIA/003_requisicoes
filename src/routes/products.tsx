@@ -9,6 +9,7 @@ import {
 import { format, addDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { excelTable } from "@/lib/excel-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -752,31 +753,25 @@ function ProductsPage() {
               )}
 
               {items.length > 0 && (
-                <div className="rounded-lg border border-border overflow-hidden">
-                  <div className="max-h-[420px] overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className="sticky top-0 bg-muted/60 backdrop-blur-sm z-10">
-                        <tr className="border-b border-border">
-                          <th className="text-left p-2 font-medium text-muted-foreground w-10">#</th>
-                          <th className="text-left p-2 font-medium text-muted-foreground">Produto</th>
-                          <th className="text-right p-2 font-medium text-muted-foreground w-20">Qtd.</th>
-                          <th className="text-left p-2 font-medium text-muted-foreground">Descrição</th>
-                          <th className="text-right p-2 font-medium text-muted-foreground w-20">Ações</th>
+                <div className={excelTable.wrapper}>
+                  <div className={excelTable.scrollBody}>
+                    <table className={excelTable.table}>
+                      <thead className={excelTable.thead}>
+                        <tr className={excelTable.headRow}>
+                          <th className={cn(excelTable.th, "w-10")}>#</th>
+                          <th className={excelTable.th}>Produto</th>
+                          <th className={cn(excelTable.thRight, "w-20")}>Qtd.</th>
+                          <th className={excelTable.th}>Descrição</th>
+                          <th className={cn(excelTable.thRight, "w-20")}>Ações</th>
                         </tr>
                       </thead>
                       <tbody>
                         {items.map((item, idx) => {
                           const qtyInvalid = !item.quantity || Number(item.quantity) <= 0;
                           return (
-                            <tr
-                              key={idx}
-                              className={cn(
-                                "border-b border-border last:border-0",
-                                idx % 2 === 1 && "bg-muted/20",
-                              )}
-                            >
-                              <td className="p-2 align-top text-muted-foreground">{idx + 1}</td>
-                              <td className="p-2 align-top min-w-0">
+                            <tr key={idx} className={excelTable.row(idx)}>
+                              <td className={cn(excelTable.td, "text-muted-foreground")}>{idx + 1}</td>
+                              <td className={cn(excelTable.td, "min-w-0")}>
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="font-medium text-foreground">{item.product_name}</span>
                                   {item.product_code && <Badge variant="outline">{item.product_code}</Badge>}
@@ -787,13 +782,13 @@ function ProductsPage() {
                                   </p>
                                 )}
                               </td>
-                              <td className={cn("p-2 align-top text-right font-semibold", qtyInvalid ? "text-destructive" : "text-foreground")}>
+                              <td className={cn(excelTable.tdRight, qtyInvalid ? "text-destructive" : "text-foreground")}>
                                 {item.quantity || "—"}
                               </td>
-                              <td className="p-2 align-top text-muted-foreground">
+                              <td className={cn(excelTable.td, "text-muted-foreground")}>
                                 {item.description.length > 80 ? `${item.description.slice(0, 80)}…` : item.description || "—"}
                               </td>
-                              <td className="p-2 align-top">
+                              <td className={excelTable.td}>
                                 <div className="flex gap-1 justify-end">
                                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditItem(idx)}>
                                     <Pencil className="h-3.5 w-3.5" />
@@ -809,7 +804,7 @@ function ProductsPage() {
                       </tbody>
                     </table>
                   </div>
-                  <div className="border-t border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
+                  <div className={excelTable.footer}>
                     {items.length} {items.length === 1 ? "item" : "itens"} adicionado{items.length === 1 ? "" : "s"}
                   </div>
                 </div>

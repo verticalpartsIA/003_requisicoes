@@ -18,6 +18,8 @@ import {
   Filter,
   ScrollText,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { excelTable } from "@/lib/excel-table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -243,22 +245,22 @@ function GestorSection({ gestorName }: { gestorName: string }) {
               {selected.items && selected.items.length > 0 && (
                 <div className="space-y-1.5">
                   <Label className="text-sm">Itens ({selected.items.length})</Label>
-                  <div className="rounded-lg border border-border overflow-hidden">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b border-border bg-muted/40">
-                          <th className="text-left p-2 font-medium text-muted-foreground">Produto</th>
-                          <th className="text-right p-2 font-medium text-muted-foreground w-20">Qtd.</th>
+                  <div className={excelTable.wrapper}>
+                    <table className={excelTable.table}>
+                      <thead className={excelTable.thead}>
+                        <tr className={excelTable.headRow}>
+                          <th className={excelTable.th}>Produto</th>
+                          <th className={cn(excelTable.thRight, "w-20")}>Qtd.</th>
                         </tr>
                       </thead>
                       <tbody>
                         {selected.items.map((it, i) => (
-                          <tr key={i} className={`border-b border-border last:border-0 ${i % 2 === 1 ? "bg-muted/20" : ""}`}>
-                            <td className="p-2 text-foreground">
+                          <tr key={i} className={excelTable.row(i)}>
+                            <td className={cn(excelTable.td, "text-foreground")}>
                               {it.productCode && <span className="font-mono text-muted-foreground mr-1">[{it.productCode}]</span>}
                               {it.productName}
                             </td>
-                            <td className="p-2 text-right font-semibold text-foreground">{it.quantity ?? "—"}</td>
+                            <td className={cn(excelTable.tdRight, "text-foreground")}>{it.quantity ?? "—"}</td>
                           </tr>
                         ))}
                       </tbody>

@@ -128,13 +128,15 @@ export function buildHtml(d: BuildInput): string {
           <td style="padding:5px 6px;border:1px solid #e5e7eb;font-size:10.5px;font-weight:600;text-align:right;">${f(it.quantity)}</td>
         </tr>`;
       }).join("");
+      const th = (label: string, align: "left" | "right" = "left") =>
+        `<th style="padding:5px 6px;border:1px solid #d1d5db;font-size:9px;font-weight:700;color:#374151;text-transform:uppercase;text-align:${align};">${label}</th>`;
       mdContent += `<table style="width:100%;border-collapse:collapse;margin-top:6px;">
-        <thead><tr style="background:#f3f4f6;">
-          <th style="padding:5px 6px;border:1px solid #e5e7eb;font-size:9px;color:#6b7280;text-transform:uppercase;">#</th>
-          <th style="padding:5px 6px;border:1px solid #e5e7eb;font-size:9px;color:#6b7280;text-transform:uppercase;">Código</th>
-          <th style="padding:5px 6px;border:1px solid #e5e7eb;font-size:9px;color:#6b7280;text-transform:uppercase;text-align:left;">Produto</th>
-          <th style="padding:5px 6px;border:1px solid #e5e7eb;font-size:9px;color:#6b7280;text-transform:uppercase;text-align:left;">Descrição</th>
-          <th style="padding:5px 6px;border:1px solid #e5e7eb;font-size:9px;color:#6b7280;text-transform:uppercase;text-align:right;">Qtd.</th>
+        <thead><tr style="background:#e5e7eb;">
+          ${th("#")}
+          ${th("Código")}
+          ${th("Produto")}
+          ${th("Descrição")}
+          ${th("Qtd.", "right")}
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>`;

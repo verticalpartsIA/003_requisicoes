@@ -61,6 +61,8 @@ import { getLogsOverview, type LogsPayload, type LogsEntry } from "@/features/lo
 import { useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { pendencyOf, PENDENCY_TONE_CLASS, MODULE_ROUTES, OPEN_STATUSES } from "@/lib/requisitions";
+import { cn } from "@/lib/utils";
+import { excelTable } from "@/lib/excel-table";
 
 /* ── Export types ── */
 
@@ -351,17 +353,17 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
               Local de Entrega: <span className="font-medium text-foreground">{f(data.delivery_location)}</span>
             </p>
           )}
-          <Card>
-            <CardContent className="p-0">
+          <Card className="p-0 overflow-hidden">
+            <div className={excelTable.wrapper}>
               <div className="overflow-x-auto">
-                <table className="w-full text-[11px]">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/40">
-                      <th className="text-left p-2 font-medium text-muted-foreground w-8">#</th>
-                      <th className="text-left p-2 font-medium text-muted-foreground">Código</th>
-                      <th className="text-left p-2 font-medium text-muted-foreground">Produto</th>
-                      <th className="text-left p-2 font-medium text-muted-foreground">Descrição</th>
-                      <th className="text-right p-2 font-medium text-muted-foreground">Qtd.</th>
+                <table className={excelTable.table}>
+                  <thead className={excelTable.thead}>
+                    <tr className={excelTable.headRow}>
+                      <th className={cn(excelTable.th, "w-8")}>#</th>
+                      <th className={excelTable.th}>Código</th>
+                      <th className={excelTable.th}>Produto</th>
+                      <th className={excelTable.th}>Descrição</th>
+                      <th className={excelTable.thRight}>Qtd.</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -372,25 +374,25 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
                         it.model_reference ? `Ref.: ${f(it.model_reference)}` : null,
                       ].filter(Boolean).join(" · ");
                       return (
-                        <tr key={i} className={`border-b border-border last:border-0 ${i % 2 === 1 ? "bg-muted/20" : ""}`}>
-                          <td className="p-2 text-muted-foreground align-top">{i + 1}</td>
-                          <td className="p-2 font-mono text-foreground align-top">{f(it.product_code)}</td>
-                          <td className="p-2 font-medium text-foreground align-top">{f(it.product_name)}</td>
-                          <td className="p-2 text-foreground align-top">
+                        <tr key={i} className={excelTable.row(i)}>
+                          <td className={cn(excelTable.td, "text-muted-foreground")}>{i + 1}</td>
+                          <td className={cn(excelTable.td, "font-mono text-foreground")}>{f(it.product_code)}</td>
+                          <td className={cn(excelTable.td, "font-medium text-foreground")}>{f(it.product_name)}</td>
+                          <td className={cn(excelTable.td, "text-foreground")}>
                             {f(it.description)}
                             {details && <p className="text-[10px] text-muted-foreground mt-0.5">{details}</p>}
                             {typeof it.photo_path === "string" && it.photo_path && (
                               <StoragePhoto path={it.photo_path} alt={`Foto — ${f(it.product_name)}`} />
                             )}
                           </td>
-                          <td className="p-2 text-right font-semibold text-foreground align-top">{f(it.quantity)}</td>
+                          <td className={cn(excelTable.tdRight, "text-foreground")}>{f(it.quantity)}</td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
-            </CardContent>
+            </div>
           </Card>
         </div>
       );
