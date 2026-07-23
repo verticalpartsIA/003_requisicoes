@@ -12,6 +12,13 @@ interface GestorRequisition {
   requester_department: string | null;
   urgency: string;
   created_at: string;
+  module_data: Record<string, unknown> | null;
+}
+
+export interface GestorQueueProductItem {
+  productCode: string | null;
+  productName: string;
+  quantity: number | null;
 }
 
 export interface GestorQueueItem {
@@ -24,6 +31,10 @@ export interface GestorQueueItem {
   requesterDepartment: string;
   urgency: string;
   createdAt: string;
+  // Colunas base (produto/quantidade) do M1 multi-itens — nascimento da
+  // requisição só mostra isso; preço/fornecedor só entram depois da cotação
+  // (V2), não antes. Ver issue de progressão de colunas por estado.
+  items?: GestorQueueProductItem[];
 }
 
 export interface GestorScope {
@@ -69,19 +80,27 @@ export const listGestorQueue = createServerFn({ method: "POST" })
     const orFilter = encodeURIComponent(`(${filters.join(",")})`);
 
     const response = await supabaseRest<GestorRequisition[]>(
-      `requisitions?select=id,ticket_number,module,title,justification,requester_name,requester_department,urgency,created_at&status=eq.GESTOR&or=${orFilter}&order=created_at.asc`,
+      `requisitions?select=id,ticket_number,module,title,justification,requester_name,requester_department,urgency,created_at,module_data&status=eq.GESTOR&or=${orFilter}&order=created_at.asc`,
     );
-    return (response.data ?? []).map((r): GestorQueueItem => ({
-      requisitionId: r.id,
-      ticketNumber: r.ticket_number,
-      module: r.module,
-      title: r.title,
-      justification: r.justification,
-      requesterName: r.requester_name,
-      requesterDepartment: r.requester_department ?? "—",
-      urgency: r.urgency,
-      createdAt: new Date(r.created_at).toLocaleDateString("pt-BR"),
-    }));
+    return (response.data ?? []).map((r): GestorQueueItem => {
+      const rawItems = r.module === "M1" ? (r.module_data?.items as Array<Record<string, unknown>> | undefined) : undefined;
+      return {
+        requisitionId: r.id,
+        ticketNumber: r.ticket_number,
+        module: r.module,
+        title: r.title,
+        justification: r.justification,
+        requesterName: r.requester_name,
+        requesterDepartment: r.requester_department ?? "—",
+        urgency: r.urgency,
+        createdAt: new Date(r.created_at).toLocaleDateString("pt-BR"),
+        items: rawItems?.map((it) => ({
+          productCode: (it.product_code as string | null) ?? null,
+          productName: String(it.product_name ?? ""),
+          quantity: (it.quantity as number | null) ?? null,
+        })),
+      };
+    });
   });
 
 /** Garante que apenas o aprovador designado do solicitante (ou admin; ou, sem

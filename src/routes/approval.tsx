@@ -237,6 +237,36 @@ function GestorSection({ gestorName }: { gestorName: string }) {
                 </CardContent>
               </Card>
 
+              {/* Nascimento da requisição: só produto + quantidade. Preço e
+                  fornecedor são colunas que só existem depois da cotação
+                  (V2) — não fazem sentido aqui, o gestor decide sem isso. */}
+              {selected.items && selected.items.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Itens ({selected.items.length})</Label>
+                  <div className="rounded-lg border border-border overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/40">
+                          <th className="text-left p-2 font-medium text-muted-foreground">Produto</th>
+                          <th className="text-right p-2 font-medium text-muted-foreground w-20">Qtd.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selected.items.map((it, i) => (
+                          <tr key={i} className={`border-b border-border last:border-0 ${i % 2 === 1 ? "bg-muted/20" : ""}`}>
+                            <td className="p-2 text-foreground">
+                              {it.productCode && <span className="font-mono text-muted-foreground mr-1">[{it.productCode}]</span>}
+                              {it.productName}
+                            </td>
+                            <td className="p-2 text-right font-semibold text-foreground">{it.quantity ?? "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label className="text-sm">Observações / Justificativa de reprovação</Label>
                 <Textarea
