@@ -14,6 +14,10 @@ import {
   UserRoundCheck,
   Ban,
   RotateCcw,
+  Search,
+  MoreVertical,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,11 +25,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { useAuth, type AppRole } from "@/features/auth/auth-context";
 import {
@@ -153,6 +173,12 @@ function UsersTab() {
   const [loading, setLoading] = useState(true);
   const [editingDept, setEditingDept] = useState<Record<string, string>>({});
   const [newGestorDept, setNewGestorDept] = useState<Record<string, string>>({});
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"Todos" | AppRole>("Todos");
+  const [statusFilter, setStatusFilter] = useState<"Todos" | "ativos" | "inativos">("Todos");
+  const [detailUserId, setDetailUserId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UserWithRoles | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
@@ -262,19 +288,23 @@ function UsersTab() {
     }
   };
 
-  const handleDeleteUser = async (target: UserWithRoles) => {
-    if (!currentUser) return;
-    const ok = window.confirm(
-      `EXCLUIR definitivamente ${target.full_name ?? target.email}? Esta ação não pode ser desfeita. As requisições já criadas por ele são mantidas no histórico.`,
-    );
-    if (!ok) return;
+  // A exclusão é destrutiva e irreversível — separada num Dialog de
+  // confirmação (setDeleteTarget abre, confirmDelete executa) em vez de um
+  // window.confirm nativo, e isolada num menu discreto na linha da tabela
+  // ao invés de um botão sempre visível ao lado de ações comuns.
+  const confirmDelete = async () => {
+    if (!currentUser || !deleteTarget) return;
+    setDeleting(true);
     try {
-      await deleteUserAccount({ data: { adminId: currentUser.id, targetUserId: target.id } });
-      setUsers((prev) => prev.filter((u) => u.id !== target.id));
-      setDeptManagers((prev) => prev.filter((dm) => dm.manager_user_id !== target.id));
+      await deleteUserAccount({ data: { adminId: currentUser.id, targetUserId: deleteTarget.id } });
+      setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id));
+      setDeptManagers((prev) => prev.filter((dm) => dm.manager_user_id !== deleteTarget.id));
       toast.success("Usuário excluído.");
+      setDeleteTarget(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao excluir usuário.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -309,271 +339,492 @@ function UsersTab() {
     );
   }
 
+  // Listagem primariamente read-only e filtrável — edição por usuário
+  // acontece num painel dedicado (Sheet), não com dezenas de inputs
+  // visíveis simultaneamente para todo mundo na lista.
+  const filteredUsers = users.filter((u) => {
+    if (statusFilter === "ativos" && !u.active) return false;
+    if (statusFilter === "inativos" && u.active) return false;
+    if (roleFilter !== "Todos" && !u.roles.some((r) => r.role === roleFilter)) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (
+        (u.full_name ?? "").toLowerCase().includes(q) ||
+        (u.email ?? "").toLowerCase().includes(q) ||
+        (u.department ?? "").toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
+
+  const detailUser = users.find((u) => u.id === detailUserId) ?? null;
+  const missingBadge = (
+    <span className="inline-flex items-center gap-1 text-amber-700">
+      <AlertTriangle className="h-3 w-3 shrink-0" /> —
+    </span>
+  );
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <p className="text-sm text-muted-foreground">{users.length} usuário(s) encontrado(s)</p>
-        <Button variant="outline" size="sm" onClick={() => void load()}>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nome, e-mail ou departamento..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as typeof roleFilter)}>
+          <SelectTrigger className="w-full sm:w-[160px]">
+            <SelectValue placeholder="Papel" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Todos">Todos os papéis</SelectItem>
+            {ALL_ROLES.map((r) => (
+              <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+          <SelectTrigger className="w-full sm:w-[140px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Todos">Todos os status</SelectItem>
+            <SelectItem value="ativos">Ativos</SelectItem>
+            <SelectItem value="inativos">Inativos</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="outline" size="sm" onClick={() => void load()} className="shrink-0">
           <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
           Atualizar
         </Button>
       </div>
 
-      {users.map((user) => {
-        const existingRoles = user.roles.map((r) => r.role);
-        const availableRoles = ALL_ROLES.filter((r) => !existingRoles.includes(r));
-        const aprovadorEntry = user.roles.find((r) => r.role === "aprovador");
-        const userManagers = deptManagers.filter((dm) => dm.manager_user_id === user.id);
-        const currentDept = editingDept[user.id] ?? user.department ?? "";
-        const savedDept = user.department ?? "";
-        const deptChanged = currentDept !== savedDept;
-        const approver = users.find((u) => u.id === user.approver_id);
-        const approverCandidates = users.filter((u) => u.id !== user.id && u.active);
-        const isSelf = user.id === currentUser?.id;
+      <p className="text-xs text-muted-foreground">
+        {filteredUsers.length} de {users.length} usuário(s)
+      </p>
 
-        return (
-          <Card key={user.id} className={`border-border/60 ${user.active ? "" : "opacity-60 bg-muted/30"}`}>
-            <CardContent className="pt-5 pb-4 space-y-4">
-              {/* Info do usuário + Papéis */}
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-semibold text-sm truncate">
-                      {user.full_name || "Sem nome"}
-                    </p>
-                    {!user.active && (
-                      <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
-                        Inativo
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-                </div>
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left p-3 text-xs font-medium text-muted-foreground">Usuário</th>
+                  <th className="text-left p-3 text-xs font-medium text-muted-foreground">Papéis</th>
+                  <th className="text-left p-3 text-xs font-medium text-muted-foreground">Alçada</th>
+                  <th className="text-left p-3 text-xs font-medium text-muted-foreground">Aprovador</th>
+                  <th className="text-left p-3 text-xs font-medium text-muted-foreground">Departamento</th>
+                  <th className="text-left p-3 text-xs font-medium text-muted-foreground">Status</th>
+                  <th className="text-right p-3 text-xs font-medium text-muted-foreground">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredUsers.map((user) => {
+                  const aprovadorEntry = user.roles.find((r) => r.role === "aprovador");
+                  const approver = users.find((u) => u.id === user.approver_id);
+                  const isSelf = user.id === currentUser?.id;
 
-                <div className="flex flex-col gap-2 min-w-0 sm:items-end">
-                  <div className="flex flex-wrap gap-1.5">
-                    {user.roles.map(({ role, approval_tier }) => (
-                      <span
-                        key={role}
-                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium ${ROLE_COLORS[role]}`}
-                      >
-                        {ROLE_LABELS[role]}
-                        {role === "aprovador" && approval_tier && (
-                          <span className="opacity-70">· {approval_tier}ª</span>
+                  return (
+                    <tr
+                      key={user.id}
+                      className={`border-b border-border last:border-0 hover:bg-accent/50 transition-colors ${user.active ? "" : "opacity-60"}`}
+                    >
+                      <td className="p-3">
+                        <p className="font-medium text-foreground truncate max-w-[180px]">
+                          {user.full_name || "Sem nome"}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate max-w-[220px]">{user.email}</p>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex flex-wrap gap-1 max-w-[200px]">
+                          {user.roles.length === 0 && <span className="text-xs text-muted-foreground italic">—</span>}
+                          {user.roles.map(({ role }) => (
+                            <span
+                              key={role}
+                              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${ROLE_COLORS[role]}`}
+                            >
+                              {ROLE_LABELS[role]}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="p-3 text-xs whitespace-nowrap">
+                        {aprovadorEntry ? (
+                          aprovadorEntry.approval_tier ? (
+                            <span className="text-foreground">{TIER_LABELS[aprovadorEntry.approval_tier]}</span>
+                          ) : missingBadge
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
                         )}
-                        <button
-                          className="ml-0.5 hover:opacity-70 transition-opacity"
-                          title={`Remover ${ROLE_LABELS[role]}`}
-                          onClick={() => void handleRemoveRole(user.id, role)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))}
-
-                    {availableRoles.length > 0 && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            className="inline-flex items-center gap-1 rounded-full border border-dashed border-muted-foreground/40 px-2.5 py-0.5 text-xs text-muted-foreground hover:border-vp-yellow hover:text-vp-dark transition-colors"
-                            title="Adicionar papel"
-                          >
-                            <Plus className="h-3 w-3" />
-                            Adicionar
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {availableRoles.map((r) => (
-                            <DropdownMenuItem
-                              key={r}
-                              onClick={() => void handleAddRole(user.id, r)}
-                            >
-                              {ROLE_LABELS[r]}
+                      </td>
+                      <td className="p-3 text-xs">
+                        {approver ? (
+                          <span className="text-foreground truncate max-w-[160px] block">
+                            {approver.full_name ?? approver.email}
+                          </span>
+                        ) : missingBadge}
+                      </td>
+                      <td className="p-3 text-xs">{user.department || missingBadge}</td>
+                      <td className="p-3">
+                        {user.active ? (
+                          <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                            Ativo
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                            Inativo
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3 text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                              <MoreVertical className="h-4 w-4" />
+                              <span className="sr-only">Ações — {user.full_name ?? user.email}</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setDetailUserId(user.id)}>
+                              Ver detalhes
                             </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
-                  </div>
-
-                  {aprovadorEntry && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Alçada:</span>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-accent transition-colors">
-                            {aprovadorEntry.approval_tier
-                              ? TIER_LABELS[aprovadorEntry.approval_tier]
-                              : "Não definida"}
-                            <ChevronDown className="h-3 w-3 opacity-50" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {([1, 2, 3] as const).map((t) => (
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              key={t}
-                              onClick={() => void handleSetTier(user.id, t)}
+                              disabled={isSelf}
+                              onClick={() => void handleToggleActive(user)}
+                              className={user.active ? "text-amber-700 focus:text-amber-700" : "text-emerald-700 focus:text-emerald-700"}
                             >
-                              {TIER_LABELS[t]}
+                              {user.active ? (
+                                <><Ban className="h-3.5 w-3.5 mr-2" /> Inativar</>
+                              ) : (
+                                <><RotateCcw className="h-3.5 w-3.5 mr-2" /> Reativar</>
+                              )}
                             </DropdownMenuItem>
-                          ))}
-                          <Separator className="my-1" />
-                          <DropdownMenuItem onClick={() => void handleSetTier(user.id, null)}>
-                            Remover alçada
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Aprovador designado das requisições deste colaborador */}
-              <div className="flex items-center gap-2">
-                <UserRoundCheck className="h-4 w-4 text-muted-foreground shrink-0" />
-                <span className="text-xs text-muted-foreground w-24 shrink-0">Aprovador:</span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className={`inline-flex items-center gap-1 rounded border px-2.5 py-1 text-xs transition-colors hover:bg-accent ${approver ? "text-foreground" : "text-muted-foreground italic"}`}>
-                      {approver ? (approver.full_name ?? approver.email) : "Não definido"}
-                      <ChevronDown className="h-3 w-3 opacity-50" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
-                    {approverCandidates.map((candidate) => (
-                      <DropdownMenuItem
-                        key={candidate.id}
-                        onClick={() => void handleSetApprover(user.id, candidate.id)}
-                      >
-                        {candidate.full_name ?? candidate.email}
-                      </DropdownMenuItem>
-                    ))}
-                    {user.approver_id && (
-                      <>
-                        <Separator className="my-1" />
-                        <DropdownMenuItem onClick={() => void handleSetApprover(user.id, null)}>
-                          Remover aprovador
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                {approver && (
-                  <span className="text-[11px] text-muted-foreground hidden sm:inline">
-                    aprova as requisições deste colaborador
-                  </span>
+                            <DropdownMenuItem
+                              disabled={isSelf}
+                              onClick={() => setDeleteTarget(user)}
+                              className="text-red-700 focus:text-red-700"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 mr-2" /> Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredUsers.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">
+                      Nenhum usuário encontrado com os filtros atuais.
+                    </td>
+                  </tr>
                 )}
-              </div>
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
 
-              {/* Departamento */}
-              <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                <span className="text-xs text-muted-foreground w-24 shrink-0">Departamento:</span>
-                <Input
-                  className="h-7 text-xs max-w-[200px]"
-                  placeholder="Ex: Engenharia"
-                  value={currentDept}
-                  onChange={(e) =>
-                    setEditingDept((prev) => ({ ...prev, [user.id]: e.target.value }))
-                  }
-                />
-                {deptChanged && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs px-2"
-                    onClick={() => void handleSaveDept(user.id)}
-                  >
-                    <Save className="h-3 w-3 mr-1" />
-                    Salvar
-                  </Button>
-                )}
-              </div>
+      {/* Painel de detalhe/edição — um usuário por vez */}
+      <Sheet open={!!detailUser} onOpenChange={(open) => !open && setDetailUserId(null)}>
+        <SheetContent className="sm:max-w-lg overflow-y-auto">
+          {detailUser && (
+            <UserDetailContent
+              user={detailUser}
+              users={users}
+              deptManagers={deptManagers}
+              editingDept={editingDept}
+              setEditingDept={setEditingDept}
+              newGestorDept={newGestorDept}
+              setNewGestorDept={setNewGestorDept}
+              onAddRole={handleAddRole}
+              onRemoveRole={handleRemoveRole}
+              onSetTier={handleSetTier}
+              onSaveDept={handleSaveDept}
+              onSetApprover={handleSetApprover}
+              onAddGestor={handleAddGestor}
+              onRemoveGestor={handleRemoveGestor}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
 
-              {/* Gestor de departamentos */}
-              <div className="flex items-start gap-2">
-                <UserCheck className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-                <span className="text-xs text-muted-foreground w-24 shrink-0 mt-0.5">Gestor de:</span>
-                <div className="flex flex-col gap-1.5 flex-1">
-                  {userManagers.length === 0 && (
-                    <span className="text-xs text-muted-foreground italic">Não designado</span>
-                  )}
-                  {userManagers.map((dm) => (
-                    <span
-                      key={dm.id}
-                      className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 w-fit"
-                    >
-                      {dm.department}
-                      <button
-                        className="ml-0.5 hover:opacity-70 transition-opacity"
-                        title="Remover designação"
-                        onClick={() => void handleRemoveGestor(dm.id)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <Input
-                      className="h-7 text-xs max-w-[180px]"
-                      placeholder="Departamento..."
-                      value={newGestorDept[user.id] ?? ""}
-                      onChange={(e) =>
-                        setNewGestorDept((prev) => ({ ...prev, [user.id]: e.target.value }))
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") void handleAddGestor(user.id);
-                      }}
-                    />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs px-2"
-                      onClick={() => void handleAddGestor(user.id)}
-                    >
-                      <Plus className="h-3 w-3 mr-1" />
-                      Designar
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Ações da conta */}
-              <div className="flex items-center justify-end gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className={`h-7 text-xs px-2 ${user.active ? "text-amber-700 border-amber-300 hover:bg-amber-50" : "text-green-700 border-green-300 hover:bg-green-50"}`}
-                  disabled={isSelf}
-                  title={isSelf ? "Você não pode inativar a própria conta." : undefined}
-                  onClick={() => void handleToggleActive(user)}
-                >
-                  {user.active ? (
-                    <><Ban className="h-3 w-3 mr-1" /> Inativar</>
-                  ) : (
-                    <><RotateCcw className="h-3 w-3 mr-1" /> Reativar</>
-                  )}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs px-2 text-red-700 border-red-300 hover:bg-red-50"
-                  disabled={isSelf}
-                  title={isSelf ? "Você não pode excluir a própria conta." : undefined}
-                  onClick={() => void handleDeleteUser(user)}
-                >
-                  <Trash2 className="h-3 w-3 mr-1" /> Excluir
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+      {/* Confirmação forte de exclusão — ação destrutiva e irreversível */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && !deleting && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Excluir Usuário
+            </DialogTitle>
+            <DialogDescription>
+              Esta ação é irreversível.{" "}
+              <span className="font-semibold text-foreground">
+                {deleteTarget?.full_name ?? deleteTarget?.email}
+              </span>{" "}
+              perderá acesso ao sistema e todos os vínculos (papéis, alçada, aprovador designado)
+              serão removidos. Requisições já criadas por ele permanecem no histórico.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 mt-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              className="flex-1 gap-2"
+              onClick={() => void confirmDelete()}
+              disabled={deleting}
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Excluir Definitivamente
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function UserDetailContent({
+  user,
+  users,
+  deptManagers,
+  editingDept,
+  setEditingDept,
+  newGestorDept,
+  setNewGestorDept,
+  onAddRole,
+  onRemoveRole,
+  onSetTier,
+  onSaveDept,
+  onSetApprover,
+  onAddGestor,
+  onRemoveGestor,
+}: {
+  user: UserWithRoles;
+  users: UserWithRoles[];
+  deptManagers: DeptManagerEntry[];
+  editingDept: Record<string, string>;
+  setEditingDept: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  newGestorDept: Record<string, string>;
+  setNewGestorDept: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  onAddRole: (userId: string, role: AppRole) => Promise<void>;
+  onRemoveRole: (userId: string, role: AppRole) => Promise<void>;
+  onSetTier: (userId: string, tier: 1 | 2 | 3 | null) => Promise<void>;
+  onSaveDept: (userId: string) => Promise<void>;
+  onSetApprover: (userId: string, approverId: string | null) => Promise<void>;
+  onAddGestor: (userId: string) => Promise<void>;
+  onRemoveGestor: (entryId: string) => Promise<void>;
+}) {
+  const existingRoles = user.roles.map((r) => r.role);
+  const availableRoles = ALL_ROLES.filter((r) => !existingRoles.includes(r));
+  const aprovadorEntry = user.roles.find((r) => r.role === "aprovador");
+  const userManagers = deptManagers.filter((dm) => dm.manager_user_id === user.id);
+  const currentDept = editingDept[user.id] ?? user.department ?? "";
+  const savedDept = user.department ?? "";
+  const deptChanged = currentDept !== savedDept;
+  const approver = users.find((u) => u.id === user.approver_id);
+  const approverCandidates = users.filter((u) => u.id !== user.id && u.active);
+
+  return (
+    <>
+      <SheetHeader>
+        <SheetTitle className="flex items-center gap-2 flex-wrap">
+          {user.full_name || "Sem nome"}
+          {!user.active && (
+            <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+              Inativo
+            </span>
+          )}
+        </SheetTitle>
+        <SheetDescription>{user.email}</SheetDescription>
+      </SheetHeader>
+
+      <div className="space-y-5 mt-6">
+        {/* Papéis */}
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground uppercase tracking-wide">Papéis</Label>
+          <div className="flex flex-wrap gap-1.5">
+            {user.roles.map(({ role, approval_tier }) => (
+              <span
+                key={role}
+                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium ${ROLE_COLORS[role]}`}
+              >
+                {ROLE_LABELS[role]}
+                {role === "aprovador" && approval_tier && (
+                  <span className="opacity-70">· {approval_tier}ª</span>
+                )}
+                <button
+                  className="ml-0.5 hover:opacity-70 transition-opacity"
+                  title={`Remover ${ROLE_LABELS[role]}`}
+                  onClick={() => void onRemoveRole(user.id, role)}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            {availableRoles.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-muted-foreground/40 px-2.5 py-0.5 text-xs text-muted-foreground hover:border-vp-yellow hover:text-vp-dark transition-colors"
+                    title="Adicionar papel"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Adicionar
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {availableRoles.map((r) => (
+                    <DropdownMenuItem key={r} onClick={() => void onAddRole(user.id, r)}>
+                      {ROLE_LABELS[r]}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        </div>
+
+        {aprovadorEntry && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground w-24 shrink-0">Alçada:</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent transition-colors">
+                  {aprovadorEntry.approval_tier ? TIER_LABELS[aprovadorEntry.approval_tier] : "Não definida"}
+                  <ChevronDown className="h-3 w-3 opacity-50" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {([1, 2, 3] as const).map((t) => (
+                  <DropdownMenuItem key={t} onClick={() => void onSetTier(user.id, t)}>
+                    {TIER_LABELS[t]}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => void onSetTier(user.id, null)}>
+                  Remover alçada
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+
+        <Separator />
+
+        {/* Aprovador designado das requisições deste colaborador */}
+        <div className="flex items-center gap-2">
+          <UserRoundCheck className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-xs text-muted-foreground w-24 shrink-0">Aprovador:</span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className={`inline-flex items-center gap-1 rounded border px-2.5 py-1 text-xs transition-colors hover:bg-accent ${approver ? "text-foreground" : "text-muted-foreground italic"}`}
+              >
+                {approver ? (approver.full_name ?? approver.email) : "Não definido"}
+                <ChevronDown className="h-3 w-3 opacity-50" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
+              {approverCandidates.map((candidate) => (
+                <DropdownMenuItem key={candidate.id} onClick={() => void onSetApprover(user.id, candidate.id)}>
+                  {candidate.full_name ?? candidate.email}
+                </DropdownMenuItem>
+              ))}
+              {user.approver_id && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => void onSetApprover(user.id, null)}>
+                    Remover aprovador
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {/* Departamento */}
+        <div className="flex items-center gap-2">
+          <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-xs text-muted-foreground w-24 shrink-0">Departamento:</span>
+          <Input
+            className="h-8 text-xs flex-1"
+            placeholder="Ex: Engenharia"
+            value={currentDept}
+            onChange={(e) => setEditingDept((prev) => ({ ...prev, [user.id]: e.target.value }))}
+          />
+          {deptChanged && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs px-2 shrink-0"
+              onClick={() => void onSaveDept(user.id)}
+            >
+              <Save className="h-3 w-3 mr-1" />
+              Salvar
+            </Button>
+          )}
+        </div>
+
+        {/* Gestor de departamentos */}
+        <div className="flex items-start gap-2">
+          <UserCheck className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+          <span className="text-xs text-muted-foreground w-24 shrink-0 mt-0.5">Gestor de:</span>
+          <div className="flex flex-col gap-1.5 flex-1">
+            {userManagers.length === 0 && (
+              <span className="text-xs text-muted-foreground italic">Não designado</span>
+            )}
+            {userManagers.map((dm) => (
+              <span
+                key={dm.id}
+                className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 w-fit"
+              >
+                {dm.department}
+                <button
+                  className="ml-0.5 hover:opacity-70 transition-opacity"
+                  title="Remover designação"
+                  onClick={() => void onRemoveGestor(dm.id)}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            <div className="flex items-center gap-1.5 mt-1">
+              <Input
+                className="h-8 text-xs flex-1"
+                placeholder="Departamento..."
+                value={newGestorDept[user.id] ?? ""}
+                onChange={(e) => setNewGestorDept((prev) => ({ ...prev, [user.id]: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void onAddGestor(user.id);
+                }}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs px-2 shrink-0"
+                onClick={() => void onAddGestor(user.id)}
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Designar
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
