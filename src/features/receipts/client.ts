@@ -45,6 +45,7 @@ export async function listPendingReceiptsClient() {
         supplier: purchase.supplier_name,
         requester: requisition.requester_name,
         category: getCategory(requisition.module),
+        moduleCode: requisition.module,
         purchaseDate: purchase.purchased_at ? new Date(purchase.purchased_at).toLocaleDateString("pt-BR") : "—",
         purchaseOrderNumber: purchase.purchase_order_number,
         invoiceNumber: purchase.invoice_number,

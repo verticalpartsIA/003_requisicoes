@@ -38,6 +38,7 @@ export interface PendingReceiptItem {
   supplier: string;
   requester: string;
   category: string;
+  moduleCode: string;
   purchaseDate: string;
   purchaseOrderNumber: string | null;
   invoiceNumber: string | null;
@@ -134,6 +135,7 @@ export const listPendingReceipts = createServerFn({ method: "GET" }).handler(asy
         supplier: purchase.supplier_name,
         requester: requisition.requester_name,
         category: getCategory(requisition.module),
+        moduleCode: requisition.module,
         purchaseDate: purchase.purchased_at
           ? new Date(purchase.purchased_at).toLocaleDateString("pt-BR")
           : "—",

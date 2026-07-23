@@ -1,4 +1,4 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   ShoppingCart,
@@ -18,10 +18,20 @@ import {
   XCircle,
   Hotel,
   Car,
+  Search,
+  Filter,
+  ScrollText,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -82,6 +92,8 @@ function PurchasingPage() {
   const { session } = useAuth();
   const router = useRouter();
   const [items, setItems] = useState<PurchaseItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [moduleFilter, setModuleFilter] = useState("Todos");
   const [selected, setSelected] = useState<PurchaseItem | null>(null);
   const [sendToV5, setSendToV5] = useState(false);
   const [v5Reason, setV5Reason] = useState("");
@@ -241,6 +253,18 @@ function PurchasingPage() {
   };
 
   const pending = items;
+  const filteredPending = pending.filter((item) => {
+    if (moduleFilter !== "Todos" && item.moduleCode !== moduleFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (
+        item.id.toLowerCase().includes(q) ||
+        item.title.toLowerCase().includes(q) ||
+        item.requesterName.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
 
   return (
     <AccessGuard roles={["admin", "comprador"]}>
@@ -290,9 +314,45 @@ function PurchasingPage() {
       )}
 
       {pending.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por ticket, título ou solicitante..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Select value={moduleFilter} onValueChange={setModuleFilter}>
+                <SelectTrigger className="w-full sm:w-[130px]">
+                  <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <SelectValue placeholder="Módulo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {["Todos", "M1", "M2", "M3", "M4", "M5", "M6"].map((m) => (
+                    <SelectItem key={m} value={m}>{m === "Todos" ? "Módulo" : m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {pending.length > 0 && (
         <div className="space-y-3">
           <p className="text-sm font-semibold text-foreground">Compras Pendentes</p>
-          {pending.map((item) => {
+          {filteredPending.length === 0 && (
+            <Card className="card-hover-yellow">
+              <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                Nenhum resultado para os filtros atuais.
+              </CardContent>
+            </Card>
+          )}
+          {filteredPending.map((item) => {
             const hasApprovedItems = (item.approvedTravelItems || []).length > 0;
             const winner = hasApprovedItems ? null : item.suppliers.find((s) => s.isWinner);
             const cat = categoryConfig[item.category];
@@ -317,6 +377,15 @@ function PurchasingPage() {
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${approvalLevelBadge[item.approvalLevel]}`}>
                         Nível {item.approvalLevel}
                       </span>
+                      <Link
+                        to="/movimentacoes"
+                        search={{ ticket: item.id }}
+                        target="_blank"
+                        title="Ver histórico completo do ticket"
+                        className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-vp-yellow transition-colors"
+                      >
+                        <ScrollText className="h-3.5 w-3.5" />
+                      </Link>
                       <Button variant="vp" size="sm" onClick={() => openDetail(item)}>
                         <Eye className="h-4 w-4 mr-1" /> Detalhar
                       </Button>

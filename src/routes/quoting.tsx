@@ -1,5 +1,5 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { FileSearch, Plus, Trash2, Trophy, DollarSign, Clock, Scale, CheckCircle2, ArrowRight, Plane, Hotel, Car, Package, CopyPlus } from "lucide-react";
+import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
+import { FileSearch, Plus, Trash2, Trophy, DollarSign, Clock, Scale, CheckCircle2, ArrowRight, Plane, Hotel, Car, Package, CopyPlus, Search, ScrollText, Filter } from "lucide-react";
 import { useState } from "react";
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,6 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -107,6 +114,9 @@ function QuotingPage() {
   const { session } = useAuth();
   const router = useRouter();
   const [queue, setQueue] = useState<QuotationQueueItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [moduleFilter, setModuleFilter] = useState("Todos");
+  const [urgencyFilter, setUrgencyFilter] = useState("Todos");
   const [selectedItem, setSelectedItem] = useState<QuotationQueueItem | null>(null);
   const [suppliers, setSuppliers] = useState<SupplierEntry[]>([]);
   const [phase, setPhase] = useState<Phase>("suppliers");
@@ -376,6 +386,16 @@ function QuotingPage() {
 
   const summaryStatuses: QuotationStatus[] = ["pending", "awaiting_proposals", "selecting_winner", "completed"];
 
+  const filteredQueue = queue.filter((item) => {
+    if (moduleFilter !== "Todos" && item.module !== moduleFilter) return false;
+    if (urgencyFilter !== "Todos" && item.urgency !== urgencyFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return item.ticketNumber.toLowerCase().includes(q) || item.title.toLowerCase().includes(q);
+    }
+    return true;
+  });
+
   return (
     <AccessGuard roles={["admin", "comprador"]}>
     <div className="max-w-5xl mx-auto space-y-6">
@@ -400,8 +420,46 @@ function QuotingPage() {
         ))}
       </div>
 
+      {/* Filtros — mesmo padrão de busca+módulo usado em Movimentações */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por ticket ou título..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={moduleFilter} onValueChange={setModuleFilter}>
+              <SelectTrigger className="w-full sm:w-[130px]">
+                <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="Módulo" />
+              </SelectTrigger>
+              <SelectContent>
+                {["Todos", "M1", "M2", "M3", "M4", "M5", "M6"].map((m) => (
+                  <SelectItem key={m} value={m}>{m === "Todos" ? "Módulo" : m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
+              <SelectTrigger className="w-full sm:w-[130px]">
+                <SelectValue placeholder="Urgência" />
+              </SelectTrigger>
+              <SelectContent>
+                {["Todos", "LOW", "MEDIUM", "HIGH", "URGENT"].map((u) => (
+                  <SelectItem key={u} value={u}>{u === "Todos" ? "Urgência" : urgLabel[u] || u}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="space-y-3">
-        {queue.map((item) => (
+        {filteredQueue.map((item) => (
           <Card key={item.requisitionId} className="card-hover-yellow">
             <CardContent className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -418,6 +476,15 @@ function QuotingPage() {
                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${urgBadge(item.urgency)}`}>
                   {urgLabel[item.urgency] || item.urgency}
                 </span>
+                <Link
+                  to="/movimentacoes"
+                  search={{ ticket: item.ticketNumber }}
+                  target="_blank"
+                  title="Ver histórico completo do ticket"
+                  className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-vp-yellow transition-colors"
+                >
+                  <ScrollText className="h-3.5 w-3.5" />
+                </Link>
                 <Button variant="vp" size="sm" onClick={() => openQuotation(item)}>
                   {item.status === "pending" ? "Cotar" : "Continuar"}
                 </Button>
@@ -426,10 +493,12 @@ function QuotingPage() {
           </Card>
         ))}
 
-        {queue.length === 0 && (
+        {filteredQueue.length === 0 && (
           <Card className="card-hover-yellow">
             <CardContent className="p-8 text-center text-sm text-muted-foreground">
-              Nenhuma requisição aguardando cotação neste momento.
+              {queue.length === 0
+                ? "Nenhuma requisição aguardando cotação neste momento."
+                : "Nenhum resultado para os filtros atuais."}
             </CardContent>
           </Card>
         )}

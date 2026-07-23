@@ -1,9 +1,16 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { PackageCheck, Truck, User, Building2, ClipboardCheck, AlertTriangle, CheckCircle2, Eye } from "lucide-react";
+import { PackageCheck, Truck, User, Building2, ClipboardCheck, AlertTriangle, CheckCircle2, Eye, Search, Filter, ScrollText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -30,6 +37,8 @@ function ReceiptPage() {
   const { session } = useAuth();
   const router = useRouter();
   const [pendingItems, setPendingItems] = useState<PendingReceiptItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [moduleFilter, setModuleFilter] = useState("Todos");
   const [selectedItem, setSelectedItem] = useState<PendingReceiptItem | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [delivererName, setDelivererName] = useState("");
@@ -118,6 +127,19 @@ function ReceiptPage() {
     return "";
   };
 
+  const filteredItems = pendingItems.filter((item) => {
+    if (moduleFilter !== "Todos" && item.moduleCode !== moduleFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (
+        item.id.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        item.requester.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
+
   return (
     <AccessGuard roles={["admin", "almoxarife"]}>
     <div className="max-w-5xl mx-auto space-y-6">
@@ -167,6 +189,35 @@ function ReceiptPage() {
         </Card>
       </div>
 
+      {pendingItems.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por ticket, título ou solicitante..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Select value={moduleFilter} onValueChange={setModuleFilter}>
+                <SelectTrigger className="w-full sm:w-[130px]">
+                  <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <SelectValue placeholder="Módulo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {["Todos", "M1", "M2", "M3", "M4", "M5", "M6"].map((m) => (
+                    <SelectItem key={m} value={m}>{m === "Todos" ? "Módulo" : m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Entregas Pendentes</CardTitle>
@@ -177,8 +228,12 @@ function ReceiptPage() {
               <PackageCheck className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
               <p className="text-muted-foreground">Nenhum recebimento pendente.</p>
             </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="p-8 text-center">
+              <p className="text-muted-foreground text-sm">Nenhum resultado para os filtros atuais.</p>
+            </div>
           ) : (
-            pendingItems.map((item) => (
+            filteredItems.map((item) => (
               <div
                 key={item.purchaseId}
                 className="flex items-center justify-between p-4 rounded-lg border hover:border-vp-yellow transition-colors"
@@ -198,9 +253,20 @@ function ReceiptPage() {
                     <span>{item.purchaseDate}</span>
                   </div>
                 </div>
-                <Button variant="vp" size="sm" onClick={() => openReceiptForm(item)}>
-                  <ClipboardCheck className="h-4 w-4 mr-1" /> Receber
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Link
+                    to="/movimentacoes"
+                    search={{ ticket: item.id }}
+                    target="_blank"
+                    title="Ver histórico completo do ticket"
+                    className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-vp-yellow transition-colors"
+                  >
+                    <ScrollText className="h-3.5 w-3.5" />
+                  </Link>
+                  <Button variant="vp" size="sm" onClick={() => openReceiptForm(item)}>
+                    <ClipboardCheck className="h-4 w-4 mr-1" /> Receber
+                  </Button>
+                </div>
               </div>
             ))
           )}

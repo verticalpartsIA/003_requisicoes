@@ -1,4 +1,4 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   CheckCircle2,
@@ -14,10 +14,21 @@ import {
   Car,
   Package,
   UserCheck,
+  Search,
+  Filter,
+  ScrollText,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -266,6 +277,9 @@ function ApprovalPage() {
   const { session, profile, hasRole } = useAuth();
   const router = useRouter();
   const [approvals, setApprovals] = useState<ApprovalRequestItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [moduleFilter, setModuleFilter] = useState("Todos");
+  const [levelFilter, setLevelFilter] = useState<"Todos" | 1 | 2 | 3>("Todos");
   const [selected, setSelected] = useState<ApprovalRequestItem | null>(null);
   const [justification, setJustification] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -464,6 +478,20 @@ function ApprovalPage() {
 
   const gestorName = profile?.full_name ?? user?.email ?? "Gestor";
 
+  const filteredApprovals = approvals.filter((request) => {
+    if (moduleFilter !== "Todos" && request.moduleCode !== moduleFilter) return false;
+    if (levelFilter !== "Todos" && request.approvalLevel !== levelFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (
+        request.id.toLowerCase().includes(q) ||
+        request.title.toLowerCase().includes(q) ||
+        request.requesterName.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Seção Gestor (aparece apenas para usuários com departamentos gerenciados) */}
@@ -503,8 +531,49 @@ function ApprovalPage() {
             })}
           </div>
 
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por ticket, título ou solicitante..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <Select value={moduleFilter} onValueChange={setModuleFilter}>
+                  <SelectTrigger className="w-full sm:w-[130px]">
+                    <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <SelectValue placeholder="Módulo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["Todos", "M1", "M2", "M3", "M4", "M5", "M6"].map((m) => (
+                      <SelectItem key={m} value={m}>{m === "Todos" ? "Módulo" : m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={String(levelFilter)}
+                  onValueChange={(v) => setLevelFilter(v === "Todos" ? "Todos" : (Number(v) as 1 | 2 | 3))}
+                >
+                  <SelectTrigger className="w-full sm:w-[130px]">
+                    <SelectValue placeholder="Alçada" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Todos">Alçada</SelectItem>
+                    <SelectItem value="1">Nível 1</SelectItem>
+                    <SelectItem value="2">Nível 2</SelectItem>
+                    <SelectItem value="3">Nível 3</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="space-y-3">
-            {approvals.map((request) => {
+            {filteredApprovals.map((request) => {
               const winner = request.suppliers.find((supplier) => supplier.isWinner);
               return (
                 <Card key={request.approvalId} className="card-hover-yellow">
@@ -528,6 +597,15 @@ function ApprovalPage() {
                         >
                           Nível {request.approvalLevel}
                         </span>
+                        <Link
+                          to="/movimentacoes"
+                          search={{ ticket: request.id }}
+                          target="_blank"
+                          title="Ver histórico completo do ticket"
+                          className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-vp-yellow transition-colors"
+                        >
+                          <ScrollText className="h-3.5 w-3.5" />
+                        </Link>
                         <Button variant="vp" size="sm" onClick={() => openApproval(request)}>
                           <Eye className="h-4 w-4 mr-1" /> Analisar
                         </Button>
@@ -585,10 +663,12 @@ function ApprovalPage() {
               );
             })}
 
-            {approvals.length === 0 && (
+            {filteredApprovals.length === 0 && (
               <Card className="card-hover-yellow">
                 <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                  Nenhuma aprovação pendente neste momento.
+                  {approvals.length === 0
+                    ? "Nenhuma aprovação pendente neste momento."
+                    : "Nenhum resultado para os filtros atuais."}
                 </CardContent>
               </Card>
             )}
