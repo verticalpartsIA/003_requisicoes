@@ -2,12 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
 import {
   Plane, Plus, ChevronRight, ChevronLeft, MapPin, Hotel,
-  CalendarIcon, Target, AlertTriangle, Users, UserPlus, Trash2, Upload, ImageIcon,
+  CalendarIcon, Target, AlertTriangle, Users, UserPlus, Trash2, Upload, ImageIcon, Eye,
 } from "lucide-react";
 import { format, differenceInCalendarDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Stepper } from "@/components/ui/stepper";
+import { excelTable } from "@/lib/excel-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -89,6 +90,7 @@ const STEPS = [
   { label: "Roteiro", icon: MapPin },
   { label: "Hospedagem", icon: Hotel },
   { label: "Objetivo", icon: Target },
+  { label: "Revisão", icon: Eye },
 ];
 
 export const Route = createFileRoute("/trips")({
@@ -1017,6 +1019,94 @@ function TripsPage() {
                   <p className="text-[11px] text-muted-foreground">
                     {shortNoticeJustification.length}/500
                   </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Step 3: Revisão ── */}
+          {step === 3 && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-vp-yellow/40 bg-amber-50/30 p-3">
+                <p className="text-xs text-vp-yellow-dark font-medium">
+                  Confira os dados abaixo antes de enviar. Use "Voltar" para corrigir qualquer campo.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Viajantes ({travelers.length})</label>
+                <div className={excelTable.wrapper}>
+                  <table className={excelTable.table}>
+                    <thead className={excelTable.thead}>
+                      <tr className={excelTable.headRow}>
+                        <th className={cn(excelTable.th, "w-10")}>#</th>
+                        <th className={excelTable.th}>Nome</th>
+                        <th className={excelTable.th}>Documento</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {travelers.map((t, idx) => (
+                        <tr key={t.id} className={excelTable.row(idx)}>
+                          <td className={cn(excelTable.td, "text-muted-foreground")}>{idx + 1}</td>
+                          <td className={cn(excelTable.td, "font-medium text-foreground")}>{t.fullName || "—"}</td>
+                          <td className={excelTable.td}>{t.docType}: {t.docNumber || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Origem → Destino</p>
+                  <p className="text-sm font-medium">{originCity || "—"} → {destinationCity || "—"}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Meio de Transporte</p>
+                  <p className="text-sm font-medium">{TRANSPORT_MODES.find((m) => m.value === transportMode)?.label ?? "—"}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Data de Partida</p>
+                  <p className="text-sm font-medium">{departureDate ? format(departureDate, "dd/MM/yyyy", { locale: ptBR }) : "—"}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Data de Retorno</p>
+                  <p className="text-sm font-medium">{returnDate ? format(returnDate, "dd/MM/yyyy", { locale: ptBR }) : "—"}</p>
+                </div>
+              </div>
+
+              {(needsHotel || needsLocalCar) && (
+                <div className="grid grid-cols-2 gap-3">
+                  {needsHotel && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Hospedagem</p>
+                      <p className="text-sm font-medium">{hotelNights || "—"} noite(s)</p>
+                    </div>
+                  )}
+                  {needsLocalCar && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Carro Alugado</p>
+                      <p className="text-sm font-medium">{carRentalDays || "—"} dia(s)</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Objetivo(s)</p>
+                <p className="text-sm font-medium">
+                  {purposes.length > 0 ? purposes.map((p) => PURPOSES.find((o) => o.value === p)?.label ?? p).join(", ") : "—"}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Justificativa</p>
+                <p className="text-sm">{justification}</p>
+              </div>
+              {!isAdvancedNotice && (
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Justificativa de Urgência</p>
+                  <p className="text-sm">{shortNoticeJustification}</p>
                 </div>
               )}
             </div>

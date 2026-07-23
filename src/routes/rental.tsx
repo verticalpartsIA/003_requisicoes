@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
 import {
-  Key, Plus, ChevronRight, ChevronLeft, CalendarIcon, Cog, ClipboardList, AlertTriangle,
+  Key, Plus, ChevronRight, ChevronLeft, CalendarIcon, Cog, ClipboardList, AlertTriangle, Eye,
 } from "lucide-react";
 import { format, differenceInCalendarDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -61,6 +61,7 @@ const STEPS = [
   { label: "Equipamento", icon: Cog },
   { label: "Período", icon: CalendarIcon },
   { label: "Justificativa", icon: ClipboardList },
+  { label: "Revisão", icon: Eye },
 ];
 
 const DIALOG_KEY = 'vpreq_m6';
@@ -568,6 +569,58 @@ function RentalPage() {
                   maxLength={500}
                 />
                 <p className="text-[11px] text-muted-foreground">{justification.length}/500{isLongRental && " (mín. 50)"}</p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 3: Revisão ── */}
+          {step === 3 && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-vp-yellow/40 bg-amber-50/30 p-3">
+                <p className="text-xs text-vp-yellow-dark font-medium">
+                  Confira os dados abaixo antes de {editMode ? "salvar" : "enviar"}. Use "Voltar" para corrigir qualquer campo.
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Categorias</p>
+                <p className="text-sm font-medium">
+                  {categories.length > 0 ? categories.map((c) => EQUIPMENT_CATEGORIES.find((e) => e.value === c)?.label ?? c).join(", ") : "—"}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Quantidade</p>
+                  <p className="text-sm font-medium">{quantity || "—"}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Nível de Urgência</p>
+                  <p className="text-sm font-medium">{URGENCY.find((u) => u.value === urgencyLevel)?.label ?? "—"}</p>
+                </div>
+              </div>
+              {specs && (
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Especificações</p>
+                  <p className="text-sm">{specs}</p>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Início</p>
+                  <p className="text-sm font-medium">{startDate ? format(startDate, "dd/MM/yyyy", { locale: ptBR }) : "—"}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Término</p>
+                  <p className="text-sm font-medium">{endDate ? format(endDate, "dd/MM/yyyy", { locale: ptBR }) : "—"}</p>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Local de Entrega</p>
+                <p className="text-sm font-medium">{deliveryLocation || "—"}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Justificativa</p>
+                <p className="text-sm">{justification}</p>
               </div>
             </div>
           )}

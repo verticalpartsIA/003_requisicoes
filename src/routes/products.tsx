@@ -4,7 +4,7 @@ import { useRouter } from "@tanstack/react-router";
 import {
   Package, Plus, ChevronRight, ChevronLeft, Truck,
   Link2, X, CalendarIcon, ImageIcon, Upload, Pencil, Trash2,
-  CheckCircle2, ChevronDown, ChevronUp, Loader2, Tag, Boxes,
+  CheckCircle2, ChevronDown, ChevronUp, Loader2, Tag, Boxes, Eye,
 } from "lucide-react";
 import { format, addDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -40,6 +40,7 @@ const URGENCY = [
 const STEPS = [
   { label: "Produtos", icon: Package },
   { label: "Logística", icon: Truck },
+  { label: "Revisão", icon: Eye },
 ];
 
 type RequestKind = "consumo" | "revenda" | "estoque";
@@ -1094,6 +1095,69 @@ function ProductsPage() {
                 <label className="text-sm font-medium">Justificativa da Compra *</label>
                 <Textarea placeholder="Por que é necessário? Qual o impacto se não for comprado?" value={justification} onChange={(e) => setJustification(e.target.value)} rows={3} maxLength={500} />
                 <p className="text-[11px] text-muted-foreground">{justification.length}/500</p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 2: Revisão ── */}
+          {step === 2 && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-vp-yellow/40 bg-amber-50/30 p-3">
+                <p className="text-xs text-vp-yellow-dark font-medium">
+                  Confira os dados abaixo antes de {editMode ? "salvar" : "enviar"}. Use "Voltar" para corrigir qualquer campo.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Produtos ({items.length})</label>
+                <div className={excelTable.wrapper}>
+                  <div className={excelTable.scrollBody}>
+                    <table className={excelTable.table}>
+                      <thead className={excelTable.thead}>
+                        <tr className={excelTable.headRow}>
+                          <th className={cn(excelTable.th, "w-10")}>#</th>
+                          <th className={excelTable.th}>Produto</th>
+                          <th className={cn(excelTable.thRight, "w-20")}>Qtd.</th>
+                          <th className={excelTable.th}>Descrição</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((item, idx) => (
+                          <tr key={idx} className={excelTable.row(idx)}>
+                            <td className={cn(excelTable.td, "text-muted-foreground")}>{idx + 1}</td>
+                            <td className={excelTable.td}>
+                              <span className="font-medium text-foreground">{item.product_name}</span>
+                              {item.product_code && <Badge variant="outline" className="ml-1.5">{item.product_code}</Badge>}
+                            </td>
+                            <td className={cn(excelTable.tdRight, "text-foreground")}>{item.quantity || "—"}</td>
+                            <td className={cn(excelTable.td, "text-muted-foreground")}>
+                              {item.description.length > 80 ? `${item.description.slice(0, 80)}…` : item.description || "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Data Limite para Entrega</p>
+                  <p className="text-sm font-medium">{deliveryDeadline ? format(deliveryDeadline, "dd/MM/yyyy", { locale: ptBR }) : "—"}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Nível de Urgência</p>
+                  <p className="text-sm font-medium">{URGENCY.find((u) => u.value === urgencyLevel)?.label ?? "—"}</p>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Local de Entrega</p>
+                <p className="text-sm font-medium">{deliveryLocation || "—"}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Justificativa</p>
+                <p className="text-sm">{justification}</p>
               </div>
             </div>
           )}
