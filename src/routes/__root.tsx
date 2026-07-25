@@ -5,6 +5,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/features/auth/auth-context";
 import { startVersionCheck } from "@/lib/version-check";
+import { trackEnter, trackExit } from "@/lib/track-activity";
 
 import appCss from "../styles.css?url";
 
@@ -80,7 +81,7 @@ function RootComponent() {
 }
 
 function ProtectedApp() {
-  const { isLoading, session } = useAuth();
+  const { isLoading, session, profile } = useAuth();
   const currentPath = useRouterState({
     select: (state) => state.location.pathname,
   });
@@ -90,6 +91,21 @@ function ProtectedApp() {
     const fallback = setTimeout(() => setBootVideoEnded(true), 12000);
     return () => clearTimeout(fallback);
   }, []);
+
+  // Rastro de acesso cross-sistema (timeline no portal vpsistema): dispara
+  // "enter" uma única vez assim que a sessão autenticada resolver, e "exit"
+  // em pagehide (preferível a beforeunload por causa do bfcache).
+  const userEmail = session?.user?.email ?? null;
+  const userName = profile?.full_name ?? userEmail;
+  useEffect(() => {
+    if (!userEmail) return;
+
+    trackEnter(userEmail, userName);
+
+    const handlePageHide = () => trackExit(userEmail, userName);
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [userEmail, userName]);
 
   if (isLoading || !bootVideoEnded) {
     return (
