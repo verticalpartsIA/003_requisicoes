@@ -145,7 +145,13 @@ function ProductsPage() {
   // Tipo de requisição (triagem)
   const [requestKind, setRequestKind] = useState<RequestKind | null>(null);
   const isRevenda = requestKind === "revenda";
-  const requiresCodeValidation = requestKind === "consumo" || requestKind === "estoque";
+  // Código VPCON: aparece em Uso e Consumo e Estoque, mas só é OBRIGATÓRIO em
+  // Estoque (precisa consultar posição de estoque mínimo/disponível no Omie
+  // por código). Em Uso e Consumo é opcional — muita coisa que se pede não
+  // tem cadastro/código VPCON ainda, e travar a requisição nesse caso não
+  // faz sentido.
+  const showCodeField = requestKind === "consumo" || requestKind === "estoque";
+  const codeIsMandatory = requestKind === "estoque";
 
   // Revenda
   const [pedidoNum, setPedidoNum] = useState("");
@@ -307,7 +313,7 @@ function ProductsPage() {
   const openEditItem = (idx: number) => {
     const item = items[idx];
     setDraftCode(item.product_code || "");
-    setDraftCodeValidated(requiresCodeValidation ? !!item.product_code : false);
+    setDraftCodeValidated(showCodeField ? !!item.product_code : false);
     setStockInfo(item.stock_snapshot);
     setDraftName(item.product_name);
     setDraftDesc(item.description);
@@ -356,7 +362,7 @@ function ProductsPage() {
       }
     } catch (err) {
       setDraftCodeValidated(false);
-      setDraftName("");
+      if (codeIsMandatory) setDraftName("");
       toast.error(err instanceof Error ? err.message : "Erro ao consultar o código no Omie.");
     } finally {
       setIsValidatingCode(false);
@@ -364,7 +370,7 @@ function ProductsPage() {
   };
 
   const saveDraft = () => {
-    if (requiresCodeValidation && !draftCodeValidated) {
+    if (codeIsMandatory && !draftCodeValidated) {
       setDraftAttemptedSave(true);
       toast.error("Verifique o código do produto antes de adicionar.");
       return;
@@ -389,7 +395,7 @@ function ProductsPage() {
     }
 
     const draft: ItemDraft = {
-      product_code: requiresCodeValidation ? draftCode.trim() : "",
+      product_code: showCodeField ? draftCode.trim() : "",
       product_name: draftName.trim(),
       description: requestKind === "estoque"
         ? (draftDesc.trim() || `Reposição de estoque — ${draftName.trim()}`)
@@ -796,16 +802,16 @@ function ProductsPage() {
                   <p className="text-xs font-semibold text-vp-yellow-dark uppercase tracking-wide">
                     {editingIdx !== null ? `Editando item ${editingIdx + 1}` : "Novo produto"}
                   </p>
-                  {requiresCodeValidation && (
+                  {showCodeField && (
                     <div className="space-y-1.5">
                       <label className="text-sm font-medium">
-                        {requestKind === "estoque" ? "Código do Produto *" : "Código do Produto (VPCON) *"}
+                        {codeIsMandatory ? "Código do Produto *" : "Código do Produto (VPCON)"}
                       </label>
                       <div className="flex gap-2">
                         <Input
                           placeholder="Ex.: VPCON-677"
                           value={draftCode}
-                          onChange={(e) => { setDraftCode(e.target.value); setDraftCodeValidated(false); setDraftName(""); setStockInfo(null); }}
+                          onChange={(e) => { setDraftCode(e.target.value); setDraftCodeValidated(false); if (codeIsMandatory) setDraftName(""); setStockInfo(null); }}
                           className="max-w-[200px]"
                           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleValidateProductCode(); } }}
                         />
@@ -819,6 +825,11 @@ function ProductsPage() {
                           {isValidatingCode || isValidatingStock ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verificar"}
                         </Button>
                       </div>
+                      {!codeIsMandatory && (
+                        <p className="text-[11px] text-muted-foreground">
+                          Opcional — deixe em branco e preencha o nome do produto manualmente se ele não tiver código VPCON cadastrado.
+                        </p>
+                      )}
                       {draftCodeValidated && draftName && (
                         <div className="flex items-center gap-2 rounded-md bg-green-50 border border-green-200 px-3 py-2">
                           <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
@@ -863,12 +874,12 @@ function ProductsPage() {
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">Nome do Produto *</label>
                     <Input
-                      placeholder={requiresCodeValidation ? "Verifique o código acima" : "Ex.: Rolamento SKF 6205 ZZ"}
+                      placeholder={codeIsMandatory ? "Verifique o código acima" : "Ex.: Rolamento SKF 6205 ZZ"}
                       value={draftName}
                       onChange={(e) => setDraftName(e.target.value)}
                       maxLength={200}
-                      disabled={requiresCodeValidation}
-                      readOnly={requiresCodeValidation}
+                      disabled={codeIsMandatory}
+                      readOnly={codeIsMandatory}
                       className={cn(draftAttemptedSave && !draftName.trim() && "border-destructive focus-visible:ring-destructive")}
                     />
                   </div>
