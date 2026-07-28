@@ -63,6 +63,7 @@ import { toast } from "sonner";
 import { pendencyOf, PENDENCY_TONE_CLASS, MODULE_ROUTES, OPEN_STATUSES } from "@/lib/requisitions";
 import { cn } from "@/lib/utils";
 import { excelTable } from "@/lib/excel-table";
+import { actionLabel } from "@/lib/audit-actions";
 
 /* ── Export types ── */
 
@@ -219,20 +220,7 @@ function matchesQuickFilter(status: string, filter: StatusQuickFilter): boolean 
 }
 
 function mapActionToDescription(action: string, details: Record<string, unknown>): string {
-  const map: Record<string, string> = {
-    GESTOR_APPROVED: "Aprovada pelo gestor",
-    GESTOR_REJECTED: "Reprovada pelo gestor",
-    REQUISITION_EDITED: "Requisição editada",
-    QUOTATION_STARTED: "Cotação iniciada",
-    WINNER_SELECTED: "Fornecedor vencedor selecionado",
-    M2_QUOTE_COMPLETED: "Cotação de viagem concluída",
-    APPROVAL_REQUESTED: "Enviada para aprovação",
-    APPROVAL_GRANTED: "Aprovada",
-    APPROVAL_REJECTED: "Reprovada",
-    PURCHASE_CONFIRMED: "Compra confirmada",
-    RECEIPT_REGISTERED: "Recebimento registrado",
-  };
-  const base = map[action] ?? action.replace(/_/g, " ").toLowerCase();
+  const base = actionLabel(action);
   const suppliersCount =
     typeof details.suppliers_count === "number" ? ` — ${details.suppliers_count} fornecedores` : "";
   const reason =

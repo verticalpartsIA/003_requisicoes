@@ -127,7 +127,7 @@ function GestorSection({ gestorName }: { gestorName: string }) {
     setIsSaving(true);
     try {
       await gestorApproveClient(selected.requisitionId, user.id, gestorName, notes);
-      toast.success("Requisição aprovada e encaminhada para cotação.");
+      toast.success("Ciência confirmada — requisição encaminhada para cotação.");
       void notifyVpClickClient({
         stage: "GESTOR_APPROVED",
         requisitionId: selected.requisitionId,
@@ -140,7 +140,7 @@ function GestorSection({ gestorName }: { gestorName: string }) {
       setNotes("");
       await reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao aprovar.");
+      toast.error(err instanceof Error ? err.message : "Erro ao confirmar ciência.");
     } finally {
       setIsSaving(false);
     }
@@ -183,9 +183,9 @@ function GestorSection({ gestorName }: { gestorName: string }) {
           <UserCheck className="h-5 w-5 text-amber-700" />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-foreground">Aprovação do Gestor</h2>
+          <h2 className="text-xl font-bold text-foreground">Ciência do Gestor</h2>
           <p className="text-sm text-muted-foreground">
-            Requisições dos seus colaboradores aguardando sua aprovação
+            Requisições dos seus colaboradores aguardando sua ciência — a aprovação por alçada financeira vem depois, na Cotação
           </p>
         </div>
       </div>
@@ -226,7 +226,7 @@ function GestorSection({ gestorName }: { gestorName: string }) {
         {gestorQueue.length === 0 && (
           <Card className="border-amber-200/50">
             <CardContent className="p-6 text-center text-sm text-muted-foreground">
-              Nenhuma requisição aguardando sua aprovação.
+              Nenhuma requisição aguardando sua ciência.
             </CardContent>
           </Card>
         )}
@@ -308,7 +308,7 @@ function GestorSection({ gestorName }: { gestorName: string }) {
                   <ThumbsDown className="h-4 w-4" /> Reprovar
                 </Button>
                 <Button variant="vp" onClick={handleApprove} disabled={isSaving} className="gap-1">
-                  <ThumbsUp className="h-4 w-4" /> Aprovar
+                  <ThumbsUp className="h-4 w-4" /> Dar Ciência
                 </Button>
               </DialogFooter>
             </>

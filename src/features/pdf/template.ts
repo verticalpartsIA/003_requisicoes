@@ -1,27 +1,12 @@
 // ─── Tradução de ações de auditoria ──────────────────────────────────────────
+// Fonte única em src/lib/audit-actions.ts — antes esse mapa vivia duplicado
+// aqui, faltando GESTOR_APPROVED/GESTOR_REJECTED/M1_ITEMS_QUOTE_COMPLETED,
+// o que fazia o PDF mostrar a ação crua ("GESTOR APPROVED") sem tradução.
 
-const ACTION_LABELS: Record<string, string> = {
-  REQUISITION_CREATED:   "Requisição criada",
-  QUOTATION_STARTED:     "Cotação iniciada",
-  QUOTATION_UPDATED:     "Cotação atualizada",
-  SUPPLIER_ADDED:        "Fornecedor adicionado",
-  SUPPLIER_UPDATED:      "Fornecedor atualizado",
-  SUPPLIER_REMOVED:      "Fornecedor removido",
-  WINNER_SELECTED:       "Fornecedor vencedor selecionado",
-  APPROVAL_REQUESTED:    "Aprovação solicitada",
-  APPROVAL_GRANTED:      "Aprovação concedida",
-  APPROVAL_REJECTED:     "Aprovação rejeitada",
-  PURCHASE_CONFIRMED:    "Compra confirmada",
-  PURCHASE_UPDATED:      "Compra atualizada",
-  RECEIPT_REGISTERED:    "Recebimento registrado",
-  RECEIPT_UPDATED:       "Recebimento atualizado",
-  STATUS_CHANGED:        "Status alterado",
-  VPCLICK_TASK_CREATED:  "Tarefa criada no VPClick",
-  NOTES_ADDED:           "Observação adicionada",
-};
+import { actionLabel as sharedActionLabel } from "@/lib/audit-actions";
 
 function actionLabel(action: string, details?: Record<string, unknown>): string {
-  const base = ACTION_LABELS[action] ?? action.replace(/_/g, " ");
+  const base = sharedActionLabel(action);
   if (action === "STATUS_CHANGED" && details?.to_status)
     return `${base} → ${String(details.to_status)}`;
   return base;

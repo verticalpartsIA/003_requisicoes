@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseRest } from "@/lib/supabase-rest";
 import { STAGE_TARGETS } from "@/features/analytics/api";
+import { actionLabel, actionStage } from "@/lib/audit-actions";
 
 /* Estágios e rótulos únicos, compartilhados com o Analytics via STAGE_TARGETS */
 const STAGE_LABELS: Record<string, string> = {
@@ -12,36 +13,8 @@ const STAGE_LABELS: Record<string, string> = {
   RECEBIMENTO: "Recebimento",
 };
 
-const ACTION_STAGE: Record<string, string> = {
-  GESTOR_APPROVED: "GESTOR",
-  GESTOR_REJECTED: "GESTOR",
-  REQUISITION_EDITED: "GESTOR",
-  QUOTATION_STARTED: "COTAÇÃO",
-  WINNER_SELECTED: "COTAÇÃO",
-  M2_QUOTE_COMPLETED: "COTAÇÃO",
-  APPROVAL_REQUESTED: "COTAÇÃO",
-  APPROVAL_GRANTED: "APROVAÇÃO",
-  APPROVAL_REJECTED: "APROVAÇÃO",
-  PURCHASE_CONFIRMED: "COMPRA",
-  RECEIPT_REGISTERED: "RECEBIMENTO",
-};
-
-const ACTION_DESCRIPTION: Record<string, string> = {
-  GESTOR_APPROVED: "Aprovada pelo gestor",
-  GESTOR_REJECTED: "Reprovada pelo gestor",
-  REQUISITION_EDITED: "Requisição editada",
-  QUOTATION_STARTED: "Cotação iniciada",
-  WINNER_SELECTED: "Fornecedor vencedor selecionado",
-  M2_QUOTE_COMPLETED: "Cotação de viagem concluída",
-  APPROVAL_REQUESTED: "Enviada para aprovação",
-  APPROVAL_GRANTED: "Aprovada",
-  APPROVAL_REJECTED: "Reprovada",
-  PURCHASE_CONFIRMED: "Compra confirmada",
-  RECEIPT_REGISTERED: "Recebimento registrado",
-};
-
 const STAGE_RECOMMENDATION: Record<string, string> = {
-  GESTOR: "Enviar lembrete ao gestor aprovador do colaborador",
+  GESTOR: "Enviar lembrete ao gestor responsável pela ciência do colaborador",
   COTAÇÃO: "Cobrar propostas dos fornecedores ou concluir a cotação",
   APROVAÇÃO: "Enviar lembrete ao aprovador da alçada responsável",
   COMPRA: "Concluir o pedido de compra com o fornecedor vencedor",
@@ -272,7 +245,7 @@ export const getLogsOverview = createServerFn({ method: "POST" })
         const p = r.approver_id ? profileById.get(r.approver_id) : null;
         return {
           name: p?.full_name ?? p?.email ?? "Gestor não designado",
-          role: "Gestor aprovador",
+          role: "Gestor (ciência)",
         };
       }
       if (stage === "COTAÇÃO" || stage === "COMPRA") {
@@ -351,7 +324,7 @@ export const getLogsOverview = createServerFn({ method: "POST" })
       const idx = rl.findIndex((x) => x.id === l.id);
       const prevAt = idx > 0 ? rl[idx - 1].created_at : (req?.created_at ?? l.created_at);
       const elapsed = Math.max(0, hoursBetween(prevAt, l.created_at));
-      const stage = ACTION_STAGE[l.action] ?? "GESTOR";
+      const stage = actionStage(l.action);
       const target = STAGE_TARGETS[stage];
       const slaStatus: "ok" | "warning" | "breach" =
         elapsed >= target ? "breach" : elapsed >= target * 0.75 ? "warning" : "ok";
@@ -368,9 +341,7 @@ export const getLogsOverview = createServerFn({ method: "POST" })
         ticket: l.ticket_number ?? req?.ticket_number ?? "—",
         module: req?.module ?? (l.ticket_number ?? "??").slice(0, 2),
         action: l.action,
-        description:
-          (ACTION_DESCRIPTION[l.action] ?? l.action.replace(/_/g, " ").toLowerCase()) +
-          suppliersCount,
+        description: actionLabel(l.action) + suppliersCount,
         stage,
         actor: l.actor_name ?? "Sistema",
         actorRole: primaryRole(actorProfile?.id),

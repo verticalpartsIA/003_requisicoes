@@ -129,7 +129,7 @@ export interface Pendency {
 export function pendencyOf(status: string, module: string): Pendency {
   switch (status) {
     case "GESTOR":
-      return { label: "Falta aprovação do gestor", route: "/approval", tone: "action" };
+      return { label: "Falta ciência do gestor", route: "/approval", tone: "action" };
     case "ABERTO":
       return { label: "Falta iniciar a cotação", route: "/quoting", tone: "action" };
     case "COTAÇÃO":

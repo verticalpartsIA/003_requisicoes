@@ -193,10 +193,11 @@ const relativeTime = (iso: string) => {
 
 const FEED_META: Record<string, { label: string; icon: typeof Package; bg: string; fg: string; badge: string }> = {
   SUBMITTED: { label: "Nova Requisição", icon: Package, bg: "bg-blue-100", fg: "text-blue-600", badge: "bg-blue-50 text-blue-600 border-blue-200" },
-  GESTOR_APPROVED: { label: "Aprovada pelo Gestor", icon: UserCheck, bg: "bg-amber-100", fg: "text-amber-700", badge: "bg-amber-50 text-amber-700 border-amber-200" },
+  GESTOR_APPROVED: { label: "Ciência do Gestor", icon: UserCheck, bg: "bg-amber-100", fg: "text-amber-700", badge: "bg-amber-50 text-amber-700 border-amber-200" },
   GESTOR_REJECTED: { label: "Reprovada pelo Gestor", icon: AlertCircle, bg: "bg-red-100", fg: "text-red-600", badge: "bg-red-50 text-red-600 border-red-200" },
   QUOTATION_STARTED: { label: "Cotação Iniciada", icon: FileText, bg: "bg-purple-100", fg: "text-purple-600", badge: "bg-purple-50 text-purple-600 border-purple-200" },
   WINNER_SELECTED: { label: "Vencedor Selecionado", icon: Trophy, bg: "bg-yellow-100", fg: "text-yellow-700", badge: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+  M1_ITEMS_QUOTE_COMPLETED: { label: "Cotação de Itens", icon: FileText, bg: "bg-purple-100", fg: "text-purple-600", badge: "bg-purple-50 text-purple-600 border-purple-200" },
   M2_QUOTE_COMPLETED: { label: "Cotação de Viagem", icon: FileText, bg: "bg-purple-100", fg: "text-purple-600", badge: "bg-purple-50 text-purple-600 border-purple-200" },
   APPROVAL_REQUESTED: { label: "Enviada p/ Aprovação", icon: Bell, bg: "bg-orange-100", fg: "text-orange-600", badge: "bg-orange-50 text-orange-600 border-orange-200" },
   APPROVAL_GRANTED: { label: "Aprovada", icon: CheckCircle2, bg: "bg-emerald-100", fg: "text-emerald-600", badge: "bg-emerald-50 text-emerald-600 border-emerald-200" },

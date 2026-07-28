@@ -395,8 +395,8 @@ export const notifyVpClickStage = createServerFn({ method: "POST" })
             `**Descrição:** ${title}\n` +
             `**Módulo:** ${mod}\n` +
             `**Requisitante:** ${requesterName}\n\n` +
-            `⚠️ Pouca antecedência — aprovar o quanto antes para não atrasar cotação e compra.\n\n` +
-            `🔗 Aprovar agora: ${base}/approval`,
+            `⚠️ Pouca antecedência — dar ciência o quanto antes para não atrasar cotação e compra.\n\n` +
+            `🔗 Dar ciência agora: ${base}/approval`,
           status: STATUS.AGUARDANDO_APROVACAO,
           assigneeIds: assignees,
         });

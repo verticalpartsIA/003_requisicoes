@@ -113,7 +113,7 @@ async function assertCanDecide(managerId: string, requisitionId: string) {
   );
   const rec = recResp.data?.[0];
   if (!rec) throw new Error("Requisição não encontrada.");
-  if (rec.status !== "GESTOR") throw new Error("Esta requisição não está mais aguardando aprovação do gestor.");
+  if (rec.status !== "GESTOR") throw new Error("Esta requisição não está mais aguardando ciência do gestor.");
 
   if (rec.approver_id === managerId) return rec;
 
