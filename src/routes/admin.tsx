@@ -18,6 +18,8 @@ import {
   MoreVertical,
   AlertTriangle,
   Loader2,
+  List,
+  Users,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -176,6 +178,7 @@ function UsersTab() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<"Todos" | AppRole>("Todos");
   const [statusFilter, setStatusFilter] = useState<"Todos" | "ativos" | "inativos">("Todos");
+  const [viewMode, setViewMode] = useState<"table" | "departments">("table");
   const [detailUserId, setDetailUserId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserWithRoles | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -364,6 +367,23 @@ function UsersTab() {
     </span>
   );
 
+  // Visão "Por Departamento": mesma listagem, só que agrupada — pra ver de
+  // uma vez quem é o gestor/aprovador de cada equipe, sem precisar filtrar
+  // departamento por departamento na tabela plana.
+  const departmentGroups = (() => {
+    const map = new Map<string, UserWithRoles[]>();
+    for (const u of filteredUsers) {
+      const dept = u.department?.trim() || "Sem departamento";
+      if (!map.has(dept)) map.set(dept, []);
+      map.get(dept)!.push(u);
+    }
+    return [...map.entries()].sort(([a], [b]) => {
+      if (a === "Sem departamento") return 1;
+      if (b === "Sem departamento") return -1;
+      return a.localeCompare(b, "pt-BR");
+    });
+  })();
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-2">
@@ -397,6 +417,26 @@ function UsersTab() {
             <SelectItem value="inativos">Inativos</SelectItem>
           </SelectContent>
         </Select>
+        <div className="inline-flex rounded-md border border-border p-0.5 shrink-0">
+          <Button
+            variant={viewMode === "table" ? "vp" : "ghost"}
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => setViewMode("table")}
+          >
+            <List className="h-3.5 w-3.5 mr-1.5" />
+            Tabela
+          </Button>
+          <Button
+            variant={viewMode === "departments" ? "vp" : "ghost"}
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => setViewMode("departments")}
+          >
+            <Users className="h-3.5 w-3.5 mr-1.5" />
+            Por Departamento
+          </Button>
+        </div>
         <Button variant="outline" size="sm" onClick={() => void load()} className="shrink-0">
           <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
           Atualizar
@@ -407,128 +447,108 @@ function UsersTab() {
         {filteredUsers.length} de {users.length} usuário(s)
       </p>
 
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left p-3 text-xs font-medium text-muted-foreground">Usuário</th>
-                  <th className="text-left p-3 text-xs font-medium text-muted-foreground">Papéis</th>
-                  <th className="text-left p-3 text-xs font-medium text-muted-foreground">Alçada</th>
-                  <th className="text-left p-3 text-xs font-medium text-muted-foreground">Aprovador</th>
-                  <th className="text-left p-3 text-xs font-medium text-muted-foreground">Departamento</th>
-                  <th className="text-left p-3 text-xs font-medium text-muted-foreground">Status</th>
-                  <th className="text-right p-3 text-xs font-medium text-muted-foreground">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.map((user) => {
-                  const aprovadorEntry = user.roles.find((r) => r.role === "aprovador");
-                  const approver = users.find((u) => u.id === user.approver_id);
-                  const isSelf = user.id === currentUser?.id;
-
-                  return (
-                    <tr
+      {viewMode === "table" ? (
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <UsersTableHead />
+                <tbody>
+                  {filteredUsers.map((user) => (
+                    <UserRow
                       key={user.id}
-                      className={`border-b border-border last:border-0 hover:bg-accent/50 transition-colors ${user.active ? "" : "opacity-60"}`}
-                    >
-                      <td className="p-3">
-                        <p className="font-medium text-foreground truncate max-w-[180px]">
-                          {user.full_name || "Sem nome"}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate max-w-[220px]">{user.email}</p>
-                      </td>
-                      <td className="p-3">
-                        <div className="flex flex-wrap gap-1 max-w-[200px]">
-                          {user.roles.length === 0 && <span className="text-xs text-muted-foreground italic">—</span>}
-                          {user.roles.map(({ role }) => (
-                            <span
-                              key={role}
-                              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${ROLE_COLORS[role]}`}
-                            >
-                              {ROLE_LABELS[role]}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="p-3 text-xs whitespace-nowrap">
-                        {aprovadorEntry ? (
-                          aprovadorEntry.approval_tier ? (
-                            <span className="text-foreground">{TIER_LABELS[aprovadorEntry.approval_tier]}</span>
-                          ) : missingBadge
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="p-3 text-xs">
-                        {approver ? (
-                          <span className="text-foreground truncate max-w-[160px] block">
-                            {approver.full_name ?? approver.email}
-                          </span>
-                        ) : missingBadge}
-                      </td>
-                      <td className="p-3 text-xs">{user.department || missingBadge}</td>
-                      <td className="p-3">
-                        {user.active ? (
-                          <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                            Ativo
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
-                            Inativo
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-3 text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                              <MoreVertical className="h-4 w-4" />
-                              <span className="sr-only">Ações — {user.full_name ?? user.email}</span>
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setDetailUserId(user.id)}>
-                              Ver detalhes
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              disabled={isSelf}
-                              onClick={() => void handleToggleActive(user)}
-                              className={user.active ? "text-amber-700 focus:text-amber-700" : "text-emerald-700 focus:text-emerald-700"}
-                            >
-                              {user.active ? (
-                                <><Ban className="h-3.5 w-3.5 mr-2" /> Inativar</>
-                              ) : (
-                                <><RotateCcw className="h-3.5 w-3.5 mr-2" /> Reativar</>
-                              )}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              disabled={isSelf}
-                              onClick={() => setDeleteTarget(user)}
-                              className="text-red-700 focus:text-red-700"
-                            >
-                              <Trash2 className="h-3.5 w-3.5 mr-2" /> Excluir
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                      user={user}
+                      users={users}
+                      currentUserId={currentUser?.id}
+                      missingBadge={missingBadge}
+                      onOpenDetail={() => setDetailUserId(user.id)}
+                      onToggleActive={() => void handleToggleActive(user)}
+                      onDelete={() => setDeleteTarget(user)}
+                    />
+                  ))}
+                  {filteredUsers.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">
+                        Nenhum usuário encontrado com os filtros atuais.
                       </td>
                     </tr>
-                  );
-                })}
-                {filteredUsers.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">
-                      Nenhum usuário encontrado com os filtros atuais.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {departmentGroups.length === 0 && (
+            <Card>
+              <CardContent className="p-6 text-center text-sm text-muted-foreground">
+                Nenhum usuário encontrado com os filtros atuais.
+              </CardContent>
+            </Card>
+          )}
+          {departmentGroups.map(([dept, deptUsers]) => {
+            const gestores = deptManagers.filter((dm) => dm.department === dept);
+            return (
+              <Card key={dept}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-base">{dept}</CardTitle>
+                      <span className="text-xs text-muted-foreground">
+                        {deptUsers.length} {deptUsers.length === 1 ? "pessoa" : "pessoas"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs text-muted-foreground">Gestor(es):</span>
+                      {gestores.length === 0 ? (
+                        <span className="inline-flex items-center gap-1 text-amber-700 text-xs">
+                          <AlertTriangle className="h-3 w-3 shrink-0" /> Nenhum designado
+                        </span>
+                      ) : (
+                        gestores.map((dm) => {
+                          const gestorUser = users.find((u) => u.id === dm.manager_user_id);
+                          return (
+                            <span
+                              key={dm.id}
+                              className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800"
+                            >
+                              {gestorUser?.full_name ?? gestorUser?.email ?? "Usuário removido"}
+                            </span>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <UsersTableHead showDepartment={false} />
+                      <tbody>
+                        {deptUsers.map((user) => (
+                          <UserRow
+                            key={user.id}
+                            user={user}
+                            users={users}
+                            currentUserId={currentUser?.id}
+                            missingBadge={missingBadge}
+                            showDepartment={false}
+                            onOpenDetail={() => setDetailUserId(user.id)}
+                            onToggleActive={() => void handleToggleActive(user)}
+                            onDelete={() => setDeleteTarget(user)}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       {/* Painel de detalhe/edição — um usuário por vez */}
       <Sheet open={!!detailUser} onOpenChange={(open) => !open && setDetailUserId(null)}>
@@ -593,6 +613,139 @@ function UsersTab() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/** Cabeçalho compartilhado entre a tabela plana e cada grupo da visão por
+ *  departamento (que omite a coluna Departamento, já que é o próprio
+ *  agrupamento). */
+function UsersTableHead({ showDepartment = true }: { showDepartment?: boolean }) {
+  return (
+    <thead>
+      <tr className="border-b border-border">
+        <th className="text-left p-3 text-xs font-medium text-muted-foreground">Usuário</th>
+        <th className="text-left p-3 text-xs font-medium text-muted-foreground">Papéis</th>
+        <th className="text-left p-3 text-xs font-medium text-muted-foreground">Alçada</th>
+        <th className="text-left p-3 text-xs font-medium text-muted-foreground">Aprovador</th>
+        {showDepartment && (
+          <th className="text-left p-3 text-xs font-medium text-muted-foreground">Departamento</th>
+        )}
+        <th className="text-left p-3 text-xs font-medium text-muted-foreground">Status</th>
+        <th className="text-right p-3 text-xs font-medium text-muted-foreground">Ações</th>
+      </tr>
+    </thead>
+  );
+}
+
+/** Linha de usuário compartilhada entre a tabela plana e a visão por
+ *  departamento — mesmas ações (ver detalhes, inativar/reativar, excluir). */
+function UserRow({
+  user,
+  users,
+  currentUserId,
+  missingBadge,
+  showDepartment = true,
+  onOpenDetail,
+  onToggleActive,
+  onDelete,
+}: {
+  user: UserWithRoles;
+  users: UserWithRoles[];
+  currentUserId: string | undefined;
+  missingBadge: React.ReactNode;
+  showDepartment?: boolean;
+  onOpenDetail: () => void;
+  onToggleActive: () => void;
+  onDelete: () => void;
+}) {
+  const aprovadorEntry = user.roles.find((r) => r.role === "aprovador");
+  const approver = users.find((u) => u.id === user.approver_id);
+  const isSelf = user.id === currentUserId;
+
+  return (
+    <tr className={`border-b border-border last:border-0 hover:bg-accent/50 transition-colors ${user.active ? "" : "opacity-60"}`}>
+      <td className="p-3">
+        <p className="font-medium text-foreground truncate max-w-[180px]">
+          {user.full_name || "Sem nome"}
+        </p>
+        <p className="text-xs text-muted-foreground truncate max-w-[220px]">{user.email}</p>
+      </td>
+      <td className="p-3">
+        <div className="flex flex-wrap gap-1 max-w-[200px]">
+          {user.roles.length === 0 && <span className="text-xs text-muted-foreground italic">—</span>}
+          {user.roles.map(({ role }) => (
+            <span
+              key={role}
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${ROLE_COLORS[role]}`}
+            >
+              {ROLE_LABELS[role]}
+            </span>
+          ))}
+        </div>
+      </td>
+      <td className="p-3 text-xs whitespace-nowrap">
+        {aprovadorEntry ? (
+          aprovadorEntry.approval_tier ? (
+            <span className="text-foreground">{TIER_LABELS[aprovadorEntry.approval_tier]}</span>
+          ) : missingBadge
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="p-3 text-xs">
+        {approver ? (
+          <span className="text-foreground truncate max-w-[160px] block">
+            {approver.full_name ?? approver.email}
+          </span>
+        ) : missingBadge}
+      </td>
+      {showDepartment && <td className="p-3 text-xs">{user.department || missingBadge}</td>}
+      <td className="p-3">
+        {user.active ? (
+          <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+            Ativo
+          </span>
+        ) : (
+          <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+            Inativo
+          </span>
+        )}
+      </td>
+      <td className="p-3 text-right">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+              <MoreVertical className="h-4 w-4" />
+              <span className="sr-only">Ações — {user.full_name ?? user.email}</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onOpenDetail}>
+              Ver detalhes
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={isSelf}
+              onClick={onToggleActive}
+              className={user.active ? "text-amber-700 focus:text-amber-700" : "text-emerald-700 focus:text-emerald-700"}
+            >
+              {user.active ? (
+                <><Ban className="h-3.5 w-3.5 mr-2" /> Inativar</>
+              ) : (
+                <><RotateCcw className="h-3.5 w-3.5 mr-2" /> Reativar</>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={isSelf}
+              onClick={onDelete}
+              className="text-red-700 focus:text-red-700"
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-2" /> Excluir
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </td>
+    </tr>
   );
 }
 
