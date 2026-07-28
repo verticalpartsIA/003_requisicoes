@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { format, addDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { cn } from "@/lib/utils";
+import { cn, parseLocalDate } from "@/lib/utils";
 import { excelTable } from "@/lib/excel-table";
 import { Stepper } from "@/components/ui/stepper";
 import { FIELD_ERROR_CLASS } from "@/lib/field-error";
@@ -256,7 +256,7 @@ function ProductsPage() {
       setDeliveryLocation(String(md.delivery_location ?? ""));
       setUrgencyLevel((data.urgency as string) ?? "");
       setJustification((data.justification as string) ?? "");
-      if (data.desired_date) setDeliveryDeadline(new Date(data.desired_date as string));
+      if (data.desired_date) setDeliveryDeadline(parseLocalDate(data.desired_date as string));
       setTriageCompleted(true); // edição pula triagem
       setStep(0);
       setDialogOpen(true);

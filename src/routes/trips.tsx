@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { format, differenceInCalendarDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { cn } from "@/lib/utils";
+import { cn, parseLocalDate } from "@/lib/utils";
 import { Stepper } from "@/components/ui/stepper";
 import { excelTable } from "@/lib/excel-table";
 import { FIELD_ERROR_CLASS } from "@/lib/field-error";
@@ -260,8 +260,8 @@ function TripsPage() {
       setEditEdition((data.edition as number | undefined) ?? 1);
       setOriginCity((md.origin_city as string | undefined) ?? "");
       setDestinationCity((md.destination_city as string | undefined) ?? "");
-      if (md.departure_date) setDepartureDate(new Date(md.departure_date as string));
-      if (md.return_date) setReturnDate(new Date(md.return_date as string));
+      if (md.departure_date) setDepartureDate(parseLocalDate(md.departure_date as string));
+      if (md.return_date) setReturnDate(parseLocalDate(md.return_date as string));
       setTransportMode((md.transport_mode as string | undefined) ?? "");
       setFlightClass((md.flight_class as string | undefined) ?? "ECONOMICA");
       setFlightTimePreference((md.flight_time_preference as string | undefined) ?? "QUALQUER");

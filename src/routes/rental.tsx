@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { format, differenceInCalendarDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { cn } from "@/lib/utils";
+import { cn, parseLocalDate } from "@/lib/utils";
 import { Stepper } from "@/components/ui/stepper";
 import { FIELD_ERROR_CLASS } from "@/lib/field-error";
 import { Button } from "@/components/ui/button";
@@ -200,8 +200,8 @@ function RentalPage() {
       if (typeof md.art_status === "string") setArtStatus(md.art_status);
       if (typeof md.needs_security_induction === "boolean") setNeedsSecurityInduction(md.needs_security_induction);
       setEditClientNormPath((md.client_norm_path as string | null) ?? null);
-      if (typeof md.start_date === "string") setStartDate(new Date(md.start_date));
-      if (typeof md.end_date === "string") setEndDate(new Date(md.end_date));
+      if (typeof md.start_date === "string") setStartDate(parseLocalDate(md.start_date));
+      if (typeof md.end_date === "string") setEndDate(parseLocalDate(md.end_date));
       if (typeof md.delivery_location === "string") setDeliveryLocation(md.delivery_location);
       if (typeof data.urgency === "string") setUrgencyLevel(data.urgency);
       if (typeof data.justification === "string") setJustification(data.justification);

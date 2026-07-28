@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { format, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { cn } from "@/lib/utils";
+import { cn, parseLocalDate } from "@/lib/utils";
 import { Stepper } from "@/components/ui/stepper";
 import { FIELD_ERROR_CLASS } from "@/lib/field-error";
 import { parseBRLNumber } from "@/lib/number";
@@ -226,8 +226,8 @@ function FreightPage() {
       setNeedsCityHallAuthorization((md.needs_city_hall_authorization as boolean | undefined) ?? false);
       setUrgencyLevel((data.urgency as string) ?? "");
       setJustification((data.justification as string) ?? "");
-      if (data.desired_date) setPickupDate(new Date(data.desired_date as string));
-      if (md.unloading_date) setUnloadingDate(new Date(md.unloading_date as string));
+      if (data.desired_date) setPickupDate(parseLocalDate(data.desired_date as string));
+      if (md.unloading_date) setUnloadingDate(parseLocalDate(md.unloading_date as string));
       setStep(0);
       setDialogOpen(true);
     })();

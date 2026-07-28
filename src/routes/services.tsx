@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { format, addDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { cn } from "@/lib/utils";
+import { cn, parseLocalDate } from "@/lib/utils";
 import { Stepper } from "@/components/ui/stepper";
 import { FIELD_ERROR_CLASS } from "@/lib/field-error";
 import { parseBRLNumber } from "@/lib/number";
@@ -175,7 +175,7 @@ function ServicesPage() {
       if (Array.isArray(md.milestones)) setMilestones(md.milestones as Milestone[]);
       setUrgencyLevel((data.urgency as string) ?? "");
       setJustification((data.justification as string) ?? "");
-      if (data.desired_date) setDeadline(new Date(data.desired_date as string));
+      if (data.desired_date) setDeadline(parseLocalDate(data.desired_date as string));
       setStep(0);
       setDialogOpen(true);
     })();
