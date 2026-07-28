@@ -128,6 +128,14 @@ function GestorSection({ gestorName }: { gestorName: string }) {
     try {
       await gestorApproveClient(selected.requisitionId, user.id, gestorName, notes);
       toast.success("Requisição aprovada e encaminhada para cotação.");
+      void notifyVpClickClient({
+        stage: "GESTOR_APPROVED",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.ticketNumber,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+      }).catch(console.warn);
       setSelected(null);
       setNotes("");
       await reload();
@@ -148,6 +156,14 @@ function GestorSection({ gestorName }: { gestorName: string }) {
     try {
       await gestorRejectClient(selected.requisitionId, user.id, gestorName, notes);
       toast.success("Requisição reprovada.");
+      void notifyVpClickClient({
+        stage: "GESTOR_REJECTED",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.ticketNumber,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+      }).catch(console.warn);
       setSelected(null);
       setNotes("");
       await reload();

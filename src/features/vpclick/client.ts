@@ -13,7 +13,10 @@ export type VpClickStage =
   | "V3_approved"
   | "V3_rejected"
   | "V4"
-  | "V5";
+  | "V5"
+  | "GESTOR_URGENT"
+  | "GESTOR_APPROVED"
+  | "GESTOR_REJECTED";
 
 export interface VpClickNotifyInput {
   stage: VpClickStage;
@@ -23,6 +26,9 @@ export interface VpClickNotifyInput {
   module: string;
   requesterName: string;
   requiresReceipt?: boolean;
+  /** GESTOR_URGENT: quem pediu (resolve o aprovador designado) e o departamento (fallback) */
+  requesterId?: string;
+  requesterDepartment?: string;
 }
 
 export async function notifyVpClickClient(input: VpClickNotifyInput): Promise<void> {

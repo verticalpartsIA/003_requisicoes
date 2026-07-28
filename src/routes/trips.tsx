@@ -565,6 +565,21 @@ function TripsPage() {
         module: "M2",
         requesterName: profile?.full_name || user?.email || "Usuário VP",
       }).catch(console.warn);
+      // Viagem com pouca antecedência (<5 dias, urgency vira "URGENT" acima):
+      // escalona direto pro aprovador designado em vez de esperar ele abrir
+      // a fila do gestor manualmente — motivo recorrente de atraso relatado.
+      if (urgency === "URGENT") {
+        void notifyVpClickClient({
+          stage: "GESTOR_URGENT",
+          requisitionId: created?.id ?? "",
+          ticketNumber: created?.ticket_number ?? "",
+          title: `Viagem ${originCity} → ${destinationCity}`,
+          module: "M2",
+          requesterName: profile?.full_name || user?.email || "Usuário VP",
+          requesterId: user?.id,
+          requesterDepartment: profile?.department || undefined,
+        }).catch(console.warn);
+      }
       setDialogOpen(false);
       resetForm();
       await loadTickets();

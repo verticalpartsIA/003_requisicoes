@@ -137,13 +137,40 @@ async function getVpClickUserIdByEmail(email: string): Promise<string | null> {
   return rows?.[0]?.id ?? null;
 }
 
-/** Retorna lista de IDs no vpclick para todos os usuários com dado papel em VPRequisições */
-async function getAssigneesByRole(role: string): Promise<string[]> {
-  const userIds = await getUserIdsByRole(role);
+/** Resolve IDs no vpclick a partir de uma lista de user_ids em VPRequisições */
+async function getVpClickIdsForUserIds(userIds: string[]): Promise<string[]> {
   if (!userIds.length) return [];
   const emails = await getEmailsByUserIds(userIds);
   const vpIds = await Promise.all(emails.map((e) => getVpClickUserIdByEmail(e)));
   return vpIds.filter((id): id is string => !!id);
+}
+
+/** Retorna lista de IDs no vpclick para todos os usuários com dado papel em VPRequisições */
+async function getAssigneesByRole(role: string): Promise<string[]> {
+  const userIds = await getUserIdsByRole(role);
+  return getVpClickIdsForUserIds(userIds);
+}
+
+/** Resolve quem deve decidir a etapa GESTOR de um requisitante: o aprovador
+ *  designado dele (profiles.approver_id) ou, na falta desse, os gestores do
+ *  departamento (department_managers) — mesma regra usada em
+ *  features/gestor/api.ts (assertCanDecide). */
+async function resolveGestorUserIds(requesterId: string | undefined, department: string | undefined): Promise<string[]> {
+  if (requesterId) {
+    const rows = await vpreqRest<Array<{ approver_id: string | null }>>(
+      `profiles?select=approver_id&id=eq.${requesterId}&limit=1`,
+    );
+    const approverId = rows?.[0]?.approver_id;
+    if (approverId) return [approverId];
+  }
+  if (department) {
+    const rows = await vpreqRest<Array<{ manager_user_id: string }>>(
+      `department_managers?select=manager_user_id&department=eq.${encodeURIComponent(department)}`,
+    );
+    const ids = (rows ?? []).map((r) => r.manager_user_id);
+    if (ids.length) return ids;
+  }
+  return [];
 }
 
 // ─── Helpers de tarefas ──────────────────────────────────────────────────────
@@ -234,7 +261,7 @@ function moduleLabel(module: string): string {
 
 const notifySchema = z.object({
   /** Etapa do fluxo que foi concluída */
-  stage: z.enum(["V1", "V2", "V3_approved", "V3_rejected", "V4", "V5"]),
+  stage: z.enum(["V1", "V2", "V3_approved", "V3_rejected", "V4", "V5", "GESTOR_URGENT", "GESTOR_APPROVED", "GESTOR_REJECTED"]),
   /** UUID da requisição em VPRequisições */
   requisitionId: z.string(),
   /** Ex: "M1-45685" */
@@ -247,6 +274,9 @@ const notifySchema = z.object({
   requesterName: z.string(),
   /** V4 only: se a compra exige recebimento (V5) */
   requiresReceipt: z.boolean().optional().default(false),
+  /** GESTOR_URGENT only: quem pediu (resolve o aprovador designado) e o departamento (fallback) */
+  requesterId: z.string().optional(),
+  requesterDepartment: z.string().optional(),
 });
 
 // ─── Server function principal ───────────────────────────────────────────────
@@ -348,6 +378,38 @@ export const notifyVpClickStage = createServerFn({ method: "POST" })
       else if (stage === "V5") {
         const v4Id = await getTaskId(requisitionId, "V4");
         if (v4Id) await updateTaskStatus(v4Id, STATUS.CONCLUIDO);
+      }
+
+      // ── GESTOR_URGENT: requisição urgente (pouca antecedência) criada →
+      //    escalona para o aprovador designado (ou gestor do departamento),
+      //    em vez de esperar ele abrir a fila manualmente ────────────────────
+      else if (stage === "GESTOR_URGENT") {
+        let assignees = await resolveGestorUserIds(data.requesterId, data.requesterDepartment);
+        assignees = await getVpClickIdsForUserIds(assignees);
+        if (!assignees.length) assignees = await getAssigneesByRole("aprovador");
+
+        const taskId = await createTask({
+          title: `🚨 URGENTE — ${ticketNumber} — ${title}`,
+          description:
+            `**Ticket:** ${ticketNumber}\n` +
+            `**Descrição:** ${title}\n` +
+            `**Módulo:** ${mod}\n` +
+            `**Requisitante:** ${requesterName}\n\n` +
+            `⚠️ Pouca antecedência — aprovar o quanto antes para não atrasar cotação e compra.\n\n` +
+            `🔗 Aprovar agora: ${base}/approval`,
+          status: STATUS.AGUARDANDO_APROVACAO,
+          assigneeIds: assignees,
+        });
+        if (taskId) await saveTaskId(requisitionId, ticketNumber, "GESTOR_URGENT", taskId);
+      }
+
+      // ── GESTOR_APPROVED / GESTOR_REJECTED: conclui a tarefa de escalonamento
+      //    (só existe se a requisição realmente tinha entrado como urgente) ──
+      else if (stage === "GESTOR_APPROVED" || stage === "GESTOR_REJECTED") {
+        const gestorTaskId = await getTaskId(requisitionId, "GESTOR_URGENT");
+        if (gestorTaskId) {
+          await updateTaskStatus(gestorTaskId, stage === "GESTOR_APPROVED" ? STATUS.APROVADO : STATUS.REPROVADO);
+        }
       }
     } catch (err) {
       // Nunca propaga — vpclick é efeito colateral
