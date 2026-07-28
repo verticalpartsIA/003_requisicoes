@@ -1,5 +1,5 @@
 import { supabaseBrowser } from "@/lib/supabase-browser";
-import type { PendingReceiptItem } from "@/features/receipts/api";
+import type { PendingReceiptItem, ReceiptLineItem } from "@/features/receipts/api";
 
 function getCategory(module: string) {
   switch (module) {
@@ -30,10 +30,37 @@ export async function listPendingReceiptsClient() {
 
   const purchaseByRequisition = new Map((purchases || []).map((purchase) => [purchase.requisition_id, purchase]));
 
+  // M1 multi-itens: busca os itens (product_code/description/quantity/received_at)
+  // pra permitir recebimento parcial item a item em vez de tudo-ou-nada.
+  const m1RequisitionIds = requisitions.filter((r) => r.module === "M1").map((r) => r.id);
+  const itemsByRequisition = new Map<string, ReceiptLineItem[]>();
+  if (m1RequisitionIds.length > 0) {
+    const { data: items, error: itemsError } = await supabaseBrowser
+      .from("requisition_items")
+      .select("id,requisition_id,product_code,description,quantity,received_at,sort_order")
+      .in("requisition_id", m1RequisitionIds)
+      .eq("item_type", "produto")
+      .order("sort_order", { ascending: true });
+    if (itemsError) throw itemsError;
+    (items || []).forEach((it) => {
+      const list = itemsByRequisition.get(it.requisition_id) ?? [];
+      list.push({
+        id: it.id,
+        productCode: it.product_code,
+        description: it.description ?? "",
+        quantity: it.quantity,
+        receivedAt: it.received_at,
+      });
+      itemsByRequisition.set(it.requisition_id, list);
+    });
+  }
+
   return requisitions
     .map((requisition) => {
       const purchase = purchaseByRequisition.get(requisition.id);
       if (!purchase) return null;
+
+      const items = itemsByRequisition.get(requisition.id);
 
       return {
         receiptId: null,
@@ -49,9 +76,25 @@ export async function listPendingReceiptsClient() {
         purchaseDate: purchase.purchased_at ? new Date(purchase.purchased_at).toLocaleDateString("pt-BR") : "—",
         purchaseOrderNumber: purchase.purchase_order_number,
         invoiceNumber: purchase.invoice_number,
+        items: items && items.length > 1 ? items : undefined,
       };
     })
     .filter(Boolean) as PendingReceiptItem[];
+}
+
+/** Marca (ou desmarca) um item do M1 multi-itens como recebido — permite
+ *  registrar entregas parciais conforme os produtos chegam de fornecedores
+ *  diferentes, sem precisar fechar o ticket inteiro de uma vez. */
+export async function markReceiptItemClient(itemId: string, received: boolean) {
+  const { data: userData } = await supabaseBrowser.auth.getUser();
+  const { error } = await supabaseBrowser
+    .from("requisition_items")
+    .update({
+      received_at: received ? new Date().toISOString() : null,
+      received_by: received ? (userData.user?.id ?? null) : null,
+    })
+    .eq("id", itemId);
+  if (error) throw error;
 }
 
 export async function registerReceiptClient(input: {

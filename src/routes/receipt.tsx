@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { PackageCheck, Truck, User, Building2, ClipboardCheck, AlertTriangle, CheckCircle2, Eye, Search, Filter, ScrollText } from "lucide-react";
+import { PackageCheck, Truck, User, Building2, ClipboardCheck, AlertTriangle, CheckCircle2, Eye, Search, Filter, ScrollText, Package } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,10 +14,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { type PendingReceiptItem } from "@/features/receipts/api";
+import { type PendingReceiptItem, type ReceiptLineItem } from "@/features/receipts/api";
 import { toast } from "sonner";
 import { AccessGuard } from "@/components/access-guard";
-import { listPendingReceiptsClient, registerReceiptClient } from "@/features/receipts/client";
+import { listPendingReceiptsClient, registerReceiptClient, markReceiptItemClient } from "@/features/receipts/client";
+import { excelTable } from "@/lib/excel-table";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/features/auth/auth-context";
 import { notifyVpClickClient } from "@/features/vpclick/client";
 
@@ -46,6 +48,8 @@ function ReceiptPage() {
   const [condition, setCondition] = useState<Condition>("");
   const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [dialogItems, setDialogItems] = useState<ReceiptLineItem[]>([]);
+  const [togglingItemId, setTogglingItemId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!session) return;
@@ -60,6 +64,7 @@ function ReceiptPage() {
     setCarrierCompany("");
     setCondition("");
     setNotes("");
+    setDialogItems(item.items ?? []);
     setDialogOpen(true);
   };
 
@@ -70,6 +75,37 @@ function ReceiptPage() {
     setCarrierCompany("");
     setCondition("");
     setNotes("");
+    setDialogItems([]);
+  };
+
+  const toggleItemReceived = async (item: ReceiptLineItem) => {
+    const willReceive = !item.receivedAt;
+    setTogglingItemId(item.id);
+    // Otimista: atualiza a UI antes da resposta do servidor.
+    setDialogItems((prev) =>
+      prev.map((it) => (it.id === item.id ? { ...it, receivedAt: willReceive ? new Date().toISOString() : null } : it)),
+    );
+    try {
+      await markReceiptItemClient(item.id, willReceive);
+      setPendingItems((prev) =>
+        prev.map((p) =>
+          p.items
+            ? {
+                ...p,
+                items: p.items.map((it) =>
+                  it.id === item.id ? { ...it, receivedAt: willReceive ? new Date().toISOString() : null } : it,
+                ),
+              }
+            : p,
+        ),
+      );
+    } catch (error) {
+      // Reverte em caso de erro.
+      setDialogItems((prev) => prev.map((it) => (it.id === item.id ? item : it)));
+      toast.error(error instanceof Error ? error.message : "Não foi possível atualizar o item.");
+    } finally {
+      setTogglingItemId(null);
+    }
   };
 
   const handleSubmit = async () => {
@@ -82,6 +118,14 @@ function ReceiptPage() {
       return;
     }
     if (!selectedItem) return;
+
+    if (dialogItems.length > 0) {
+      const pendentes = dialogItems.filter((it) => !it.receivedAt).length;
+      if (pendentes > 0) {
+        toast.error(`Ainda há ${pendentes} ${pendentes === 1 ? "item não recebido" : "itens não recebidos"}. Marque todos antes de finalizar.`);
+        return;
+      }
+    }
 
     setIsSaving(true);
 
@@ -245,6 +289,15 @@ function ReceiptPage() {
                     {item.purchaseOrderNumber && (
                       <Badge variant="secondary" className="text-xs">Pedido {item.purchaseOrderNumber}</Badge>
                     )}
+                    {item.items && item.items.length > 0 && (
+                      <Badge
+                        variant={item.items.every((it) => it.receivedAt) ? "secondary" : "outline"}
+                        className={cn("text-xs gap-1", item.items.every((it) => it.receivedAt) ? "bg-green-100 text-green-800 border-green-200" : "text-amber-700 border-amber-300")}
+                      >
+                        <Package className="h-3 w-3" />
+                        {item.items.filter((it) => it.receivedAt).length}/{item.items.length} itens recebidos
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-sm font-medium">{item.description}</p>
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -274,7 +327,7 @@ function ReceiptPage() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => !open && closeDialog()}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className={cn("max-w-lg", dialogItems.length > 0 && "max-w-2xl")}>
           <DialogHeader>
             <DialogTitle>Recebimento de Materiais</DialogTitle>
             <DialogDescription>
@@ -299,6 +352,54 @@ function ReceiptPage() {
                 </div>
               )}
             </div>
+
+            {dialogItems.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Itens ({dialogItems.length})</label>
+                  <span className="text-xs text-muted-foreground">
+                    {dialogItems.filter((it) => it.receivedAt).length}/{dialogItems.length} recebidos
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Marque cada item conforme ele chega — compras fracionadas entre fornecedores costumam entregar em ondas diferentes.
+                </p>
+                <div className={excelTable.wrapper}>
+                  <div className={excelTable.scrollBody}>
+                    <table className={excelTable.table}>
+                      <thead className={excelTable.thead}>
+                        <tr className={excelTable.headRow}>
+                          <th className={cn(excelTable.th, "w-10")}>Recebido</th>
+                          <th className={excelTable.th}>Produto</th>
+                          <th className={cn(excelTable.thRight, "w-16")}>Qtd.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dialogItems.map((it, i) => (
+                          <tr key={it.id} className={excelTable.row(i)}>
+                            <td className={excelTable.td}>
+                              <input
+                                type="checkbox"
+                                checked={!!it.receivedAt}
+                                disabled={togglingItemId === it.id}
+                                onChange={() => void toggleItemReceived(it)}
+                                className="h-4 w-4 rounded border-border accent-vp-yellow"
+                                aria-label={`Marcar ${it.description} como recebido`}
+                              />
+                            </td>
+                            <td className={excelTable.td}>
+                              {it.productCode && <span className="font-mono text-muted-foreground mr-1">[{it.productCode}]</span>}
+                              {it.description}
+                            </td>
+                            <td className={cn(excelTable.tdRight, "text-foreground")}>{it.quantity ?? "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Nome do Entregador (opcional)</label>

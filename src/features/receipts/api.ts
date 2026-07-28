@@ -28,6 +28,14 @@ interface ReceiptRow {
   condition: "ok" | "damaged" | "mismatch";
 }
 
+export interface ReceiptLineItem {
+  id: string;
+  productCode: string | null;
+  description: string;
+  quantity: number | null;
+  receivedAt: string | null;
+}
+
 export interface PendingReceiptItem {
   receiptId: string | null;
   requisitionId: string;
@@ -42,6 +50,10 @@ export interface PendingReceiptItem {
   purchaseDate: string;
   purchaseOrderNumber: string | null;
   invoiceNumber: string | null;
+  // M1 multi-itens: presente só quando a requisição tem 2+ itens do tipo
+  // 'produto' em requisition_items — permite marcar recebimento parcial
+  // item a item em vez de tudo-ou-nada no ticket inteiro.
+  items?: ReceiptLineItem[];
 }
 
 const registerReceiptSchema = z.object({
