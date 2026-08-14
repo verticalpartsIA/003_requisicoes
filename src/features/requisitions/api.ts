@@ -22,12 +22,26 @@ export const updateRequisition = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
-    const current = await supabaseRest<Array<{ edition: number; ticket_number: string }>>(
-      `requisitions?select=edition,ticket_number&id=eq.${data.requisitionId}`,
+    const current = await supabaseRest<Array<{ edition: number; ticket_number: string; status: string }>>(
+      `requisitions?select=edition,ticket_number,status&id=eq.${data.requisitionId}`,
     );
     const rec = current.data?.[0];
     const newEdition = (rec?.edition ?? 1) + 1;
     const ticketNumber = rec?.ticket_number ?? "";
+
+    // Se a requisição foi devolvida pelo comprador na Cotação por falta de
+    // informação, reenviar precisa trazê-la de volta pra fila de Cotação —
+    // senão o ticket fica preso em REJEITADO para sempre (não mexe nos casos
+    // de reprovação por Gestor/Aprovação, que seguem o comportamento atual).
+    let resumeStatus: string | undefined;
+    if (rec?.status === "REJEITADO") {
+      const lastRejection = await supabaseRest<Array<{ action: string }>>(
+        `audit_logs?select=action&requisition_id=eq.${data.requisitionId}` +
+          `&action=in.(GESTOR_REJECTED,APPROVAL_REJECTED,QUOTATION_RETURNED_FOR_INFO)` +
+          `&order=created_at.desc&limit=1`,
+      );
+      if (lastRejection.data[0]?.action === "QUOTATION_RETURNED_FOR_INFO") resumeStatus = "ABERTO";
+    }
 
     await supabaseRest(`requisitions?id=eq.${data.requisitionId}`, {
       method: "PATCH",
@@ -41,6 +55,7 @@ export const updateRequisition = createServerFn({ method: "POST" })
         module_data: data.moduleData,
         edition: newEdition,
         updated_at: new Date().toISOString(),
+        ...(resumeStatus ? { status: resumeStatus } : {}),
       },
     });
 

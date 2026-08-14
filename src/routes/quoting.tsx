@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
-import { FileSearch, Plus, Trash2, Trophy, DollarSign, Clock, Scale, CheckCircle2, ArrowRight, Plane, Hotel, Car, Package, CopyPlus, Search, ScrollText, Filter } from "lucide-react";
+import { FileSearch, Plus, Trash2, Trophy, DollarSign, Clock, Scale, CheckCircle2, ArrowRight, Plane, Hotel, Car, Package, CopyPlus, Search, ScrollText, Filter, Undo2, AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -41,6 +41,7 @@ import {
   saveQuotationSuppliersClient,
   saveM2QuoteClient,
   saveM1ItemQuotesClient,
+  returnQuotationForInfoClient,
   type M2ItemQuote,
 } from "@/features/quotations/client";
 import { useAuth } from "@/features/auth/auth-context";
@@ -130,6 +131,11 @@ function QuotingPage() {
   const [m2Quotes, setM2Quotes] = useState<Record<string, Omit<M2ItemQuote, "itemId" | "itemType">>>({});
   const [isM2Saving, setIsM2Saving] = useState(false);
 
+  // Devolver ao solicitante por falta de informação
+  const [returnItem, setReturnItem] = useState<QuotationQueueItem | null>(null);
+  const [returnReason, setReturnReason] = useState("");
+  const [isReturning, setIsReturning] = useState(false);
+
   useEffect(() => {
     if (!session) return;
     void listQuotationQueueClient().then(setQueue);
@@ -191,6 +197,34 @@ function QuotingPage() {
   const closeM2Dialog = () => {
     setM2Item(null);
     setM2Quotes({});
+  };
+
+  const openReturnDialog = (item: QuotationQueueItem) => {
+    setReturnItem(item);
+    setReturnReason("");
+  };
+
+  const closeReturnDialog = () => {
+    setReturnItem(null);
+    setReturnReason("");
+  };
+
+  const confirmReturnForInfo = async () => {
+    if (!returnItem || !returnReason.trim()) return;
+
+    setIsReturning(true);
+
+    try {
+      await returnQuotationForInfoClient(returnItem.requisitionId, returnReason.trim());
+      toast.success("Requisição devolvida ao solicitante.");
+      closeReturnDialog();
+      setQueue(await listQuotationQueueClient());
+      await router.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível devolver a requisição.");
+    } finally {
+      setIsReturning(false);
+    }
   };
 
   const advanceToProposals = async () => {
@@ -485,6 +519,15 @@ function QuotingPage() {
                 >
                   <ScrollText className="h-3.5 w-3.5" />
                 </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                  title="Devolver ao solicitante por falta de informação"
+                  onClick={() => openReturnDialog(item)}
+                >
+                  <Undo2 className="h-3.5 w-3.5 mr-1" /> Devolver
+                </Button>
                 <Button variant="vp" size="sm" onClick={() => openQuotation(item)}>
                   {item.status === "pending" ? "Cotar" : "Continuar"}
                 </Button>
@@ -881,6 +924,39 @@ function QuotingPage() {
             >
               <CheckCircle2 className="h-4 w-4 mr-1" />
               {isM2Saving ? "Salvando..." : isM1Fractioned ? "Finalizar Cotação Fracionada" : "Finalizar Cotação de Viagem"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog — devolver ao solicitante por falta de informação */}
+      <Dialog open={!!returnItem} onOpenChange={(open) => !open && closeReturnDialog()}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700">
+              <AlertTriangle className="h-5 w-5" /> Devolver ao Solicitante
+            </DialogTitle>
+            <DialogDescription>
+              {returnItem?.ticketNumber} — {returnItem?.title}. A requisição sai da fila de cotação e só volta depois que o solicitante corrigir e reenviar.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <Label className="text-xs">Motivo (o que falta ou precisa ser corrigido) *</Label>
+            <Textarea
+              placeholder="Ex.: Faltou anexar os documentos de viagem do passageiro."
+              value={returnReason}
+              onChange={(e) => setReturnReason(e.target.value)}
+              className="min-h-[100px]"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={closeReturnDialog}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              disabled={!returnReason.trim() || isReturning}
+              onClick={confirmReturnForInfo}
+            >
+              <Undo2 className="h-4 w-4 mr-1" /> Devolver ao Solicitante
             </Button>
           </DialogFooter>
         </DialogContent>
