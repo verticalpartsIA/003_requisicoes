@@ -224,7 +224,8 @@ function mapActionToDescription(action: string, details: Record<string, unknown>
   const suppliersCount =
     typeof details.suppliers_count === "number" ? ` — ${details.suppliers_count} fornecedores` : "";
   const reason =
-    action === "GESTOR_REJECTED" && typeof details.reason === "string"
+    (action === "GESTOR_REJECTED" || action === "QUOTATION_RETURNED_FOR_INFO") &&
+    typeof details.reason === "string"
       ? ` — motivo: ${details.reason}`
       : action === "APPROVAL_REJECTED" && typeof details.justification === "string" && details.justification
         ? ` — motivo: ${details.justification}`
@@ -909,11 +910,18 @@ function MovimentacoesPage() {
     void router.navigate({ to: route, search: { edit: liveDetail.ticket_id } });
   };
 
-  /** Motivo da recusa — busca no histórico o evento de reprovação (gestor ou
-   * alçada) para o requisitante entender o que precisa corrigir antes de
-   * reenviar. GESTOR_REJECTED guarda o motivo em details.reason; a reprovação
-   * de alçada (V3) já vem em approval_justification. */
-  const rejectionEvent = liveDetail?.ticket_audit_logs.find((l) => l.action === "GESTOR_REJECTED");
+  /** Motivo da recusa — busca no histórico o evento de reprovação (gestor,
+   * comprador na cotação, ou alçada) para o requisitante entender o que
+   * precisa corrigir antes de reenviar. GESTOR_REJECTED e
+   * QUOTATION_RETURNED_FOR_INFO guardam o motivo em details.reason; a
+   * reprovação de alçada (V3) já vem em approval_justification. Pega o
+   * último evento (não o primeiro) porque um ticket pode ser devolvido mais
+   * de uma vez ao longo da vida dele. */
+  const rejectionEvents = liveDetail?.ticket_audit_logs.filter(
+    (l) => l.action === "GESTOR_REJECTED" || l.action === "QUOTATION_RETURNED_FOR_INFO",
+  ) ?? [];
+  const rejectionEvent = rejectionEvents[rejectionEvents.length - 1];
+  const isQuotationReturn = rejectionEvent?.action === "QUOTATION_RETURNED_FOR_INFO";
   const rejectionReason =
     liveDetail?.status === "REJEITADO"
       ? liveDetail.approval_justification ||
@@ -1557,7 +1565,9 @@ function MovimentacoesPage() {
                   <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-2">
                     <div className="flex items-center gap-2 text-red-700 font-semibold text-sm">
                       <AlertTriangle className="h-4 w-4 shrink-0" />
-                      Requisição reprovada{rejectedBy ? ` por ${rejectedBy}` : ""}
+                      {isQuotationReturn
+                        ? `Devolvida na Cotação${rejectedBy ? ` por ${rejectedBy}` : ""} — falta de informação`
+                        : `Requisição reprovada${rejectedBy ? ` por ${rejectedBy}` : ""}`}
                     </div>
                     <p className="text-xs text-red-900">
                       {rejectionReason || "Nenhum motivo foi registrado para esta reprovação."}

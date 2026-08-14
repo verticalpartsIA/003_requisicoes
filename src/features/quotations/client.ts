@@ -408,6 +408,33 @@ export async function saveQuotationProposalsClient(
   };
 }
 
+/** Devolve a requisição ao solicitante por falta de informação — mesma
+ *  transição usada em GESTOR_REJECTED/APPROVAL_REJECTED (status REJEITADO),
+ *  só que registrada aqui como QUOTATION_RETURNED_FOR_INFO para a tela de
+ *  Movimentações e o "reenviar" saberem que ela deve voltar pra Cotação. */
+export async function returnQuotationForInfoClient(requisitionId: string, reason: string) {
+  const { data: requisition, error: requisitionError } = await supabaseBrowser
+    .from("requisitions")
+    .select("ticket_number")
+    .eq("id", requisitionId)
+    .single();
+  if (requisitionError) throw new Error(friendlySupabaseError(requisitionError));
+
+  const { error: updateError } = await supabaseBrowser
+    .from("requisitions")
+    .update({ status: "REJEITADO" })
+    .eq("id", requisitionId);
+  if (updateError) throw new Error(friendlySupabaseError(updateError));
+
+  const { error: logError } = await supabaseBrowser.from("audit_logs").insert({
+    requisition_id: requisitionId,
+    ticket_number: requisition.ticket_number,
+    action: "QUOTATION_RETURNED_FOR_INFO",
+    details: { reason },
+  });
+  if (logError) console.warn("[audit_logs] QUOTATION_RETURNED_FOR_INFO failed:", logError.message);
+}
+
 export async function finalizeQuotationClient(
   requisitionId: string,
   quotationId: string,

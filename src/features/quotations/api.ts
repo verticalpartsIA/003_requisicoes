@@ -105,6 +105,11 @@ const finalizeQuotationSchema = z.object({
   winCriteria: z.enum(["price", "deadline", "price_deadline"]),
 });
 
+const returnForInfoSchema = z.object({
+  requisitionId: z.string().uuid(),
+  reason: z.string().min(1).max(1000),
+});
+
 /** Limites de alçada configurados pelo Admin (tabela settings), com fallback
  *  nos padrões. Antes havia aqui uma cópia local com limites fixos (1500/3000)
  *  divergente do resto do sistema (1500/3500) — valores entre R$ 3.000,01 e
@@ -363,6 +368,37 @@ export const saveQuotationProposals = createServerFn({ method: "POST" })
       })),
       status: "selecting_winner" as QuotationStatus,
     };
+  });
+
+/** Devolve a requisição ao solicitante por falta de informação (ex.: faltou
+ *  anexar documento de viagem) — o comprador registra o motivo, a requisição
+ *  volta para o mesmo status/tela de "reprovada" já usada pelo Gestor e pela
+ *  Aprovação (RLS já libera edição do solicitante e a tela de Movimentações já
+ *  mostra o motivo e o botão de corrigir/reenviar), sem precisar de e-mail. */
+export const returnQuotationForInfo = createServerFn({ method: "POST" })
+  .inputValidator(returnForInfoSchema)
+  .handler(async ({ data }) => {
+    const requisitionResponse = await supabaseRest<RequisitionRow[]>(
+      `requisitions?select=id,ticket_number,status&id=eq.${data.requisitionId}&limit=1`,
+    );
+    const requisition = requisitionResponse.data[0];
+
+    if (!requisition) {
+      throw new Error("Requisição não encontrada para devolver ao solicitante.");
+    }
+
+    await supabaseRest(`requisitions?id=eq.${data.requisitionId}`, {
+      method: "PATCH",
+      body: {
+        status: "REJEITADO",
+      },
+    });
+
+    await logQuotationEvent(data.requisitionId, requisition.ticket_number, "QUOTATION_RETURNED_FOR_INFO", {
+      reason: data.reason,
+    });
+
+    return { success: true };
   });
 
 export const finalizeQuotation = createServerFn({ method: "POST" })

@@ -32,6 +32,7 @@ export const ACTION_INFO: Record<string, ActionInfo> = {
   SUPPLIER_ADDED:           { label: "Fornecedor adicionado", stage: "COTAÇÃO" },
   SUPPLIER_UPDATED:         { label: "Fornecedor atualizado", stage: "COTAÇÃO" },
   SUPPLIER_REMOVED:         { label: "Fornecedor removido", stage: "COTAÇÃO" },
+  QUOTATION_RETURNED_FOR_INFO: { label: "Devolvida ao solicitante — falta de informação", stage: "COTAÇÃO" },
   WINNER_SELECTED:          { label: "Fornecedor vencedor selecionado", stage: "COTAÇÃO" },
   M1_ITEMS_QUOTE_COMPLETED: { label: "Cotação de itens concluída", stage: "COTAÇÃO" },
   M2_QUOTE_COMPLETED:       { label: "Cotação de viagem concluída", stage: "COTAÇÃO" },
