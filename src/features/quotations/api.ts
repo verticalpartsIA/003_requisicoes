@@ -387,15 +387,19 @@ export const returnQuotationForInfo = createServerFn({ method: "POST" })
       throw new Error("Requisição não encontrada para devolver ao solicitante.");
     }
 
+    // Grava o marcador ANTES de mudar o status: updateRequisition depende dele
+    // pra saber restaurar a requisição pra ABERTO no reenvio — se a ordem
+    // fosse invertida e o log falhasse depois do status já ter mudado, o
+    // ticket ficaria preso em REJEITADO sem chance de reenvio.
+    await logQuotationEvent(data.requisitionId, requisition.ticket_number, "QUOTATION_RETURNED_FOR_INFO", {
+      reason: data.reason,
+    });
+
     await supabaseRest(`requisitions?id=eq.${data.requisitionId}`, {
       method: "PATCH",
       body: {
         status: "REJEITADO",
       },
-    });
-
-    await logQuotationEvent(data.requisitionId, requisition.ticket_number, "QUOTATION_RETURNED_FOR_INFO", {
-      reason: data.reason,
     });
 
     return { success: true };

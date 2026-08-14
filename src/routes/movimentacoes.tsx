@@ -914,11 +914,16 @@ function MovimentacoesPage() {
    * comprador na cotação, ou alçada) para o requisitante entender o que
    * precisa corrigir antes de reenviar. GESTOR_REJECTED e
    * QUOTATION_RETURNED_FOR_INFO guardam o motivo em details.reason; a
-   * reprovação de alçada (V3) já vem em approval_justification. Pega o
-   * último evento (não o primeiro) porque um ticket pode ser devolvido mais
-   * de uma vez ao longo da vida dele. */
+   * reprovação de alçada (V3) já vem em approval_justification, mas
+   * APPROVAL_REJECTED também entra aqui pra achar o evento realmente mais
+   * recente entre os três — um ticket pode ser devolvido na Cotação, corrigido,
+   * seguir até a Aprovação e ser reprovado lá; sem isso o painel continuaria
+   * atribuindo a reprovação mais recente ao evento antigo da Cotação. */
   const rejectionEvents = liveDetail?.ticket_audit_logs.filter(
-    (l) => l.action === "GESTOR_REJECTED" || l.action === "QUOTATION_RETURNED_FOR_INFO",
+    (l) =>
+      l.action === "GESTOR_REJECTED" ||
+      l.action === "QUOTATION_RETURNED_FOR_INFO" ||
+      l.action === "APPROVAL_REJECTED",
   ) ?? [];
   const rejectionEvent = rejectionEvents[rejectionEvents.length - 1];
   const isQuotationReturn = rejectionEvent?.action === "QUOTATION_RETURNED_FOR_INFO";
