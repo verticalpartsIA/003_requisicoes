@@ -1,5 +1,12 @@
 # 🔧 Correção da Issue #36 — Relacionamento Ambíguo no MCP VPRequisições
 
+> **Status ao reorganizar esta pasta (18/08/2026):** o checklist abaixo está
+> todo desmarcado e **não existe uma função `mcp-server` em
+> `supabase/functions/` neste repositório** — a Edge Function referenciada
+> provavelmente vive num projeto/repo diferente (o MCP central do
+> `vpsistema`?). Não confirmei se a correção já foi aplicada lá. Se você
+> souber o status real, atualize esta nota ou apague o arquivo.
+
 ## 🐛 Problema Identificado
 
 ```

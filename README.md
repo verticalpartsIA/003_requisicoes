@@ -11,6 +11,8 @@
   <img src="public/logo-vp.png" alt="VerticalParts" width="220" />
 </p>
 
+> **Contribuindo (humano ou IA):** leia `CLAUDE.md` primeiro (arquitetura e convenções) e depois `CHANGELOG.md` (o que já foi feito, mais recente no topo). Relatórios técnicos detalhados de features/incidentes ficam em `docs/reports/`.
+
 ## Visão do Produto
 
 O **VPRequisições** é um sistema web para transformar pedidos internos em processos rastreáveis de compra e atendimento. Ele nasce para substituir controles dispersos por uma jornada padronizada: o solicitante cria a demanda, o comprador conduz a cotação, o aprovador decide conforme alçada, o comprador confirma a compra, o almoxarife registra o recebimento e a gestão acompanha tudo por dashboard, logs e analytics.
@@ -325,7 +327,7 @@ Pendências não bloqueantes mapeadas no próprio projeto:
 
 - **Nome:** VPRequisições
 - **Organização:** VerticalParts
-- **Repositório:** `verticalpartsIA/Requisicoes`
+- **Repositório:** `verticalpartsIA/003_requisicoes`
 - **Domínio funcional:** compras, requisições internas, aprovação, recebimento e auditoria
 - **Público:** solicitantes internos, compradores, aprovadores, almoxarifado, gestores e administradores
 

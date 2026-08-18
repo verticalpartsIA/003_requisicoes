@@ -375,7 +375,7 @@ git push origin HEAD:main
 - **Branch:** `claude/project-discussion-u9suca`
 - **Commit:** `5fdf45b`
 - **Tela:** `/estoque-omie` (autenticada, requisição necessária)
-- **Acesso:** https://requisicoes.verticalparts.com.br/estoque-omie
+- **Acesso:** https://vprequisicoes.vpsistema.com/estoque-omie
 
 ---
 
