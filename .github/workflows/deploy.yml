@@ -29,7 +29,11 @@ jobs:
             echo "=== instala dependencias ==="
             npm ci || npm install
             echo "=== builda o front (dist/ nao vai pro git, precisa gerar aqui) ==="
-            npm run build
+            BUILD_FAILED=0
+            npm run build || BUILD_FAILED=1
+            if [ "$BUILD_FAILED" = "1" ]; then
+              echo "!!! BUILD FALHOU — dist/ anterior foi restaurado automaticamente (scripts/build.mjs), app continua servindo a versao anterior."
+            fi
             echo "=== valida require(server.js) como o Passenger faz ==="
             if PORT=3199 timeout 15 $NODE -e "require('./server.js'); setTimeout(() => process.exit(0), 3000);" > /tmp/vpreq-req.log 2>&1; then
               echo "REQUIRE OK — server.js compativel com Passenger"
@@ -48,3 +52,7 @@ jobs:
             echo "=== console.log do app ==="
             tail -c 1500 console.log 2>/dev/null || echo "(vazio)"
             echo "=== FIM ==="
+            if [ "$BUILD_FAILED" = "1" ]; then
+              echo "!!! Marcando job como falho: build desta versao nao foi publicado (versao anterior continua no ar)."
+              exit 1
+            fi

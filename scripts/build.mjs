@@ -1,7 +1,7 @@
 // Build multiplataforma (issue #3): substitui o antigo `sh -c '...'` que
 // falhava no Windows. Carrega o .env da Hostinger quando presente (produção)
 // e roda o vite build com o limite de memória ampliado.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
 import { spawnSync, execSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,15 +41,39 @@ writeFileSync(
 );
 console.log(`[build] build-info.generated.ts gravado (BUILD_TIME=${buildTime}).`);
 
+// Backup do dist/ anterior: em hospedagem compartilhada (Hostinger) o binário
+// nativo do esbuild pode falhar por falta de threads do processo do usuário
+// ("Resource temporarily unavailable" ao criar OS thread) — o vite já limpa
+// dist/ antes de escrever a saída, então uma falha nesse ponto derrubava o
+// site (dist/server/index.js some e o server.js não tem o que carregar).
+// Guardamos o build anterior e restauramos se a nova build falhar.
+const distDir = join(ROOT, "dist");
+const distBackupDir = join(ROOT, "dist.bak");
+if (existsSync(distBackupDir)) rmSync(distBackupDir, { recursive: true, force: true });
+const hadPreviousDist = existsSync(distDir);
+if (hadPreviousDist) renameSync(distDir, distBackupDir);
+
 const result = spawnSync("npx", ["vite", "build"], {
   stdio: "inherit",
   shell: process.platform === "win32",
-  env: { ...process.env, NODE_OPTIONS: "--max-old-space-size=2048" },
+  env: {
+    ...process.env,
+    NODE_OPTIONS: "--max-old-space-size=2048",
+    // Limita as threads que os binários nativos do esbuild/rollup (Go/Rust)
+    // tentam criar — evita o panic de runtime ao bater no limite de
+    // processos/threads (ulimit -u) da conta compartilhada da Hostinger.
+    GOMAXPROCS: "2",
+  },
 });
 
 if (result.status !== 0) {
+  console.error("[build] vite build falhou — restaurando dist/ anterior (se houver).");
+  if (existsSync(distDir)) rmSync(distDir, { recursive: true, force: true });
+  if (hadPreviousDist) renameSync(distBackupDir, distDir);
   process.exit(result.status ?? 1);
 }
+
+if (hadPreviousDist) rmSync(distBackupDir, { recursive: true, force: true });
 
 const clientDir = join(ROOT, "dist", "client");
 if (existsSync(clientDir)) {
