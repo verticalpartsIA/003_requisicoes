@@ -44,6 +44,12 @@ jobs:
               sed -i 's/^PassengerStartupFile .*/PassengerStartupFile boot.cjs/' $D/public_html/.htaccess
             fi
             grep Passenger $D/public_html/.htaccess || true
+            echo "=== diagnostico: hbuilds/current aponta pra onde? ==="
+            readlink -f "$D/hbuilds/current" 2>&1 || echo "hbuilds/current: nao existe ou nao e symlink"
+            ls -la "$D/hbuilds" 2>&1 || echo "hbuilds: diretorio nao existe"
+            echo "-- comparando dist/server/index.js: nodejs/ vs hbuilds/current/nodejs/ --"
+            stat -c '%Y %n' "$D/nodejs/dist/server/index.js" 2>&1 || echo "nodejs/dist/server/index.js: nao existe"
+            stat -c '%Y %n' "$D/hbuilds/current/nodejs/dist/server/index.js" 2>&1 || echo "hbuilds/current/nodejs/dist/server/index.js: nao existe"
             echo "=== reinicia app ==="
             mkdir -p tmp && touch tmp/restart.txt
             sleep 5
