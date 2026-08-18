@@ -26,24 +26,32 @@ export interface BuildInput {
 }
 
 export function buildHtml(d: BuildInput): string {
-  const f  = (v: unknown) => (v != null && v !== "" ? String(v) : "—");
+  const f = (v: unknown) => (v != null && v !== "" ? String(v) : "—");
   const fP = (v: unknown) =>
     v != null ? `R$&nbsp;${Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—";
   const fDate = (v: unknown) => {
     if (!v) return "—";
-    try { return new Date(String(v)).toLocaleString("pt-BR"); } catch { return f(v); }
+    try {
+      return new Date(String(v)).toLocaleString("pt-BR");
+    } catch {
+      return f(v);
+    }
   };
   const now = new Date().toLocaleString("pt-BR");
 
   const MODULE_LABEL: Record<string, string> = {
-    M1: "Produto", M2: "Viagem", M3: "Serviço",
-    M4: "Manutenção", M5: "Frete", M6: "Locação",
+    M1: "Produto",
+    M2: "Viagem",
+    M3: "Serviço",
+    M4: "Manutenção",
+    M5: "Frete",
+    M6: "Locação",
   };
   const { req } = d;
-  const module     = f(req.module);
-  const modLabel   = MODULE_LABEL[module] ?? module;
-  const ticket     = f(req.ticket_number);
-  const status     = f(req.status);
+  const module = f(req.module);
+  const modLabel = MODULE_LABEL[module] ?? module;
+  const ticket = f(req.ticket_number);
+  const status = f(req.status);
   const moduleData = (req.module_data ?? {}) as Record<string, unknown>;
 
   // ─ Helpers HTML ────────────────────────────────────────────────────────────
@@ -76,7 +84,10 @@ export function buildHtml(d: BuildInput): string {
   // busca — a tabela de itens (mdSection abaixo) já mostra os dados por
   // linha, então repetir o texto corrido aqui só reintroduz a "parede de
   // texto" que esta correção existe para eliminar.
-  const m1MultiItems = module === "M1" && Array.isArray(moduleData.items) && (moduleData.items as unknown[]).length > 0;
+  const m1MultiItems =
+    module === "M1" &&
+    Array.isArray(moduleData.items) &&
+    (moduleData.items as unknown[]).length > 0;
 
   const v1 = `
   ${sectionHead("V1", "#dbeafe", "#1d4ed8", "Requisição")}
@@ -98,21 +109,26 @@ export function buildHtml(d: BuildInput): string {
     if (items.length > 0) {
       // Multi-itens: uma linha por produto — antes isso virava um parágrafo
       // concatenado com "|" (req.description), ilegível para 20+ itens.
-      if (moduleData.delivery_location) mdContent += fld("Local de Entrega", f(moduleData.delivery_location));
-      const rows = items.map((it, i) => {
-        const details = [
-          it.technical_specs ? `Espec.: ${f(it.technical_specs)}` : "",
-          it.brand_preference ? `Marca: ${f(it.brand_preference)}` : "",
-          it.model_reference ? `Ref.: ${f(it.model_reference)}` : "",
-        ].filter(Boolean).join(" · ");
-        return `<tr style="background:${i % 2 === 0 ? "#ffffff" : "#f9fafb"};">
+      if (moduleData.delivery_location)
+        mdContent += fld("Local de Entrega", f(moduleData.delivery_location));
+      const rows = items
+        .map((it, i) => {
+          const details = [
+            it.technical_specs ? `Espec.: ${f(it.technical_specs)}` : "",
+            it.brand_preference ? `Marca: ${f(it.brand_preference)}` : "",
+            it.model_reference ? `Ref.: ${f(it.model_reference)}` : "",
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          return `<tr style="background:${i % 2 === 0 ? "#ffffff" : "#f9fafb"};">
           <td style="padding:5px 6px;border:1px solid #e5e7eb;font-size:10px;color:#6b7280;text-align:center;">${i + 1}</td>
           <td style="padding:5px 6px;border:1px solid #e5e7eb;font-size:10px;font-family:monospace;">${f(it.product_code)}</td>
           <td style="padding:5px 6px;border:1px solid #e5e7eb;font-size:10.5px;font-weight:600;">${f(it.product_name)}</td>
           <td style="padding:5px 6px;border:1px solid #e5e7eb;font-size:10px;color:#374151;">${f(it.description)}${details ? `<br/><span style="color:#9ca3af;">${details}</span>` : ""}</td>
           <td style="padding:5px 6px;border:1px solid #e5e7eb;font-size:10.5px;font-weight:600;text-align:right;">${f(it.quantity)}</td>
         </tr>`;
-      }).join("");
+        })
+        .join("");
       const th = (label: string, align: "left" | "right" = "left") =>
         `<th style="padding:5px 6px;border:1px solid #d1d5db;font-size:9px;font-weight:700;color:#374151;text-transform:uppercase;text-align:${align};">${label}</th>`;
       mdContent += `<table style="width:100%;border-collapse:collapse;margin-top:6px;">
@@ -130,10 +146,17 @@ export function buildHtml(d: BuildInput): string {
         if (url) mdContent += imgBox(url, `Foto — ${f(it.product_name)}`);
       });
     } else {
-      mdContent += grid2(fld("Quantidade", f(moduleData.quantity)), fld("Local de Entrega", f(moduleData.delivery_location)));
-      if (moduleData.technical_specs) mdContent += fld("Especificações Técnicas", f(moduleData.technical_specs));
+      mdContent += grid2(
+        fld("Quantidade", f(moduleData.quantity)),
+        fld("Local de Entrega", f(moduleData.delivery_location)),
+      );
+      if (moduleData.technical_specs)
+        mdContent += fld("Especificações Técnicas", f(moduleData.technical_specs));
       if (moduleData.brand_preference || moduleData.model_reference)
-        mdContent += grid2(fld("Marca Preferida", f(moduleData.brand_preference)), fld("Ref. Modelo", f(moduleData.model_reference)));
+        mdContent += grid2(
+          fld("Marca Preferida", f(moduleData.brand_preference)),
+          fld("Ref. Modelo", f(moduleData.model_reference)),
+        );
       if (moduleData.online_purchase_suggestion)
         mdContent += fld("Sugestão de Compra Online", f(moduleData.online_purchase_suggestion));
       const rl = moduleData.reference_links as string[] | undefined;
@@ -141,33 +164,133 @@ export function buildHtml(d: BuildInput): string {
       if (d.imageUrls.photo) mdContent += imgBox(d.imageUrls.photo, "Foto do Produto");
     }
   } else if (module === "M2") {
+    // Espelha as opções de src/routes/trips.tsx (TRANSPORT_MODES, PURPOSES,
+    // FLIGHT_CLASSES, FLIGHT_TIME_PREFERENCES, FLIGHT_BAGGAGE_OPTIONS) — o
+    // module_data grava só o value, o rótulo é só para exibição.
+    const TRANSPORT_MODE_LABELS: Record<string, string> = {
+      AVIAO: "Avião",
+      CARRO_EMPRESA: "Carro da Empresa",
+      CARRO_PROPRIO: "Carro Próprio",
+      ONIBUS: "Ônibus",
+    };
+    const PURPOSE_LABELS: Record<string, string> = {
+      OBRA: "Obra",
+      CURSO: "Curso",
+      VISITA_CLIENTE: "Visita a Cliente",
+      WORKSHOP: "Workshop",
+      EVENTO_FEIRA: "Evento/Feira",
+    };
+    const FLIGHT_CLASS_LABELS: Record<string, string> = {
+      ECONOMICA: "Econômica",
+      EXECUTIVA: "Executiva",
+    };
+    const FLIGHT_TIME_LABELS: Record<string, string> = {
+      QUALQUER: "Qualquer horário",
+      MANHA: "Manhã (até 12h)",
+      TARDE: "Tarde (12h às 18h)",
+      NOITE: "Noite (após 18h)",
+    };
+    const FLIGHT_BAGGAGE_LABELS: Record<string, string> = {
+      EQUIPAMENTO: "Equipamento",
+      BAGAGEM_EXTRA: "Bagagem extra",
+    };
+    const labelJoin = (values: unknown, map: Record<string, string>) => {
+      const arr = Array.isArray(values) ? values : [];
+      return arr.length ? arr.map((v) => map[String(v)] ?? String(v)).join(", ") : "—";
+    };
+    const fDateOnly = (v: unknown) => {
+      if (!v) return "—";
+      try {
+        const [y, m, day] = String(v).slice(0, 10).split("-").map(Number);
+        return new Date(y, m - 1, day).toLocaleDateString("pt-BR");
+      } catch {
+        return f(v);
+      }
+    };
+
+    mdContent += grid2(
+      fld("Origem", f(moduleData.origin_city)),
+      fld("Destino", f(moduleData.destination_city)),
+    );
+    mdContent += grid2(
+      fld("Ida", fDateOnly(moduleData.departure_date)),
+      fld("Volta", fDateOnly(moduleData.return_date)),
+    );
+    mdContent += grid2(
+      fld(
+        "Duração",
+        moduleData.duration_days != null ? `${f(moduleData.duration_days)} dia(s)` : "—",
+      ),
+      fld(
+        "Transporte",
+        TRANSPORT_MODE_LABELS[String(moduleData.transport_mode)] ?? f(moduleData.transport_mode),
+      ),
+    );
+    if (moduleData.transport_mode === "AVIAO") {
+      mdContent += grid2(
+        fld(
+          "Classe do Voo",
+          FLIGHT_CLASS_LABELS[String(moduleData.flight_class)] ?? f(moduleData.flight_class),
+        ),
+        fld(
+          "Preferência de Horário",
+          FLIGHT_TIME_LABELS[String(moduleData.flight_time_preference)] ??
+            f(moduleData.flight_time_preference),
+        ),
+      );
+      mdContent += fld("Bagagem", labelJoin(moduleData.flight_baggage, FLIGHT_BAGGAGE_LABELS));
+    }
+    mdContent += grid2(
+      fld(
+        "Hospedagem",
+        moduleData.needs_hotel ? `Sim — ${f(moduleData.hotel_nights)} noite(s)` : "Não",
+      ),
+      fld(
+        "Carro no destino",
+        moduleData.needs_local_car ? `Sim — ${f(moduleData.car_rental_days)} dia(s)` : "Não",
+      ),
+    );
+    mdContent += fld("Motivo da Viagem", labelJoin(moduleData.purposes, PURPOSE_LABELS));
+    if (moduleData.project_number)
+      mdContent += fld("Número do Projeto/Obra", f(moduleData.project_number));
+    if (moduleData.short_notice_justification)
+      mdContent += fld("Justificativa de Prazo Curto", f(moduleData.short_notice_justification));
+
     const travelers = (moduleData.travelers ?? []) as Array<Record<string, unknown>>;
     if (travelers.length) {
-      mdContent += `<div style="font-size:10px;font-weight:600;color:#374151;margin-bottom:6px;">Viajantes (${travelers.length})</div>`;
+      mdContent += `<div style="font-size:10px;font-weight:600;color:#374151;margin:10px 0 6px;">Viajantes (${travelers.length})</div>`;
       travelers.forEach((t, i) => {
         mdContent += card(`
-          <div style="font-size:12px;font-weight:600;">${i + 1}. ${f(t.fullName)}</div>
-          ${grid2(fld("Tipo de documento", f(t.docType)), fld("Número", f(t.docNumber)))}
+          <div style="font-size:12px;font-weight:600;">${i + 1}. ${f(t.full_name)}</div>
+          ${grid2(fld("Tipo de documento", f(t.doc_type)), fld("Número", f(t.doc_number)))}
           ${d.imageUrls[`traveler_${i}`] ? imgBox(d.imageUrls[`traveler_${i}`], "Documento") : ""}
         `);
       });
-    } else {
+    } else if (moduleData.traveler_name) {
       mdContent += fld("Viajante", f(moduleData.traveler_name));
     }
-    if (moduleData.destination)  mdContent += fld("Destino", f(moduleData.destination));
-    if (moduleData.trip_reason)  mdContent += fld("Motivo", f(moduleData.trip_reason));
   } else if (module === "M5") {
-    if (moduleData.cargo_description)     mdContent += fld("Descrição da Carga", f(moduleData.cargo_description));
-    if (moduleData.unloading_location)    mdContent += fld("Local de Descarregamento", f(moduleData.unloading_location));
-    if (moduleData.cargo_photo_description) mdContent += fld("Obs. da Foto", f(moduleData.cargo_photo_description));
+    if (moduleData.cargo_description)
+      mdContent += fld("Descrição da Carga", f(moduleData.cargo_description));
+    if (moduleData.unloading_location)
+      mdContent += fld("Local de Descarregamento", f(moduleData.unloading_location));
+    if (moduleData.cargo_photo_description)
+      mdContent += fld("Obs. da Foto", f(moduleData.cargo_photo_description));
     if (d.imageUrls.cargo) mdContent += imgBox(d.imageUrls.cargo, "Foto da Carga");
   } else if (module === "M6") {
     const cats = (moduleData.categories ?? []) as string[];
     if (cats.length) mdContent += fld("Categorias", cats.join(" + "));
     if (moduleData.specs) mdContent += fld("Especificações", f(moduleData.specs));
-    mdContent += grid2(fld("Quantidade", f(moduleData.quantity)), fld("Dias de Locação", f(moduleData.rental_days)));
-    mdContent += grid2(fld("Início", f(moduleData.start_date)), fld("Término", f(moduleData.end_date)));
-    if (moduleData.delivery_location) mdContent += fld("Local de Entrega", f(moduleData.delivery_location));
+    mdContent += grid2(
+      fld("Quantidade", f(moduleData.quantity)),
+      fld("Dias de Locação", f(moduleData.rental_days)),
+    );
+    mdContent += grid2(
+      fld("Início", f(moduleData.start_date)),
+      fld("Término", f(moduleData.end_date)),
+    );
+    if (moduleData.delivery_location)
+      mdContent += fld("Local de Entrega", f(moduleData.delivery_location));
   } else {
     // Generic: render every non-empty field
     Object.entries(moduleData).forEach(([k, v]) => {
@@ -184,24 +307,36 @@ export function buildHtml(d: BuildInput): string {
 
   let v2Section = "";
   if (d.suppliers.length > 0) {
-    const received = d.suppliers.filter(s => s.proposal_received).length;
-    const cards = d.suppliers.map(s => {
-      const win = !!s.is_winner;
-      return card(`
+    const received = d.suppliers.filter((s) => s.proposal_received).length;
+    const cards = d.suppliers
+      .map((s) => {
+        const win = !!s.is_winner;
+        return card(
+          `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
           <strong style="font-size:12px;">${f(s.supplier_name)}</strong>
-          ${win
-            ? pill("✓ Vencedor", "#d1fae5", "#065f46")
-            : pill("Não selecionado", "#f3f4f6", "#6b7280")}
+          ${
+            win
+              ? pill("✓ Vencedor", "#d1fae5", "#065f46")
+              : pill("Não selecionado", "#f3f4f6", "#6b7280")
+          }
         </div>
         ${grid2(fld("Preço", fP(s.price)), fld("Prazo", f(s.deadline)))}
         ${grid2(fld("Proposta", s.proposal_received ? "Recebida" : "Pendente"), fld("Observações", f(s.notes)))}
-      `, win ? "#86efac" : "#e5e7eb", win ? "#f0fdf4" : "#fafafa");
-    }).join("");
+      `,
+          win ? "#86efac" : "#e5e7eb",
+          win ? "#f0fdf4" : "#fafafa",
+        );
+      })
+      .join("");
 
     v2Section = `
-    ${sectionHead("V2", "#fef3c7", "#b45309",
-      `Cotação — ${d.suppliers.length} fornecedor${d.suppliers.length !== 1 ? "es" : ""} · ${received} proposta${received !== 1 ? "s" : ""} recebida${received !== 1 ? "s" : ""}`)}
+    ${sectionHead(
+      "V2",
+      "#fef3c7",
+      "#b45309",
+      `Cotação — ${d.suppliers.length} fornecedor${d.suppliers.length !== 1 ? "es" : ""} · ${received} proposta${received !== 1 ? "s" : ""} recebida${received !== 1 ? "s" : ""}`,
+    )}
     ${cards}
     ${d.winCriteria ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px;font-size:11px;color:#b45309;margin-top:4px;"><strong>Critério de seleção:</strong> ${d.winCriteria}</div>` : ""}`;
   }
@@ -210,15 +345,18 @@ export function buildHtml(d: BuildInput): string {
 
   let v3Section = "";
   if (d.approval) {
-    const a   = d.approval;
+    const a = d.approval;
     const dec = f(a.decision);
     const [decLabel, decBg, decFg, borderC] =
-      dec === "approved" ? ["Aprovado",  "#d1fae5", "#065f46", "#86efac"] :
-      dec === "rejected" ? ["Rejeitado", "#fee2e2", "#991b1b", "#fca5a5"] :
-                           ["Pendente",  "#f3f4f6", "#6b7280", "#e5e7eb"];
+      dec === "approved"
+        ? ["Aprovado", "#d1fae5", "#065f46", "#86efac"]
+        : dec === "rejected"
+          ? ["Rejeitado", "#fee2e2", "#991b1b", "#fca5a5"]
+          : ["Pendente", "#f3f4f6", "#6b7280", "#e5e7eb"];
     v3Section = `
     ${sectionHead("V3", "#ede9fe", "#7c3aed", "Aprovação")}
-    ${card(`
+    ${card(
+      `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <strong>Nível ${f(a.approval_level)}</strong>
         ${pill(decLabel, decBg, decFg)}
@@ -226,7 +364,9 @@ export function buildHtml(d: BuildInput): string {
       ${grid2(fld("Valor Total", fP(a.total_value)), fld("Data da Decisão", fDate(a.decided_at)))}
       ${a.approver_name ? fld("Aprovador", f(a.approver_name)) : ""}
       ${a.justification ? fld("Justificativa", f(a.justification)) : ""}
-    `, borderC)}`;
+    `,
+      borderC,
+    )}`;
   }
 
   // ─ V4 Compra ───────────────────────────────────────────────────────────────
@@ -251,34 +391,39 @@ export function buildHtml(d: BuildInput): string {
     const r = d.receipt;
     const cond = f(r.condition);
     const [condLabel, condBg, condFg, condBorder] =
-      cond === "ok"       ? ["OK — Conforme", "#d1fae5", "#065f46", "#86efac"] :
-      cond === "damaged"  ? ["Danificado",    "#fee2e2", "#991b1b", "#fca5a5"] :
-                            ["Divergente",    "#fef3c7", "#b45309", "#fde68a"];
+      cond === "ok"
+        ? ["OK — Conforme", "#d1fae5", "#065f46", "#86efac"]
+        : cond === "damaged"
+          ? ["Danificado", "#fee2e2", "#991b1b", "#fca5a5"]
+          : ["Divergente", "#fef3c7", "#b45309", "#fde68a"];
     v5Section = `
     ${sectionHead("V5", "#d1fae5", "#065f46", "Recebimento")}
-    ${card(`
+    ${card(
+      `
       <div style="margin-bottom:8px;">${pill(condLabel, condBg, condFg)}</div>
       ${grid2(fld("Entregador", f(r.deliverer_name)), fld("Data de Recebimento", fDate(r.received_at)))}
       ${r.notes ? fld("Observações", f(r.notes)) : ""}
-    `, condBorder)}`;
+    `,
+      condBorder,
+    )}`;
   }
 
   // ─ Histórico de Ações ──────────────────────────────────────────────────────
 
   let histSection = "";
   if (d.auditLogs.length > 0) {
-    const entries = d.auditLogs.map(l => {
-      const det = (l.details ?? {}) as Record<string, unknown>;
-      const detKeys = Object.keys(det).filter(k => k !== "stage" && k !== "vpclick_task_id");
-      const detText = detKeys.length
-        ? detKeys.map(k => `${k}: ${f(det[k])}`).join(" · ")
-        : "";
-      return `<div style="padding:5px 0 5px 12px;border-left:2px solid #FFB800;margin-bottom:5px;">
+    const entries = d.auditLogs
+      .map((l) => {
+        const det = (l.details ?? {}) as Record<string, unknown>;
+        const detKeys = Object.keys(det).filter((k) => k !== "stage" && k !== "vpclick_task_id");
+        const detText = detKeys.length ? detKeys.map((k) => `${k}: ${f(det[k])}`).join(" · ") : "";
+        return `<div style="padding:5px 0 5px 12px;border-left:2px solid #FFB800;margin-bottom:5px;">
         <div style="font-size:11px;font-weight:600;">${actionLabel(f(l.action), det)}</div>
         <div style="font-size:10px;color:#9ca3af;margin-top:1px;">${f(l.actor_name)} · ${fDate(l.created_at)}</div>
         ${detText ? `<div style="font-size:10px;color:#6b7280;margin-top:2px;">${detText}</div>` : ""}
       </div>`;
-    }).join("");
+      })
+      .join("");
     histSection = `
     <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin:20px 0 8px;padding-bottom:5px;border-bottom:1px solid #e5e7eb;">
       Histórico de Ações (${d.auditLogs.length})
