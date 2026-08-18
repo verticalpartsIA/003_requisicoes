@@ -10,6 +10,7 @@ import {
   Eye,
   Unlock,
   Paperclip,
+  FileDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -26,7 +27,14 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import { friendlySupabaseError } from "@/lib/supabase-error";
 import { useAuth } from "@/features/auth/auth-context";
@@ -49,6 +57,8 @@ import {
   type ComandoAnexo,
   type ComandoAuditoria,
 } from "@/features/comando/types";
+import { humanizeKey, humanizeValue } from "@/features/comando/format";
+import { generateComandoPdf } from "@/features/comando/pdf";
 
 export const Route = createFileRoute("/comando")({
   head: () => ({
@@ -62,7 +72,13 @@ export const Route = createFileRoute("/comando")({
 
 type StatusFilter = ComandoPedidoStatus | "todos";
 
-const STATUS_FILTERS: StatusFilter[] = ["todos", "rascunho", "enviado", "visualizado", "respondido"];
+const STATUS_FILTERS: StatusFilter[] = [
+  "todos",
+  "rascunho",
+  "enviado",
+  "visualizado",
+  "respondido",
+];
 
 function statusBadgeClass(status: ComandoPedidoStatus): string {
   switch (status) {
@@ -86,36 +102,6 @@ function fmtDateTime(value: string | null | undefined): string {
   } catch {
     return "—";
   }
-}
-
-function humanizeKey(key: string): string {
-  return key
-    .replace(/_/g, " ")
-    .split(" ")
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-function humanizeValue(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === "boolean") return value ? "Sim" : "Não";
-  if (typeof value === "string") return value.trim() === "" ? null : value;
-  if (typeof value === "number") return String(value);
-  if (Array.isArray(value)) {
-    const items = value.map((v) => humanizeValue(v)).filter((v): v is string => !!v);
-    return items.length ? items.join(", ") : null;
-  }
-  if (typeof value === "object") {
-    // Objeto aninhado inesperado — mostra como JSON compacto.
-    try {
-      const json = JSON.stringify(value);
-      return json === "{}" ? null : json;
-    } catch {
-      return null;
-    }
-  }
-  return String(value);
 }
 
 const AUDITORIA_LABELS: Record<ComandoAuditoria["evento"], string> = {
@@ -186,6 +172,7 @@ function ComandoPage() {
   const [detailAnexos, setDetailAnexos] = useState<ComandoAnexo[]>([]);
   const [detailAuditoria, setDetailAuditoria] = useState<ComandoAuditoria[]>([]);
   const [detailActionLoading, setDetailActionLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const loadPedidos = async () => {
     setLoading(true);
@@ -340,6 +327,24 @@ function ComandoPage() {
     }
   };
 
+  const handleDownloadPdf = async () => {
+    if (!detailPedido) return;
+    setPdfLoading(true);
+    try {
+      const blob = await generateComandoPdf(detailPedido, detailAnexos);
+      const blobUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = `${detailPedido.numero_documento}-quadro-comando.pdf`;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao gerar o PDF.");
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   const handleOpenPublicForm = () => {
     if (!detailPedido) return;
     const url = comandoPublicUrl(detailPedido.token);
@@ -394,7 +399,9 @@ function ComandoPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-foreground">M7 — Quadro de Comando</h1>
-            <p className="text-sm text-muted-foreground">Engenharia de pedidos de quadro de comando de elevador</p>
+            <p className="text-sm text-muted-foreground">
+              Engenharia de pedidos de quadro de comando de elevador
+            </p>
           </div>
         </div>
         <Button
@@ -491,8 +498,12 @@ function ComandoPage() {
                         {COMANDO_STATUS_LABELS[p.status]}
                       </span>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{fmtDateTime(p.created_at)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{fmtDateTime(p.expires_at)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {fmtDateTime(p.created_at)}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {fmtDateTime(p.expires_at)}
+                    </TableCell>
                   </TableRow>
                 ))}
             </TableBody>
@@ -506,7 +517,8 @@ function ComandoPage() {
           <DialogHeader>
             <DialogTitle>Novo Pedido — Quadro de Comando</DialogTitle>
             <DialogDescription>
-              Informe os dados básicos do cliente. O link do formulário técnico será enviado a seguir.
+              Informe os dados básicos do cliente. O link do formulário técnico será enviado a
+              seguir.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -530,11 +542,20 @@ function ComandoPage() {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">E-mail do Cliente</label>
-              <Input type="email" value={clienteEmail} onChange={(e) => setClienteEmail(e.target.value)} placeholder="cliente@empresa.com" />
+              <Input
+                type="email"
+                value={clienteEmail}
+                onChange={(e) => setClienteEmail(e.target.value)}
+                placeholder="cliente@empresa.com"
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Número do Projeto</label>
-              <Input value={projetoNumero} onChange={(e) => setProjetoNumero(e.target.value)} placeholder="Opcional" />
+              <Input
+                value={projetoNumero}
+                onChange={(e) => setProjetoNumero(e.target.value)}
+                placeholder="Opcional"
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Observações internas</label>
@@ -560,7 +581,9 @@ function ComandoPage() {
       {/* Dialog: Detalhe do Pedido */}
       <Dialog open={!!detailId} onOpenChange={closeDetail}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          {detailLoading && <p className="text-sm text-muted-foreground py-8 text-center">Carregando...</p>}
+          {detailLoading && (
+            <p className="text-sm text-muted-foreground py-8 text-center">Carregando...</p>
+          )}
           {!detailLoading && detailPedido && (
             <>
               <DialogHeader>
@@ -606,7 +629,9 @@ function ComandoPage() {
                 {detailPedido.observacoes_internas && (
                   <div className="col-span-2">
                     <p className="text-xs text-muted-foreground">Observações internas</p>
-                    <p className="font-medium whitespace-pre-wrap">{detailPedido.observacoes_internas}</p>
+                    <p className="font-medium whitespace-pre-wrap">
+                      {detailPedido.observacoes_internas}
+                    </p>
                   </div>
                 )}
               </div>
@@ -622,20 +647,33 @@ function ComandoPage() {
                   disabled={detailActionLoading}
                 >
                   <MessageCircle className="h-4 w-4 mr-1" />
-                  {detailPedido.status === "rascunho" ? "Enviar via WhatsApp" : "Reenviar via WhatsApp"}
+                  {detailPedido.status === "rascunho"
+                    ? "Enviar via WhatsApp"
+                    : "Reenviar via WhatsApp"}
                 </Button>
                 <Button variant="outline" size="sm" onClick={handleOpenPublicForm}>
                   <Eye className="h-4 w-4 mr-1" /> Abrir formulário público
                 </Button>
                 {detailPedido.status === "respondido" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void handleReabrir()}
-                    disabled={detailActionLoading}
-                  >
-                    <Unlock className="h-4 w-4 mr-1" /> Reabrir para o cliente
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleDownloadPdf()}
+                      disabled={pdfLoading}
+                    >
+                      <FileDown className="h-4 w-4 mr-1" />
+                      {pdfLoading ? "Gerando PDF..." : "Baixar PDF"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleReabrir()}
+                      disabled={detailActionLoading}
+                    >
+                      <Unlock className="h-4 w-4 mr-1" /> Reabrir para o cliente
+                    </Button>
+                  </>
                 )}
               </div>
 
@@ -693,13 +731,18 @@ function ComandoPage() {
                 <div className="border-t pt-3 space-y-3">
                   <h3 className="text-sm font-semibold">Anexos</h3>
                   {Array.from(anexosBySecao.entries()).map(([secaoKey, anexos]) => {
-                    const secaoTitle = COMANDO_SECOES.find((s) => s.key === secaoKey)?.title ?? "Outros";
+                    const secaoTitle =
+                      COMANDO_SECOES.find((s) => s.key === secaoKey)?.title ?? "Outros";
                     return (
                       <div key={secaoKey} className="space-y-1">
                         <p className="text-xs font-medium text-muted-foreground">{secaoTitle}</p>
                         <div className="flex flex-col gap-1">
                           {anexos.map((a) => (
-                            <StorageDownloadLink key={a.id} path={a.file_path} fileName={a.file_name} />
+                            <StorageDownloadLink
+                              key={a.id}
+                              path={a.file_path}
+                              fileName={a.file_name}
+                            />
                           ))}
                         </div>
                       </div>
