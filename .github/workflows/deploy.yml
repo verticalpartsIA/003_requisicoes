@@ -50,11 +50,15 @@ jobs:
             echo "-- comparando dist/server/index.js: nodejs/ vs hbuilds/current/nodejs/ --"
             stat -c '%Y %n' "$D/nodejs/dist/server/index.js" 2>&1 || echo "nodejs/dist/server/index.js: nao existe"
             stat -c '%Y %n' "$D/hbuilds/current/nodejs/dist/server/index.js" 2>&1 || echo "hbuilds/current/nodejs/dist/server/index.js: nao existe"
+            echo "-- console.log de hbuilds/current/nodejs (app real que o Passenger serve) --"
+            tail -c 3000 "$D/hbuilds/current/nodejs/console.log" 2>&1 || echo "sem console.log em hbuilds/current/nodejs"
+            echo "-- arquivos de log recentes em hbuilds/logs --"
+            find "$D/hbuilds/logs" -type f -mmin -30 2>&1 | head -20
             echo "=== reinicia app ==="
             mkdir -p tmp && touch tmp/restart.txt
             sleep 5
             echo "=== testa site pelo dominio ==="
-            curl -s -o /dev/null -w "GET /login => %{http_code}\n" --max-time 40 https://vprequisicoes.vpsistema.com/login || true
+            curl -s -w "\nGET /login => %{http_code}\n" --max-time 40 https://vprequisicoes.vpsistema.com/login 2>&1 | tail -c 2000 || true
             echo "=== console.log do app ==="
             tail -c 1500 console.log 2>/dev/null || echo "(vazio)"
             echo "=== FIM ==="
