@@ -40,7 +40,13 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import {
   Dialog,
   DialogContent,
@@ -193,7 +199,9 @@ function UsersTab() {
       setUsers(usersData);
       setDeptManagers(managersData);
       const deptMap: Record<string, string> = {};
-      usersData.forEach((u) => { deptMap[u.id] = u.department ?? ""; });
+      usersData.forEach((u) => {
+        deptMap[u.id] = u.department ?? "";
+      });
       setEditingDept(deptMap);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao carregar usuários.");
@@ -202,7 +210,9 @@ function UsersTab() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   // Todas as ações abaixo atualizam o estado local, sem recarregar a lista —
   // a página não "pula" para o topo ao salvar.
@@ -283,9 +293,13 @@ function UsersTab() {
       if (!ok) return;
     }
     try {
-      await setUserActive({ data: { adminId: currentUser.id, targetUserId: target.id, active: activating } });
+      await setUserActive({
+        data: { adminId: currentUser.id, targetUserId: target.id, active: activating },
+      });
       patchUser(target.id, { active: activating });
-      toast.success(activating ? "Usuário reativado." : "Usuário inativado. O login foi bloqueado.");
+      toast.success(
+        activating ? "Usuário reativado." : "Usuário inativado. O login foi bloqueado.",
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao alterar status do usuário.");
     }
@@ -313,7 +327,10 @@ function UsersTab() {
 
   const handleAddGestor = async (userId: string) => {
     const dept = (newGestorDept[userId] ?? "").trim();
-    if (!dept) { toast.error("Informe o nome do departamento."); return; }
+    if (!dept) {
+      toast.error("Informe o nome do departamento.");
+      return;
+    }
     try {
       await addDeptManagerClient(dept, userId);
       setNewGestorDept((prev) => ({ ...prev, [userId]: "" }));
@@ -403,11 +420,16 @@ function UsersTab() {
           <SelectContent>
             <SelectItem value="Todos">Todos os papéis</SelectItem>
             {ALL_ROLES.map((r) => (
-              <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
+              <SelectItem key={r} value={r}>
+                {ROLE_LABELS[r]}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+        <Select
+          value={statusFilter}
+          onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}
+        >
           <SelectTrigger className="w-full sm:w-[140px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -575,7 +597,10 @@ function UsersTab() {
       </Sheet>
 
       {/* Confirmação forte de exclusão — ação destrutiva e irreversível */}
-      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && !deleting && setDeleteTarget(null)}>
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && !deleting && setDeleteTarget(null)}
+      >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
@@ -606,7 +631,11 @@ function UsersTab() {
               onClick={() => void confirmDelete()}
               disabled={deleting}
             >
-              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {deleting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
               Excluir Definitivamente
             </Button>
           </div>
@@ -663,7 +692,9 @@ function UserRow({
   const isSelf = user.id === currentUserId;
 
   return (
-    <tr className={`border-b border-border last:border-0 hover:bg-accent/50 transition-colors ${user.active ? "" : "opacity-60"}`}>
+    <tr
+      className={`border-b border-border last:border-0 hover:bg-accent/50 transition-colors ${user.active ? "" : "opacity-60"}`}
+    >
       <td className="p-3">
         <p className="font-medium text-foreground truncate max-w-[180px]">
           {user.full_name || "Sem nome"}
@@ -672,7 +703,9 @@ function UserRow({
       </td>
       <td className="p-3">
         <div className="flex flex-wrap gap-1 max-w-[200px]">
-          {user.roles.length === 0 && <span className="text-xs text-muted-foreground italic">—</span>}
+          {user.roles.length === 0 && (
+            <span className="text-xs text-muted-foreground italic">—</span>
+          )}
           {user.roles.map(({ role }) => (
             <span
               key={role}
@@ -687,7 +720,9 @@ function UserRow({
         {aprovadorEntry ? (
           aprovadorEntry.approval_tier ? (
             <span className="text-foreground">{TIER_LABELS[aprovadorEntry.approval_tier]}</span>
-          ) : missingBadge
+          ) : (
+            missingBadge
+          )
         ) : (
           <span className="text-muted-foreground">—</span>
         )}
@@ -697,7 +732,9 @@ function UserRow({
           <span className="text-foreground truncate max-w-[160px] block">
             {approver.full_name ?? approver.email}
           </span>
-        ) : missingBadge}
+        ) : (
+          missingBadge
+        )}
       </td>
       {showDepartment && <td className="p-3 text-xs">{user.department || missingBadge}</td>}
       <td className="p-3">
@@ -720,19 +757,25 @@ function UserRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onOpenDetail}>
-              Ver detalhes
-            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onOpenDetail}>Ver detalhes</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               disabled={isSelf}
               onClick={onToggleActive}
-              className={user.active ? "text-amber-700 focus:text-amber-700" : "text-emerald-700 focus:text-emerald-700"}
+              className={
+                user.active
+                  ? "text-amber-700 focus:text-amber-700"
+                  : "text-emerald-700 focus:text-emerald-700"
+              }
             >
               {user.active ? (
-                <><Ban className="h-3.5 w-3.5 mr-2" /> Inativar</>
+                <>
+                  <Ban className="h-3.5 w-3.5 mr-2" /> Inativar
+                </>
               ) : (
-                <><RotateCcw className="h-3.5 w-3.5 mr-2" /> Reativar</>
+                <>
+                  <RotateCcw className="h-3.5 w-3.5 mr-2" /> Reativar
+                </>
               )}
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -787,6 +830,15 @@ function UserDetailContent({
   const currentDept = editingDept[user.id] ?? user.department ?? "";
   const savedDept = user.department ?? "";
   const deptChanged = currentDept !== savedDept;
+  // Departamento é texto livre tanto aqui (profiles.department) quanto na
+  // designação de gestor (department_managers.department) — sem essa lista
+  // como guia, pequenas variações de digitação ("Logistica" vs "Logistica/
+  // Almoxarifado") quebram silenciosamente o casamento entre as duas tabelas
+  // e um gestor deixa de ver (e poder decidir) requisições do seu próprio
+  // departamento, inclusive as que ele mesmo cria.
+  const knownDepartments = Array.from(
+    new Set(users.map((u) => u.department).filter((d): d is string => !!d?.trim())),
+  ).sort((a, b) => a.localeCompare(b, "pt-BR"));
   const approver = users.find((u) => u.id === user.approver_id);
   const approverCandidates = users.filter((u) => u.id !== user.id && u.active);
 
@@ -856,7 +908,9 @@ function UserDetailContent({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent transition-colors">
-                  {aprovadorEntry.approval_tier ? TIER_LABELS[aprovadorEntry.approval_tier] : "Não definida"}
+                  {aprovadorEntry.approval_tier
+                    ? TIER_LABELS[aprovadorEntry.approval_tier]
+                    : "Não definida"}
                   <ChevronDown className="h-3 w-3 opacity-50" />
                 </button>
               </DropdownMenuTrigger>
@@ -892,7 +946,10 @@ function UserDetailContent({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
               {approverCandidates.map((candidate) => (
-                <DropdownMenuItem key={candidate.id} onClick={() => void onSetApprover(user.id, candidate.id)}>
+                <DropdownMenuItem
+                  key={candidate.id}
+                  onClick={() => void onSetApprover(user.id, candidate.id)}
+                >
                   {candidate.full_name ?? candidate.email}
                 </DropdownMenuItem>
               ))}
@@ -915,9 +972,15 @@ function UserDetailContent({
           <Input
             className="h-8 text-xs flex-1"
             placeholder="Ex: Engenharia"
+            list={`departments-datalist-${user.id}`}
             value={currentDept}
             onChange={(e) => setEditingDept((prev) => ({ ...prev, [user.id]: e.target.value }))}
           />
+          <datalist id={`departments-datalist-${user.id}`}>
+            {knownDepartments.map((d) => (
+              <option key={d} value={d} />
+            ))}
+          </datalist>
           {deptChanged && (
             <Button
               size="sm"
@@ -955,15 +1018,23 @@ function UserDetailContent({
               </span>
             ))}
             <div className="flex items-center gap-1.5 mt-1">
-              <Input
-                className="h-8 text-xs flex-1"
-                placeholder="Departamento..."
+              <Select
                 value={newGestorDept[user.id] ?? ""}
-                onChange={(e) => setNewGestorDept((prev) => ({ ...prev, [user.id]: e.target.value }))}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void onAddGestor(user.id);
-                }}
-              />
+                onValueChange={(v) => setNewGestorDept((prev) => ({ ...prev, [user.id]: v }))}
+              >
+                <SelectTrigger className="h-8 text-xs flex-1">
+                  <SelectValue placeholder="Selecione o departamento..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {knownDepartments
+                    .filter((d) => !userManagers.some((dm) => dm.department === d))
+                    .map((d) => (
+                      <SelectItem key={d} value={d}>
+                        {d}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
               <Button
                 size="sm"
                 variant="outline"
@@ -982,7 +1053,10 @@ function UserDetailContent({
 }
 
 function TiersTab() {
-  const [thresholds, setThresholds] = useState<TierThresholds>({ tier1_max: 1500, tier2_max: 3500 });
+  const [thresholds, setThresholds] = useState<TierThresholds>({
+    tier1_max: 1500,
+    tier2_max: 3500,
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -1024,17 +1098,15 @@ function TiersTab() {
         <CardHeader>
           <CardTitle className="text-base">Limites das alçadas de aprovação</CardTitle>
           <CardDescription>
-            Defina os valores máximos para cada alçada. Requisições acima do limite da 2ª alçada
-            são automaticamente encaminhadas para a 3ª.
+            Defina os valores máximos para cada alçada. Requisições acima do limite da 2ª alçada são
+            automaticamente encaminhadas para a 3ª.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="grid grid-cols-3 gap-3 text-center text-xs">
             <div className="rounded-lg border bg-blue-50 p-3">
               <p className="font-semibold text-blue-700">1ª Alçada</p>
-              <p className="text-muted-foreground mt-0.5">
-                Até {formatBRL(thresholds.tier1_max)}
-              </p>
+              <p className="text-muted-foreground mt-0.5">Até {formatBRL(thresholds.tier1_max)}</p>
             </div>
             <div className="rounded-lg border bg-green-50 p-3">
               <p className="font-semibold text-green-700">2ª Alçada</p>
