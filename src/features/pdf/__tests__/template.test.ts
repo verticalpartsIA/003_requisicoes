@@ -41,7 +41,13 @@ describe("buildHtml — M2 (Viagem)", () => {
         project_number: "OBRA-42",
         short_notice_justification: null,
         travelers: [
-          { id: "1", full_name: "Alessandre Franciscretto", doc_type: "CNH", doc_number: "123456", doc_photo_path: null },
+          {
+            id: "1",
+            full_name: "Alessandre Franciscretto",
+            doc_type: "CNH",
+            doc_number: "123456",
+            doc_photo_path: null,
+          },
         ],
       }),
     );
@@ -55,9 +61,10 @@ describe("buildHtml — M2 (Viagem)", () => {
     expect(html).toContain("Econômica");
     expect(html).toContain("Manhã (até 12h)");
     expect(html).toContain("Equipamento");
-    expect(html).toContain("Sim — 3 noite(s)");
+    expect(html).toContain("3 noite(s)");
     expect(html).toContain("Obra");
     expect(html).toContain("OBRA-42");
+    expect(html).toContain("Viagem — Dados da Viagem");
     // Regressão do bug reportado: o bloco usava t.fullName/t.docType (camelCase)
     // em vez de t.full_name/t.doc_type (o formato real salvo pelo formulário),
     // então o nome e o tipo de documento do viajante saíam sempre em branco.
@@ -67,6 +74,6 @@ describe("buildHtml — M2 (Viagem)", () => {
 
   it("nao quebra quando os campos da viagem estao ausentes", () => {
     const html = buildHtml(baseInput({ travelers: [] }));
-    expect(html).toContain("Viagem — Dados do Formulário");
+    expect(html).toContain("Viagem — Dados da Viagem");
   });
 });

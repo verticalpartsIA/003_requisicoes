@@ -213,8 +213,8 @@ export function buildHtml(d: BuildInput): string {
       fld("Destino", f(moduleData.destination_city)),
     );
     mdContent += grid2(
-      fld("Ida", fDateOnly(moduleData.departure_date)),
-      fld("Volta", fDateOnly(moduleData.return_date)),
+      fld("Data de Partida", fDateOnly(moduleData.departure_date)),
+      fld("Data de Retorno", fDateOnly(moduleData.return_date)),
     );
     mdContent += grid2(
       fld(
@@ -222,37 +222,34 @@ export function buildHtml(d: BuildInput): string {
         moduleData.duration_days != null ? `${f(moduleData.duration_days)} dia(s)` : "—",
       ),
       fld(
-        "Transporte",
+        "Meio de Transporte",
         TRANSPORT_MODE_LABELS[String(moduleData.transport_mode)] ?? f(moduleData.transport_mode),
       ),
     );
     if (moduleData.transport_mode === "AVIAO") {
       mdContent += grid2(
         fld(
-          "Classe do Voo",
+          "Classe",
           FLIGHT_CLASS_LABELS[String(moduleData.flight_class)] ?? f(moduleData.flight_class),
         ),
         fld(
-          "Preferência de Horário",
+          "Horário Preferido",
           FLIGHT_TIME_LABELS[String(moduleData.flight_time_preference)] ??
             f(moduleData.flight_time_preference),
         ),
       );
       mdContent += fld("Bagagem", labelJoin(moduleData.flight_baggage, FLIGHT_BAGGAGE_LABELS));
     }
-    mdContent += grid2(
-      fld(
-        "Hospedagem",
-        moduleData.needs_hotel ? `Sim — ${f(moduleData.hotel_nights)} noite(s)` : "Não",
-      ),
-      fld(
-        "Carro no destino",
-        moduleData.needs_local_car ? `Sim — ${f(moduleData.car_rental_days)} dia(s)` : "Não",
-      ),
-    );
-    mdContent += fld("Motivo da Viagem", labelJoin(moduleData.purposes, PURPOSE_LABELS));
-    if (moduleData.project_number)
-      mdContent += fld("Número do Projeto/Obra", f(moduleData.project_number));
+    if (moduleData.needs_hotel || moduleData.needs_local_car) {
+      mdContent += grid2(
+        moduleData.needs_hotel ? fld("Hotel", `${f(moduleData.hotel_nights)} noite(s)`) : "",
+        moduleData.needs_local_car
+          ? fld("Carro no Destino", `${f(moduleData.car_rental_days)} dia(s)`)
+          : "",
+      );
+    }
+    mdContent += fld("Objetivo", labelJoin(moduleData.purposes, PURPOSE_LABELS));
+    if (moduleData.project_number) mdContent += fld("Número da Obra", f(moduleData.project_number));
     if (moduleData.short_notice_justification)
       mdContent += fld("Justificativa de Prazo Curto", f(moduleData.short_notice_justification));
 
@@ -299,8 +296,10 @@ export function buildHtml(d: BuildInput): string {
     });
   }
 
+  const MODULE_SECTION_SUFFIX: Record<string, string> = { M2: "Dados da Viagem" };
+  const mdSectionSuffix = MODULE_SECTION_SUFFIX[module] ?? "Dados do Formulário";
   const mdSection = mdContent
-    ? `${sectionHead("M", "#f3f4f6", "#374151", `${modLabel} — Dados do Formulário`)}${card(mdContent)}`
+    ? `${sectionHead("M", "#f3f4f6", "#374151", `${modLabel} — ${mdSectionSuffix}`)}${card(mdContent)}`
     : "";
 
   // ─ V2 Cotação (todos os fornecedores) ─────────────────────────────────────
