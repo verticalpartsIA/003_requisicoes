@@ -62,6 +62,8 @@ Repo `verticalpartsIA/003_requisicoes`:
 
 ## Onde tudo está
 
-- Branches: trabalho feito em `claude/project-discussion-u9suca`, sempre mesclado (fast-forward) em `main` pra disparar o deploy.
+- Branches: o trabalho original (issues #19-#23) foi feito em `claude/project-discussion-u9suca`, mesclado em `main`. Isso é histórico — a convenção atual é uma branch nova por tarefa (`fix/...`, `feat/...`, `diag/...`), ver `CHANGELOG.md`.
 - Site em produção: `https://vprequisicoes.vpsistema.com/estoque-omie`
 - Supabase do app: projeto `vprequisicao` (`vvgcrhtmzvssfdazkkzk.supabase.co`)
+- Relatório detalhado da issue #35 (regras de arredondamento/lote/cobertura): `docs/reports/2026-07-10-sugestao-compra-omie.md`
+- Sobre o pipeline de deploy em si (não é só `npm run build` — ver o incidente de 18/08 com o painel Node.js da Hostinger): `docs/reports/2026-08-18-deploy-outage-esbuild-envvars.md` e `DEPLOY_HOSTINGER.md`.
