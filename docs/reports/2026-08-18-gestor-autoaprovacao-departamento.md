@@ -1,6 +1,6 @@
 # Relatório — Gestor não conseguia decidir (nem ver) as próprias requisições
 
-**Status:** ✅ Resolvido para o caso relatado — dois achados relacionados pendentes de confirmação
+**Status:** ✅ Resolvido, incluindo os dois achados relacionados
 **PR:** #84
 
 ## Problema relatado
@@ -46,11 +46,30 @@ de ninguém.
 Uma consulta mais ampla mostrou que essa não é uma inconsistência isolada:
 `profiles.department` tem valores como "Logistica", "Logistica/
 Almoxarifado", "Producao" — cada um digitado uma vez por alguém, sem
-padronização. Duas entradas de `department_managers` também não batem com
+padronização. Duas entradas de `department_managers` também não batiam com
 **nenhum** valor real de `profiles.department`: `"Expedição"` → Gelson
-Simões e `"VerticalParts"` → Diego Maeno. Essas eu não corrigi — não sei
-a que departamento real elas deveriam corresponder, fica pendente de
-confirmação com o usuário.
+Simões e `"VerticalParts"` → Diego Maeno.
+
+Perguntei ao usuário o que essas duas deveriam representar. Resposta:
+Diego é o CEO ("dono da empresa") e Gelson é o criador das soluções —
+ambos deveriam ter poderes máximos. Consultando o banco, **os dois já
+tinham todos os 5 papéis** (`admin, solicitante, comprador, aprovador,
+almoxarife`) — ou seja, o pedido já estava atendido pelo mecanismo
+correto (`user_roles`, que dá bypass total em `assertCanDecide` e na
+maioria das políticas de RLS). As duas linhas de `department_managers`
+eram tentativas (uma de 23/06, outra criada momentos antes desta
+conversa, às 19:12 de hoje) de usar a ferramenta errada para o objetivo
+— department_managers só concede autoridade sobre um departamento
+específico na etapa GESTOR, não é o mecanismo de "poder total" do
+sistema.
+
+**Limpeza feita:**
+- Removidas as duas linhas órfãs de `department_managers` (não faziam
+  nada de qualquer forma, e ficavam confusas na tela de Admin).
+- Removido `profiles.approver_id` do Gelson (apontava para outra
+  colaboradora — não bloqueava nada, já que ele é admin, mas não fazia
+  sentido o criador do sistema ter alguém designado como aprovador
+  pessoal dele).
 
 ## Correção
 

@@ -10,6 +10,7 @@ de PRs com diff completo, ver a aba *Pull requests* do repositório.
 
 ## 2026-08-18
 
+- chore(dados): limpa designações de gestor órfãs (Expedição, VerticalParts) e o approver_id do Gelson — Diego e Gelson já tinham todos os papéis (poder máximo já concedido via `user_roles`) — [relatório](docs/reports/2026-08-18-gestor-autoaprovacao-departamento.md)
 - fix(admin): gestor não via/decidia as próprias requisições por incompatibilidade de texto entre `department_managers` e `profiles.department` — não havia bloqueio proposital de autoaprovação — [relatório](docs/reports/2026-08-18-gestor-autoaprovacao-departamento.md) (#84)
 - fix(pdf): rótulos da seção "Viagem — Dados da Viagem" alinhados aos usados na tela de `trips.tsx` (#82)
 - fix(pdf): PDF da requisição M2 (Viagem) omitia quase todos os dados da viagem — [relatório](docs/reports/2026-08-18-pdf-m2-viagem-dados-completos.md) (#81)
