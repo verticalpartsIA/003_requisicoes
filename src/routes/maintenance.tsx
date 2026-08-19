@@ -1,7 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import {
-  HardHat, Plus, ChevronRight, ChevronLeft, Cog, AlertTriangle, ClipboardList,
+  HardHat,
+  Plus,
+  ChevronRight,
+  ChevronLeft,
+  Cog,
+  AlertTriangle,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Stepper } from "@/components/ui/stepper";
@@ -11,10 +17,19 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { TicketsTable, type TicketRow } from "@/components/tickets-table";
 import { supabaseBrowser } from "@/lib/supabase-browser";
@@ -44,7 +59,7 @@ const STEPS = [
   { label: "Prioridade", icon: ClipboardList },
 ];
 
-const DIALOG_KEY = 'vpreq_m4';
+const DIALOG_KEY = "vpreq_m4";
 
 export const Route = createFileRoute("/maintenance")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -67,7 +82,9 @@ function MaintenancePage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [stepAttempted, setStepAttempted] = useState(false);
-  useEffect(() => { setStepAttempted(false); }, [step]);
+  useEffect(() => {
+    setStepAttempted(false);
+  }, [step]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editReqId, setEditReqId] = useState<string | null>(null);
@@ -92,14 +109,16 @@ function MaintenancePage() {
       .eq("module", "M4")
       .order("created_at", { ascending: false })
       .limit(20);
-    setTickets((data ?? []).map((item) => ({
-      id: item.ticket_number,
-      title: item.title,
-      requester: item.requester_name,
-      urgency: item.urgency as TicketRow["urgency"],
-      status: item.status as TicketRow["status"],
-      date: new Date(item.created_at).toLocaleDateString("pt-BR"),
-    })));
+    setTickets(
+      (data ?? []).map((item) => ({
+        id: item.ticket_number,
+        title: item.title,
+        requester: item.requester_name,
+        urgency: item.urgency as TicketRow["urgency"],
+        status: item.status as TicketRow["status"],
+        date: new Date(item.created_at).toLocaleDateString("pt-BR"),
+      })),
+    );
   };
 
   useEffect(() => {
@@ -109,19 +128,23 @@ function MaintenancePage() {
       const s = JSON.parse(saved) as Record<string, unknown>;
       if (!s.open) return;
       setDialogOpen(true);
-      if (typeof s.step === 'number') setStep(s.step);
-      if (typeof s.equipmentName === 'string') setEquipmentName(s.equipmentName);
-      if (typeof s.equipmentTag === 'string') setEquipmentTag(s.equipmentTag);
-      if (typeof s.sector === 'string') setSector(s.sector);
-      if (typeof s.maintenanceType === 'string') setMaintenanceType(s.maintenanceType);
-      if (typeof s.problemDescription === 'string') setProblemDescription(s.problemDescription);
-      if (typeof s.machineDown === 'boolean') setMachineDown(s.machineDown);
-      if (typeof s.urgencyLevel === 'string') setUrgencyLevel(s.urgencyLevel);
-      if (typeof s.justification === 'string') setJustification(s.justification);
-    } catch { /* ignore */ }
+      if (typeof s.step === "number") setStep(s.step);
+      if (typeof s.equipmentName === "string") setEquipmentName(s.equipmentName);
+      if (typeof s.equipmentTag === "string") setEquipmentTag(s.equipmentTag);
+      if (typeof s.sector === "string") setSector(s.sector);
+      if (typeof s.maintenanceType === "string") setMaintenanceType(s.maintenanceType);
+      if (typeof s.problemDescription === "string") setProblemDescription(s.problemDescription);
+      if (typeof s.machineDown === "boolean") setMachineDown(s.machineDown);
+      if (typeof s.urgencyLevel === "string") setUrgencyLevel(s.urgencyLevel);
+      if (typeof s.justification === "string") setJustification(s.justification);
+    } catch {
+      /* ignore */
+    }
   }, []);
 
-  useEffect(() => { void loadTickets(); }, [session]);
+  useEffect(() => {
+    void loadTickets();
+  }, [session]);
 
   useEffect(() => {
     if (!editTicketNumber || !session) return;
@@ -131,7 +154,10 @@ function MaintenancePage() {
         .select("id,description,justification,urgency,module_data,edition")
         .eq("ticket_number", editTicketNumber)
         .maybeSingle();
-      if (!data) { toast.error("Requisição não encontrada."); return; }
+      if (!data) {
+        toast.error("Requisição não encontrada.");
+        return;
+      }
       const md = (data.module_data ?? {}) as Record<string, unknown>;
       setEditMode(true);
       setEditReqId(data.id as string);
@@ -152,13 +178,36 @@ function MaintenancePage() {
   useEffect(() => {
     if (!dialogOpen) return;
     try {
-      sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
-        open: true, step, equipmentName, equipmentTag, sector,
-        maintenanceType, problemDescription, machineDown, urgencyLevel, justification,
-      }));
-    } catch { /* ignore */ }
-  }, [dialogOpen, step, equipmentName, equipmentTag, sector,
-      maintenanceType, problemDescription, machineDown, urgencyLevel, justification]);
+      sessionStorage.setItem(
+        DIALOG_KEY,
+        JSON.stringify({
+          open: true,
+          step,
+          equipmentName,
+          equipmentTag,
+          sector,
+          maintenanceType,
+          problemDescription,
+          machineDown,
+          urgencyLevel,
+          justification,
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [
+    dialogOpen,
+    step,
+    equipmentName,
+    equipmentTag,
+    sector,
+    maintenanceType,
+    problemDescription,
+    machineDown,
+    urgencyLevel,
+    justification,
+  ]);
 
   // Quando máquina está parada, eleva urgência automaticamente
   const handleMachineDown = (checked: boolean) => {
@@ -169,34 +218,62 @@ function MaintenancePage() {
   const resetForm = () => {
     sessionStorage.removeItem(DIALOG_KEY);
     setStep(0);
-    setEquipmentName(""); setEquipmentTag(""); setSector("");
-    setMaintenanceType(""); setProblemDescription(""); setMachineDown(false);
-    setUrgencyLevel(""); setJustification("");
+    setEquipmentName("");
+    setEquipmentTag("");
+    setSector("");
+    setMaintenanceType("");
+    setProblemDescription("");
+    setMachineDown(false);
+    setUrgencyLevel("");
+    setJustification("");
   };
 
   const validateStep = (): boolean => {
     if (step === 0) {
-      if (equipmentName.length < 3) { toast.error("Nome do equipamento deve ter pelo menos 3 caracteres."); return false; }
-      if (!sector.trim()) { toast.error("Informe o setor."); return false; }
+      if (equipmentName.length < 3) {
+        toast.error("Nome do equipamento deve ter pelo menos 3 caracteres.");
+        return false;
+      }
+      if (!sector.trim()) {
+        toast.error("Informe o setor.");
+        return false;
+      }
     }
     if (step === 1) {
-      if (!maintenanceType) { toast.error("Selecione o tipo de manutenção."); return false; }
-      if (problemDescription.length < 20) { toast.error("Descrição do problema deve ter pelo menos 20 caracteres."); return false; }
+      if (!maintenanceType) {
+        toast.error("Selecione o tipo de manutenção.");
+        return false;
+      }
+      if (problemDescription.length < 20) {
+        toast.error("Descrição do problema deve ter pelo menos 20 caracteres.");
+        return false;
+      }
     }
     if (step === 2) {
-      if (!urgencyLevel) { toast.error("Selecione o nível de urgência."); return false; }
-      if (justification.length < 10) { toast.error("Justificativa deve ter pelo menos 10 caracteres."); return false; }
+      if (!urgencyLevel) {
+        toast.error("Selecione o nível de urgência.");
+        return false;
+      }
+      if (justification.length < 10) {
+        toast.error("Justificativa deve ter pelo menos 10 caracteres.");
+        return false;
+      }
     }
     return true;
   };
 
   const handleNext = () => {
-    if (validateStep()) { toast.dismiss(); setStep((s) => Math.min(s + 1, STEPS.length - 1)); }
-    else setStepAttempted(true);
+    if (validateStep()) {
+      toast.dismiss();
+      setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    } else setStepAttempted(true);
   };
 
   const handleSubmit = async () => {
-    if (!validateStep()) { setStepAttempted(true); return; }
+    if (!validateStep()) {
+      setStepAttempted(true);
+      return;
+    }
     setIsSubmitting(true);
     const computedTitle = `${equipmentName}${equipmentTag ? ` (${equipmentTag})` : ""} — ${maintenanceType}`;
     const moduleData = {
@@ -220,29 +297,31 @@ function MaintenancePage() {
         });
         const ordinals = ["1ª", "2ª", "3ª", "4ª", "5ª", "6ª", "7ª", "8ª", "9ª", "10ª"];
         const ordinal = ordinals[(result.edition ?? 2) - 1] ?? `${result.edition}ª`;
-        toast.success(`Requisição editada — ${ordinal} Edição`, { description: editTicketNumber ?? "" });
+        toast.success(`Requisição editada — ${ordinal} Edição`, {
+          description: editTicketNumber ?? "",
+        });
         setDialogOpen(false);
         resetForm();
-        setEditMode(false); setEditReqId(null); setEditEdition(1);
+        setEditMode(false);
+        setEditReqId(null);
+        setEditEdition(1);
         void router.navigate({ to: "/logs" });
         return;
       }
-      const { error } = await supabaseBrowser
-        .from("requisitions")
-        .insert({
-          module: "M4",
-          title: computedTitle,
-          description: problemDescription,
-          justification,
-          urgency: urgencyLevel,
-          desired_date: null,
-          requester_name: profile?.full_name || user?.email || "Usuário VP",
-          requester_email: profile?.email || user?.email || "",
-          requester_department: profile?.department || "Não informado",
-          requester_profile_id: user?.id ?? null,
-          module_data: moduleData,
-          status: "GESTOR",
-        });
+      const { error } = await supabaseBrowser.from("requisitions").insert({
+        module: "M4",
+        title: computedTitle,
+        description: problemDescription,
+        justification,
+        urgency: urgencyLevel,
+        desired_date: null,
+        requester_name: profile?.full_name || user?.email || "Usuário VP",
+        requester_email: profile?.email || user?.email || "",
+        requester_department: profile?.department || "Não informado",
+        requester_profile_id: user?.id ?? null,
+        module_data: moduleData,
+        status: "GESTOR",
+      });
 
       if (error) throw error;
 
@@ -256,7 +335,21 @@ function MaintenancePage() {
         .limit(1)
         .maybeSingle();
 
-      toast.success("Requisição de manutenção criada!", { description: created?.ticket_number ?? "" });
+      if (created?.id) {
+        const { error: auditError } = await supabaseBrowser.from("audit_logs").insert({
+          requisition_id: created.id,
+          ticket_number: created.ticket_number,
+          action: "REQUISITION_CREATED",
+          new_status: "GESTOR",
+          actor_name: profile?.full_name || user?.email || "Usuário VP",
+          details: { module: "M4", urgency: urgencyLevel },
+        });
+        if (auditError) console.warn("[audit_logs]", auditError.message);
+      }
+
+      toast.success("Requisição de manutenção criada!", {
+        description: created?.ticket_number ?? "",
+      });
       void notifyVpClickClient({
         stage: "V1",
         requisitionId: created?.id ?? "",
@@ -287,8 +380,15 @@ function MaintenancePage() {
             <p className="text-sm text-muted-foreground">Corretiva, preventiva e preditiva</p>
           </div>
         </div>
-        <Button variant="vp" onClick={() => { resetForm(); setDialogOpen(true); }}>
-          <Plus className="h-4 w-4 mr-2" />Nova Requisição
+        <Button
+          variant="vp"
+          onClick={() => {
+            resetForm();
+            setDialogOpen(true);
+          }}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Nova Requisição
         </Button>
       </div>
 
@@ -298,14 +398,23 @@ function MaintenancePage() {
         emptyMessage="Nenhuma requisição de manutenção ainda."
       />
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); }}>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          if (open) setDialogOpen(true);
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button]:hidden">
           <DialogHeader>
             <DialogTitle>
-              {editMode ? `Editando ${editTicketNumber} — ${editEdition + 1}ª Edição` : "Nova Requisição de Manutenção"}
+              {editMode
+                ? `Editando ${editTicketNumber} — ${editEdition + 1}ª Edição`
+                : "Nova Requisição de Manutenção"}
             </DialogTitle>
             <DialogDescription>
-              {editMode ? "Altere os campos desejados e salve para registrar nova versão." : "Informe o equipamento e o problema."}
+              {editMode
+                ? "Altere os campos desejados e salve para registrar nova versão."
+                : "Informe o equipamento e o problema."}
             </DialogDescription>
           </DialogHeader>
 
@@ -326,7 +435,11 @@ function MaintenancePage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">TAG / Patrimônio</label>
-                  <Input placeholder="Ex.: PH-001" value={equipmentTag} onChange={(e) => setEquipmentTag(e.target.value)} />
+                  <Input
+                    placeholder="Ex.: PH-001"
+                    value={equipmentTag}
+                    onChange={(e) => setEquipmentTag(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Setor / Linha *</label>
@@ -346,9 +459,17 @@ function MaintenancePage() {
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Tipo de Manutenção *</label>
                 <Select value={maintenanceType} onValueChange={setMaintenanceType}>
-                  <SelectTrigger className={cn(stepAttempted && !maintenanceType && FIELD_ERROR_CLASS)}><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectTrigger
+                    className={cn(stepAttempted && !maintenanceType && FIELD_ERROR_CLASS)}
+                  >
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
                   <SelectContent>
-                    {MAINTENANCE_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                    {MAINTENANCE_TYPES.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>
+                        {t.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -360,14 +481,21 @@ function MaintenancePage() {
                   onChange={(e) => setProblemDescription(e.target.value)}
                   rows={4}
                   maxLength={1000}
-                  className={cn(stepAttempted && problemDescription.length < 20 && FIELD_ERROR_CLASS)}
+                  className={cn(
+                    stepAttempted && problemDescription.length < 20 && FIELD_ERROR_CLASS,
+                  )}
                 />
-                <p className="text-[11px] text-muted-foreground">{problemDescription.length}/1000</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {problemDescription.length}/1000
+                </p>
               </div>
               <div className="flex items-center justify-between rounded-lg border-2 border-red-200 bg-red-50 p-4">
                 <div>
                   <label className="text-sm font-medium text-red-700">Máquina Parada?</label>
-                  <p className="text-xs text-red-600">Marque se o equipamento está inoperante — urgência será elevada para URGENTE automaticamente</p>
+                  <p className="text-xs text-red-600">
+                    Marque se o equipamento está inoperante — urgência será elevada para URGENTE
+                    automaticamente
+                  </p>
                 </div>
                 <Switch checked={machineDown} onCheckedChange={handleMachineDown} />
               </div>
@@ -381,20 +509,35 @@ function MaintenancePage() {
                 {machineDown && (
                   <div className="rounded-lg border-2 border-red-300 bg-red-50 p-3 mb-2">
                     <p className="text-xs font-medium text-red-700 flex items-center gap-1">
-                      <AlertTriangle className="h-3.5 w-3.5" /> Máquina parada — urgência elevada automaticamente para URGENTE
+                      <AlertTriangle className="h-3.5 w-3.5" /> Máquina parada — urgência elevada
+                      automaticamente para URGENTE
                     </p>
                   </div>
                 )}
-                <div className={cn("grid grid-cols-4 gap-2 rounded-lg", stepAttempted && !urgencyLevel && "ring-2 ring-destructive ring-offset-2")}>
+                <div
+                  className={cn(
+                    "grid grid-cols-4 gap-2 rounded-lg",
+                    stepAttempted && !urgencyLevel && "ring-2 ring-destructive ring-offset-2",
+                  )}
+                >
                   {URGENCY.map((u) => (
-                    <button key={u.value} type="button" onClick={() => setUrgencyLevel(u.value)}
-                      className={cn("rounded-lg border-2 p-2.5 text-xs font-medium text-center transition-all",
+                    <button
+                      key={u.value}
+                      type="button"
+                      onClick={() => setUrgencyLevel(u.value)}
+                      className={cn(
+                        "rounded-lg border-2 p-2.5 text-xs font-medium text-center transition-all",
                         urgencyLevel === u.value
-                          ? u.value === "LOW" ? "border-green-500 bg-green-50 text-green-700"
-                          : u.value === "MEDIUM" ? "border-yellow-500 bg-yellow-50 text-yellow-700"
-                          : u.value === "HIGH" ? "border-orange-500 bg-orange-50 text-orange-700"
-                          : "border-red-500 bg-red-50 text-red-700"
-                          : "border-border hover:border-muted-foreground/40")}>
+                          ? u.value === "LOW"
+                            ? "border-green-500 bg-green-50 text-green-700"
+                            : u.value === "MEDIUM"
+                              ? "border-yellow-500 bg-yellow-50 text-yellow-700"
+                              : u.value === "HIGH"
+                                ? "border-orange-500 bg-orange-50 text-orange-700"
+                                : "border-red-500 bg-red-50 text-red-700"
+                          : "border-border hover:border-muted-foreground/40",
+                      )}
+                    >
                       {u.label}
                     </button>
                   ))}
@@ -416,14 +559,26 @@ function MaintenancePage() {
           )}
 
           <DialogFooter className="flex justify-between sm:justify-between">
-            <Button variant="outline" onClick={() => step === 0 ? setDialogOpen(false) : setStep(step - 1)}>
-              {step === 0 ? "Cancelar" : <><ChevronLeft className="h-4 w-4 mr-1" /> Voltar</>}
+            <Button
+              variant="outline"
+              onClick={() => (step === 0 ? setDialogOpen(false) : setStep(step - 1))}
+            >
+              {step === 0 ? (
+                "Cancelar"
+              ) : (
+                <>
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Voltar
+                </>
+              )}
             </Button>
             {step < STEPS.length - 1 ? (
-              <Button variant="vp" onClick={handleNext}>Próximo <ChevronRight className="h-4 w-4 ml-1" /></Button>
+              <Button variant="vp" onClick={handleNext}>
+                Próximo <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
             ) : (
               <Button variant="vp" onClick={() => void handleSubmit()} disabled={isSubmitting}>
-                <HardHat className="h-4 w-4 mr-1" /> {isSubmitting ? "Enviando..." : "Enviar Requisição"}
+                <HardHat className="h-4 w-4 mr-1" />{" "}
+                {isSubmitting ? "Enviando..." : "Enviar Requisição"}
               </Button>
             )}
           </DialogFooter>

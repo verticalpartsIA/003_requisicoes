@@ -152,10 +152,33 @@ export const getLogsOverview = createServerFn({ method: "POST" })
     ]);
 
     const reqs = reqsResp.data ?? [];
-    const logs = logsResp.data ?? [];
     const profiles = profilesResp.data ?? [];
     const roles = rolesResp.data ?? [];
     const quotations = quotsResp.data ?? [];
+
+    // M2-M6 criam a requisição direto do client (dois inserts HTTP separados,
+    // sem transação) — se o segundo (audit_logs) falhar ou nunca rodar, a
+    // requisição fica com zero eventos e desaparece de Movimentações, que só
+    // lista tickets a partir de audit_logs. Sintetiza o evento de criação a
+    // partir da própria requisição sempre que faltar, pra nunca sumir um
+    // ticket da lista por falta do primeiro evento da timeline.
+    const reqIdsWithLogs = new Set(
+      (logsResp.data ?? []).filter((l) => l.requisition_id).map((l) => l.requisition_id),
+    );
+    const syntheticCreationLogs: AuditLog[] = reqs
+      .filter((r) => !reqIdsWithLogs.has(r.id))
+      .map((r) => ({
+        id: `synthetic-created-${r.id}`,
+        requisition_id: r.id,
+        ticket_number: r.ticket_number,
+        action: "REQUISITION_CREATED",
+        actor_name: r.requester_name,
+        details: null,
+        created_at: r.created_at,
+      }));
+    const logs = [...(logsResp.data ?? []), ...syntheticCreationLogs].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
 
     const reqById = new Map(reqs.map((r) => [r.id, r]));
     const reqByTicket = new Map(reqs.map((r) => [r.ticket_number, r]));

@@ -1,8 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
 import {
-  Truck, Plus, ChevronRight, ChevronLeft, MapPin, Package, CalendarIcon, ClipboardList, ShieldCheck,
-  ImageIcon, Upload,
+  Truck,
+  Plus,
+  ChevronRight,
+  ChevronLeft,
+  MapPin,
+  Package,
+  CalendarIcon,
+  ClipboardList,
+  ShieldCheck,
+  ImageIcon,
+  Upload,
 } from "lucide-react";
 import { format, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -17,10 +26,19 @@ import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { TicketsTable, type TicketRow } from "@/components/tickets-table";
 import { supabaseBrowser } from "@/lib/supabase-browser";
@@ -58,7 +76,7 @@ function formatBRL(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-const DIALOG_KEY = 'vpreq_m5';
+const DIALOG_KEY = "vpreq_m5";
 
 export const Route = createFileRoute("/freight")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -81,7 +99,9 @@ function FreightPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [stepAttempted, setStepAttempted] = useState(false);
-  useEffect(() => { setStepAttempted(false); }, [step]);
+  useEffect(() => {
+    setStepAttempted(false);
+  }, [step]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editReqId, setEditReqId] = useState<string | null>(null);
@@ -147,14 +167,16 @@ function FreightPage() {
       .eq("module", "M5")
       .order("created_at", { ascending: false })
       .limit(20);
-    setTickets((data ?? []).map((item) => ({
-      id: item.ticket_number,
-      title: item.title,
-      requester: item.requester_name,
-      urgency: item.urgency as TicketRow["urgency"],
-      status: item.status as TicketRow["status"],
-      date: new Date(item.created_at).toLocaleDateString("pt-BR"),
-    })));
+    setTickets(
+      (data ?? []).map((item) => ({
+        id: item.ticket_number,
+        title: item.title,
+        requester: item.requester_name,
+        urgency: item.urgency as TicketRow["urgency"],
+        status: item.status as TicketRow["status"],
+        date: new Date(item.created_at).toLocaleDateString("pt-BR"),
+      })),
+    );
   };
 
   useEffect(() => {
@@ -164,32 +186,39 @@ function FreightPage() {
       const s = JSON.parse(saved) as Record<string, unknown>;
       if (!s.open) return;
       setDialogOpen(true);
-      if (typeof s.step === 'number') setStep(s.step);
-      if (typeof s.originAddress === 'string') setOriginAddress(s.originAddress);
-      if (typeof s.destinationAddress === 'string') setDestinationAddress(s.destinationAddress);
-      if (typeof s.vehicleType === 'string') setVehicleType(s.vehicleType);
-      if (typeof s.isForConstruction === 'string') setIsForConstruction(s.isForConstruction as "" | "sim" | "nao");
-      if (typeof s.projectNumber === 'string') setProjectNumber(s.projectNumber);
-      if (typeof s.cargoDescription === 'string') setCargoDescription(s.cargoDescription);
-      if (typeof s.receiverName === 'string') setReceiverName(s.receiverName);
-      if (typeof s.receiverPhone === 'string') setReceiverPhone(s.receiverPhone);
-      if (typeof s.unloadingLocation === 'string') setUnloadingLocation(s.unloadingLocation);
-      if (typeof s.cargoPhotoDescription === 'string') setCargoPhotoDescription(s.cargoPhotoDescription);
-      if (typeof s.weight === 'string') setWeight(s.weight);
-      if (typeof s.dimensions === 'string') setDimensions(s.dimensions);
-      if (typeof s.fragile === 'boolean') setFragile(s.fragile);
-      if (typeof s.declaredValue === 'string') setDeclaredValue(s.declaredValue);
-      if (typeof s.pickupDate === 'string') setPickupDate(new Date(s.pickupDate));
-      if (typeof s.unloadingDate === 'string') setUnloadingDate(new Date(s.unloadingDate));
-      if (typeof s.allowedSchedule === 'string') setAllowedSchedule(s.allowedSchedule);
-      if (typeof s.accessRestriction === 'string') setAccessRestriction(s.accessRestriction);
-      if (typeof s.needsCityHallAuthorization === 'boolean') setNeedsCityHallAuthorization(s.needsCityHallAuthorization);
-      if (typeof s.urgencyLevel === 'string') setUrgencyLevel(s.urgencyLevel);
-      if (typeof s.justification === 'string') setJustification(s.justification);
-    } catch { /* ignore */ }
+      if (typeof s.step === "number") setStep(s.step);
+      if (typeof s.originAddress === "string") setOriginAddress(s.originAddress);
+      if (typeof s.destinationAddress === "string") setDestinationAddress(s.destinationAddress);
+      if (typeof s.vehicleType === "string") setVehicleType(s.vehicleType);
+      if (typeof s.isForConstruction === "string")
+        setIsForConstruction(s.isForConstruction as "" | "sim" | "nao");
+      if (typeof s.projectNumber === "string") setProjectNumber(s.projectNumber);
+      if (typeof s.cargoDescription === "string") setCargoDescription(s.cargoDescription);
+      if (typeof s.receiverName === "string") setReceiverName(s.receiverName);
+      if (typeof s.receiverPhone === "string") setReceiverPhone(s.receiverPhone);
+      if (typeof s.unloadingLocation === "string") setUnloadingLocation(s.unloadingLocation);
+      if (typeof s.cargoPhotoDescription === "string")
+        setCargoPhotoDescription(s.cargoPhotoDescription);
+      if (typeof s.weight === "string") setWeight(s.weight);
+      if (typeof s.dimensions === "string") setDimensions(s.dimensions);
+      if (typeof s.fragile === "boolean") setFragile(s.fragile);
+      if (typeof s.declaredValue === "string") setDeclaredValue(s.declaredValue);
+      if (typeof s.pickupDate === "string") setPickupDate(new Date(s.pickupDate));
+      if (typeof s.unloadingDate === "string") setUnloadingDate(new Date(s.unloadingDate));
+      if (typeof s.allowedSchedule === "string") setAllowedSchedule(s.allowedSchedule);
+      if (typeof s.accessRestriction === "string") setAccessRestriction(s.accessRestriction);
+      if (typeof s.needsCityHallAuthorization === "boolean")
+        setNeedsCityHallAuthorization(s.needsCityHallAuthorization);
+      if (typeof s.urgencyLevel === "string") setUrgencyLevel(s.urgencyLevel);
+      if (typeof s.justification === "string") setJustification(s.justification);
+    } catch {
+      /* ignore */
+    }
   }, []);
 
-  useEffect(() => { void loadTickets(); }, [session]);
+  useEffect(() => {
+    void loadTickets();
+  }, [session]);
 
   useEffect(() => {
     if (!editTicketNumber || !session) return;
@@ -199,7 +228,10 @@ function FreightPage() {
         .select("id,description,justification,urgency,desired_date,module_data,edition")
         .eq("ticket_number", editTicketNumber)
         .maybeSingle();
-      if (!data) { toast.error("Requisição não encontrada."); return; }
+      if (!data) {
+        toast.error("Requisição não encontrada.");
+        return;
+      }
       const md = (data.module_data ?? {}) as Record<string, unknown>;
       setEditMode(true);
       setEditReqId(data.id as string);
@@ -209,7 +241,9 @@ function FreightPage() {
       setOriginAddress((md.origin_address as string | undefined) ?? "");
       setDestinationAddress((md.destination_address as string | undefined) ?? "");
       setVehicleType((md.vehicle_type as string | undefined) ?? "");
-      const wasConstruction = (md.is_construction_site as boolean | undefined) ?? !!(md.project_number as string | undefined);
+      const wasConstruction =
+        (md.is_construction_site as boolean | undefined) ??
+        !!(md.project_number as string | undefined);
       setIsForConstruction(wasConstruction ? "sim" : "nao");
       setProjectNumber((md.project_number as string | undefined) ?? "");
       setCargoDescription((data.description as string) ?? "");
@@ -223,7 +257,9 @@ function FreightPage() {
       setDeclaredValue(String((md.declared_value as number | undefined) ?? ""));
       setAllowedSchedule((md.allowed_schedule as string | undefined) ?? "");
       setAccessRestriction((md.access_restriction as string | undefined) ?? "");
-      setNeedsCityHallAuthorization((md.needs_city_hall_authorization as boolean | undefined) ?? false);
+      setNeedsCityHallAuthorization(
+        (md.needs_city_hall_authorization as boolean | undefined) ?? false,
+      );
       setUrgencyLevel((data.urgency as string) ?? "");
       setJustification((data.justification as string) ?? "");
       if (data.desired_date) setPickupDate(parseLocalDate(data.desired_date as string));
@@ -236,66 +272,166 @@ function FreightPage() {
   useEffect(() => {
     if (!dialogOpen) return;
     try {
-      sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
-        open: true, step, originAddress, destinationAddress, vehicleType, isForConstruction, projectNumber,
-        cargoDescription, receiverName, receiverPhone, unloadingLocation, cargoPhotoDescription,
-        weight, dimensions, fragile, declaredValue,
-        pickupDate: pickupDate?.toISOString(),
-        unloadingDate: unloadingDate?.toISOString(),
-        allowedSchedule, accessRestriction, needsCityHallAuthorization,
-        urgencyLevel, justification,
-      }));
-    } catch { /* ignore */ }
-  }, [dialogOpen, step, originAddress, destinationAddress, vehicleType, isForConstruction, projectNumber,
-      cargoDescription, receiverName, receiverPhone, unloadingLocation, cargoPhotoDescription,
-      weight, dimensions, fragile, declaredValue,
-      pickupDate, unloadingDate, allowedSchedule, accessRestriction, needsCityHallAuthorization,
-      urgencyLevel, justification]);
+      sessionStorage.setItem(
+        DIALOG_KEY,
+        JSON.stringify({
+          open: true,
+          step,
+          originAddress,
+          destinationAddress,
+          vehicleType,
+          isForConstruction,
+          projectNumber,
+          cargoDescription,
+          receiverName,
+          receiverPhone,
+          unloadingLocation,
+          cargoPhotoDescription,
+          weight,
+          dimensions,
+          fragile,
+          declaredValue,
+          pickupDate: pickupDate?.toISOString(),
+          unloadingDate: unloadingDate?.toISOString(),
+          allowedSchedule,
+          accessRestriction,
+          needsCityHallAuthorization,
+          urgencyLevel,
+          justification,
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [
+    dialogOpen,
+    step,
+    originAddress,
+    destinationAddress,
+    vehicleType,
+    isForConstruction,
+    projectNumber,
+    cargoDescription,
+    receiverName,
+    receiverPhone,
+    unloadingLocation,
+    cargoPhotoDescription,
+    weight,
+    dimensions,
+    fragile,
+    declaredValue,
+    pickupDate,
+    unloadingDate,
+    allowedSchedule,
+    accessRestriction,
+    needsCityHallAuthorization,
+    urgencyLevel,
+    justification,
+  ]);
 
   const resetForm = () => {
     sessionStorage.removeItem(DIALOG_KEY);
     setStep(0);
-    setOriginAddress(""); setDestinationAddress(""); setVehicleType(""); setIsForConstruction(""); setProjectNumber("");
-    setCargoDescription(""); setReceiverName(""); setReceiverPhone(""); setUnloadingLocation("");
+    setOriginAddress("");
+    setDestinationAddress("");
+    setVehicleType("");
+    setIsForConstruction("");
+    setProjectNumber("");
+    setCargoDescription("");
+    setReceiverName("");
+    setReceiverPhone("");
+    setUnloadingLocation("");
     if (cargoPhotoPreview) URL.revokeObjectURL(cargoPhotoPreview);
-    setCargoPhotoFile(null); setCargoPhotoPreview(null); setCargoPhotoDescription("");
+    setCargoPhotoFile(null);
+    setCargoPhotoPreview(null);
+    setCargoPhotoDescription("");
     cargoPicPreviews.forEach((p) => URL.revokeObjectURL(p));
-    setCargoPicFiles([]); setCargoPicPreviews([]); setEditCargoPicPaths([]);
-    setWeight(""); setDimensions(""); setFragile(false); setDeclaredValue("");
-    setPickupDate(undefined); setUnloadingDate(undefined);
-    setAllowedSchedule(""); setAccessRestriction(""); setNeedsCityHallAuthorization(false);
-    setUrgencyLevel(""); setJustification("");
+    setCargoPicFiles([]);
+    setCargoPicPreviews([]);
+    setEditCargoPicPaths([]);
+    setWeight("");
+    setDimensions("");
+    setFragile(false);
+    setDeclaredValue("");
+    setPickupDate(undefined);
+    setUnloadingDate(undefined);
+    setAllowedSchedule("");
+    setAccessRestriction("");
+    setNeedsCityHallAuthorization(false);
+    setUrgencyLevel("");
+    setJustification("");
   };
 
   const validateStep = (): boolean => {
     if (step === 0) {
-      if (!originAddress.trim()) { toast.error("Informe o endereço de origem."); return false; }
-      if (!destinationAddress.trim()) { toast.error("Informe o endereço de destino."); return false; }
-      if (!vehicleType) { toast.error("Selecione o tipo de veículo."); return false; }
-      if (!isForConstruction) { toast.error("Informe se é para atender uma obra."); return false; }
-      if (isForConstruction === "sim" && !projectNumber.trim()) { toast.error("Informe o número da obra."); return false; }
+      if (!originAddress.trim()) {
+        toast.error("Informe o endereço de origem.");
+        return false;
+      }
+      if (!destinationAddress.trim()) {
+        toast.error("Informe o endereço de destino.");
+        return false;
+      }
+      if (!vehicleType) {
+        toast.error("Selecione o tipo de veículo.");
+        return false;
+      }
+      if (!isForConstruction) {
+        toast.error("Informe se é para atender uma obra.");
+        return false;
+      }
+      if (isForConstruction === "sim" && !projectNumber.trim()) {
+        toast.error("Informe o número da obra.");
+        return false;
+      }
     }
     if (step === 1) {
-      if (cargoDescription.length < 10) { toast.error("Descrição da carga deve ter pelo menos 10 caracteres."); return false; }
-      if (!receiverName.trim()) { toast.error("Informe o nome de quem vai receber a carga."); return false; }
-      if (!receiverPhone.trim()) { toast.error("Informe o telefone de quem vai receber a carga."); return false; }
+      if (cargoDescription.length < 10) {
+        toast.error("Descrição da carga deve ter pelo menos 10 caracteres.");
+        return false;
+      }
+      if (!receiverName.trim()) {
+        toast.error("Informe o nome de quem vai receber a carga.");
+        return false;
+      }
+      if (!receiverPhone.trim()) {
+        toast.error("Informe o telefone de quem vai receber a carga.");
+        return false;
+      }
     }
     if (step === 2) {
-      if (!pickupDate) { toast.error("Informe a data de coleta."); return false; }
-      if (!unloadingDate) { toast.error("Informe a data da descarga."); return false; }
-      if (!urgencyLevel) { toast.error("Selecione o nível de urgência."); return false; }
-      if (justification.length < 10) { toast.error("Justificativa deve ter pelo menos 10 caracteres."); return false; }
+      if (!pickupDate) {
+        toast.error("Informe a data de coleta.");
+        return false;
+      }
+      if (!unloadingDate) {
+        toast.error("Informe a data da descarga.");
+        return false;
+      }
+      if (!urgencyLevel) {
+        toast.error("Selecione o nível de urgência.");
+        return false;
+      }
+      if (justification.length < 10) {
+        toast.error("Justificativa deve ter pelo menos 10 caracteres.");
+        return false;
+      }
     }
     return true;
   };
 
   const handleNext = () => {
-    if (validateStep()) { toast.dismiss(); setStep((s) => Math.min(s + 1, STEPS.length - 1)); }
-    else setStepAttempted(true);
+    if (validateStep()) {
+      toast.dismiss();
+      setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    } else setStepAttempted(true);
   };
 
   const handleSubmit = async () => {
-    if (!validateStep()) { setStepAttempted(true); return; }
+    if (!validateStep()) {
+      setStepAttempted(true);
+      return;
+    }
     setIsSubmitting(true);
     try {
       let cargoPhotoPath: string | null = editCargoPhotoPath;
@@ -316,18 +452,24 @@ function FreightPage() {
           const { data: uploadData, error: uploadError } = await supabaseBrowser.storage
             .from("travel-docs")
             .upload(path, file, { upsert: true });
-          if (uploadError) { console.warn("[cargo pic upload]", uploadError.message); return null; }
+          if (uploadError) {
+            console.warn("[cargo pic upload]", uploadError.message);
+            return null;
+          }
           return uploadData.path;
         }),
       );
-      const cargoPicsPaths = [...editCargoPicPaths, ...newCargoPicPaths.filter((p): p is string => !!p)];
+      const cargoPicsPaths = [
+        ...editCargoPicPaths,
+        ...newCargoPicPaths.filter((p): p is string => !!p),
+      ];
 
       const moduleData = {
         origin_address: originAddress,
         destination_address: destinationAddress,
         vehicle_type: vehicleType,
         is_construction_site: isForConstruction === "sim",
-        project_number: isForConstruction === "sim" ? (projectNumber || null) : null,
+        project_number: isForConstruction === "sim" ? projectNumber || null : null,
         receiver_name: receiverName,
         receiver_phone: receiverPhone,
         unloading_location: unloadingLocation || null,
@@ -358,30 +500,33 @@ function FreightPage() {
         });
         const ordinals = ["1ª", "2ª", "3ª", "4ª", "5ª", "6ª", "7ª", "8ª", "9ª", "10ª"];
         const ordinal = ordinals[(result.edition ?? 2) - 1] ?? `${result.edition}ª`;
-        toast.success(`Requisição editada — ${ordinal} Edição`, { description: editTicketNumber ?? "" });
+        toast.success(`Requisição editada — ${ordinal} Edição`, {
+          description: editTicketNumber ?? "",
+        });
         setDialogOpen(false);
         resetForm();
-        setEditMode(false); setEditReqId(null); setEditEdition(1); setEditCargoPhotoPath(null);
+        setEditMode(false);
+        setEditReqId(null);
+        setEditEdition(1);
+        setEditCargoPhotoPath(null);
         void router.navigate({ to: "/logs" });
         return;
       }
 
-      const { error } = await supabaseBrowser
-        .from("requisitions")
-        .insert({
-          module: "M5",
-          title: `Frete ${originAddress} → ${destinationAddress}`,
-          description: cargoDescription,
-          justification,
-          urgency: urgencyLevel,
-          desired_date: pickupDate?.toISOString().slice(0, 10) ?? null,
-          requester_name: profile?.full_name || user?.email || "Usuário VP",
-          requester_email: profile?.email || user?.email || "",
-          requester_department: profile?.department || "Não informado",
-          requester_profile_id: user?.id ?? null,
-          module_data: moduleData,
-          status: "GESTOR",
-        });
+      const { error } = await supabaseBrowser.from("requisitions").insert({
+        module: "M5",
+        title: `Frete ${originAddress} → ${destinationAddress}`,
+        description: cargoDescription,
+        justification,
+        urgency: urgencyLevel,
+        desired_date: pickupDate?.toISOString().slice(0, 10) ?? null,
+        requester_name: profile?.full_name || user?.email || "Usuário VP",
+        requester_email: profile?.email || user?.email || "",
+        requester_department: profile?.department || "Não informado",
+        requester_profile_id: user?.id ?? null,
+        module_data: moduleData,
+        status: "GESTOR",
+      });
 
       if (error) throw error;
 
@@ -394,6 +539,18 @@ function FreightPage() {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+
+      if (created?.id) {
+        const { error: auditError } = await supabaseBrowser.from("audit_logs").insert({
+          requisition_id: created.id,
+          ticket_number: created.ticket_number,
+          action: "REQUISITION_CREATED",
+          new_status: "GESTOR",
+          actor_name: profile?.full_name || user?.email || "Usuário VP",
+          details: { module: "M5", urgency: urgencyLevel },
+        });
+        if (auditError) console.warn("[audit_logs]", auditError.message);
+      }
 
       toast.success("Requisição de frete criada!", { description: created?.ticket_number ?? "" });
       void notifyVpClickClient({
@@ -426,8 +583,15 @@ function FreightPage() {
             <p className="text-sm text-muted-foreground">Transporte e logística</p>
           </div>
         </div>
-        <Button variant="vp" onClick={() => { resetForm(); setDialogOpen(true); }}>
-          <Plus className="h-4 w-4 mr-2" />Nova Requisição
+        <Button
+          variant="vp"
+          onClick={() => {
+            resetForm();
+            setDialogOpen(true);
+          }}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Nova Requisição
         </Button>
       </div>
 
@@ -437,10 +601,19 @@ function FreightPage() {
         emptyMessage="Nenhuma requisição de frete ainda."
       />
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); }}>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          if (open) setDialogOpen(true);
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button]:hidden">
           <DialogHeader>
-            <DialogTitle>{editMode ? `Editando ${editTicketNumber} — ${editEdition + 1}ª Edição` : "Nova Requisição de Frete"}</DialogTitle>
+            <DialogTitle>
+              {editMode
+                ? `Editando ${editTicketNumber} — ${editEdition + 1}ª Edição`
+                : "Nova Requisição de Frete"}
+            </DialogTitle>
             <DialogDescription>Informe os dados do transporte.</DialogDescription>
           </DialogHeader>
 
@@ -469,15 +642,26 @@ function FreightPage() {
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Tipo de Veículo *</label>
                 <Select value={vehicleType} onValueChange={setVehicleType}>
-                  <SelectTrigger className={cn(stepAttempted && !vehicleType && FIELD_ERROR_CLASS)}><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectTrigger className={cn(stepAttempted && !vehicleType && FIELD_ERROR_CLASS)}>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
                   <SelectContent>
-                    {VEHICLE_TYPES.map((v) => <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>)}
+                    {VEHICLE_TYPES.map((v) => (
+                      <SelectItem key={v.value} value={v.value}>
+                        {v.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">É para atender uma obra? *</label>
-                <div className={cn("grid grid-cols-2 gap-2 rounded-lg", stepAttempted && !isForConstruction && "ring-2 ring-destructive ring-offset-2")}>
+                <div
+                  className={cn(
+                    "grid grid-cols-2 gap-2 rounded-lg",
+                    stepAttempted && !isForConstruction && "ring-2 ring-destructive ring-offset-2",
+                  )}
+                >
                   {(["sim", "nao"] as const).map((opt) => (
                     <button
                       key={opt}
@@ -549,11 +733,21 @@ function FreightPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Peso Estimado (kg)</label>
-                  <Input type="number" min="0" placeholder="Ex.: 500" value={weight} onChange={(e) => setWeight(e.target.value)} />
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="Ex.: 500"
+                    value={weight}
+                    onChange={(e) => setWeight(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Dimensões (CxLxA)</label>
-                  <Input placeholder="Ex.: 2m x 1m x 0.5m" value={dimensions} onChange={(e) => setDimensions(e.target.value)} />
+                  <Input
+                    placeholder="Ex.: 2m x 1m x 0.5m"
+                    value={dimensions}
+                    onChange={(e) => setDimensions(e.target.value)}
+                  />
                 </div>
               </div>
               <div className="space-y-1.5">
@@ -578,7 +772,9 @@ function FreightPage() {
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <div>
                   <label className="text-sm font-medium">Carga Frágil?</label>
-                  <p className="text-xs text-muted-foreground">Requer cuidados especiais no transporte</p>
+                  <p className="text-xs text-muted-foreground">
+                    Requer cuidados especiais no transporte
+                  </p>
                 </div>
                 <Switch checked={fragile} onCheckedChange={setFragile} />
               </div>
@@ -590,7 +786,8 @@ function FreightPage() {
                   onChange={(e) => setUnloadingLocation(e.target.value)}
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  Descreva as condições de acesso para que o cotador avalie o tipo de veículo adequado.
+                  Descreva as condições de acesso para que o cotador avalie o tipo de veículo
+                  adequado.
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -614,14 +811,22 @@ function FreightPage() {
                   htmlFor="cargo-photo"
                   className={cn(
                     "flex items-center gap-3 rounded-lg border-2 border-dashed p-3 cursor-pointer transition-colors",
-                    cargoPhotoFile ? "border-green-400 bg-green-50" : "border-border hover:border-muted-foreground/50",
+                    cargoPhotoFile
+                      ? "border-green-400 bg-green-50"
+                      : "border-border hover:border-muted-foreground/50",
                   )}
                 >
                   {cargoPhotoPreview ? (
                     <>
-                      <img src={cargoPhotoPreview} alt="Local" className="h-14 w-14 rounded object-cover border" />
+                      <img
+                        src={cargoPhotoPreview}
+                        alt="Local"
+                        className="h-14 w-14 rounded object-cover border"
+                      />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-green-700 truncate">{cargoPhotoFile?.name}</p>
+                        <p className="text-xs font-medium text-green-700 truncate">
+                          {cargoPhotoFile?.name}
+                        </p>
                         <p className="text-[11px] text-muted-foreground">Clique para trocar</p>
                       </div>
                     </>
@@ -634,7 +839,9 @@ function FreightPage() {
                         <p className="text-xs font-medium flex items-center gap-1">
                           <Upload className="h-3.5 w-3.5" /> Enviar foto do local
                         </p>
-                        <p className="text-[11px] text-muted-foreground">JPG, PNG, WebP — máx. 5 MB</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          JPG, PNG, WebP — máx. 5 MB
+                        </p>
                       </div>
                     </>
                   )}
@@ -651,7 +858,9 @@ function FreightPage() {
               <div className="space-y-1.5">
                 <label className="text-sm font-medium flex items-center gap-1">
                   📸 Tem fotos da carga?
-                  <span className="text-muted-foreground font-normal text-[11px]">(ajuda na cotação)</span>
+                  <span className="text-muted-foreground font-normal text-[11px]">
+                    (ajuda na cotação)
+                  </span>
                 </label>
                 <input
                   type="file"
@@ -659,7 +868,10 @@ function FreightPage() {
                   multiple
                   className="hidden"
                   id="cargo-pics"
-                  onChange={(e) => { handleCargoPics(e.target.files); e.target.value = ""; }}
+                  onChange={(e) => {
+                    handleCargoPics(e.target.files);
+                    e.target.value = "";
+                  }}
                 />
                 <label
                   htmlFor="cargo-pics"
@@ -672,7 +884,11 @@ function FreightPage() {
                   <div className="flex flex-wrap gap-2 pt-1">
                     {cargoPicPreviews.map((preview, idx) => (
                       <div key={preview} className="relative">
-                        <img src={preview} alt={`Foto da carga ${idx + 1}`} className="h-16 w-16 rounded object-cover border" />
+                        <img
+                          src={preview}
+                          alt={`Foto da carga ${idx + 1}`}
+                          className="h-16 w-16 rounded object-cover border"
+                        />
                         <button
                           type="button"
                           onClick={() => removeCargoPic(idx)}
@@ -683,7 +899,10 @@ function FreightPage() {
                       </div>
                     ))}
                     {editCargoPicPaths.map((path) => (
-                      <div key={path} className="flex h-16 w-16 items-center justify-center rounded border bg-green-50">
+                      <div
+                        key={path}
+                        className="flex h-16 w-16 items-center justify-center rounded border bg-green-50"
+                      >
                         <ImageIcon className="h-5 w-5 text-green-600" />
                       </div>
                     ))}
@@ -699,18 +918,33 @@ function FreightPage() {
                 <label className="text-sm font-medium">Data de Coleta *</label>
                 <Popover open={pickupDateOpen} onOpenChange={setPickupDateOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !pickupDate && "text-muted-foreground",
-                      stepAttempted && !pickupDate && FIELD_ERROR_CLASS,
-                    )}>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !pickupDate && "text-muted-foreground",
+                        stepAttempted && !pickupDate && FIELD_ERROR_CLASS,
+                      )}
+                    >
                       <CalendarIcon className="mr-2 h-4 w-4" />
-                      {pickupDate ? format(pickupDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecione a data"}
+                      {pickupDate
+                        ? format(pickupDate, "dd/MM/yyyy", { locale: ptBR })
+                        : "Selecione a data"}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={pickupDate} onSelect={(d) => { setPickupDate(d); setPickupDateOpen(false); }}
-                      disabled={(d) => d < startOfDay(new Date())} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
+                    <Calendar
+                      mode="single"
+                      selected={pickupDate}
+                      onSelect={(d) => {
+                        setPickupDate(d);
+                        setPickupDateOpen(false);
+                      }}
+                      disabled={(d) => d < startOfDay(new Date())}
+                      initialFocus
+                      className="p-3 pointer-events-auto"
+                      locale={ptBR}
+                    />
                   </PopoverContent>
                 </Popover>
               </div>
@@ -721,18 +955,33 @@ function FreightPage() {
                   <label className="text-xs text-muted-foreground">Data da descarga</label>
                   <Popover open={unloadingDateOpen} onOpenChange={setUnloadingDateOpen}>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !unloadingDate && "text-muted-foreground",
-                        stepAttempted && !unloadingDate && FIELD_ERROR_CLASS,
-                      )}>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !unloadingDate && "text-muted-foreground",
+                          stepAttempted && !unloadingDate && FIELD_ERROR_CLASS,
+                        )}
+                      >
                         <CalendarIcon className="mr-2 h-4 w-4" />
-                        {unloadingDate ? format(unloadingDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecione a data"}
+                        {unloadingDate
+                          ? format(unloadingDate, "dd/MM/yyyy", { locale: ptBR })
+                          : "Selecione a data"}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar mode="single" selected={unloadingDate} onSelect={(d) => { setUnloadingDate(d); setUnloadingDateOpen(false); }}
-                        disabled={(d) => d < startOfDay(pickupDate ?? new Date())} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
+                      <Calendar
+                        mode="single"
+                        selected={unloadingDate}
+                        onSelect={(d) => {
+                          setUnloadingDate(d);
+                          setUnloadingDateOpen(false);
+                        }}
+                        disabled={(d) => d < startOfDay(pickupDate ?? new Date())}
+                        initialFocus
+                        className="p-3 pointer-events-auto"
+                        locale={ptBR}
+                      />
                     </PopoverContent>
                   </Popover>
                 </div>
@@ -745,7 +994,9 @@ function FreightPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs text-muted-foreground">Tem alguma restrição de acesso?</label>
+                  <label className="text-xs text-muted-foreground">
+                    Tem alguma restrição de acesso?
+                  </label>
                   <Textarea
                     placeholder="Ex.: Rua estreita, horário limitado..."
                     value={accessRestriction}
@@ -756,24 +1007,43 @@ function FreightPage() {
                 <div className="flex items-center justify-between rounded-lg border p-3">
                   <div>
                     <label className="text-sm font-medium">Precisa avisar a Prefeitura?</label>
-                    <p className="text-xs text-muted-foreground">Ex.: pegar autorização de acesso/carga e descarga</p>
+                    <p className="text-xs text-muted-foreground">
+                      Ex.: pegar autorização de acesso/carga e descarga
+                    </p>
                   </div>
-                  <Switch checked={needsCityHallAuthorization} onCheckedChange={setNeedsCityHallAuthorization} />
+                  <Switch
+                    checked={needsCityHallAuthorization}
+                    onCheckedChange={setNeedsCityHallAuthorization}
+                  />
                 </div>
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Nível de Urgência *</label>
-                <div className={cn("grid grid-cols-4 gap-2 rounded-lg", stepAttempted && !urgencyLevel && "ring-2 ring-destructive ring-offset-2")}>
+                <div
+                  className={cn(
+                    "grid grid-cols-4 gap-2 rounded-lg",
+                    stepAttempted && !urgencyLevel && "ring-2 ring-destructive ring-offset-2",
+                  )}
+                >
                   {URGENCY.map((u) => (
-                    <button key={u.value} type="button" onClick={() => setUrgencyLevel(u.value)}
-                      className={cn("rounded-lg border-2 p-2.5 text-xs font-medium text-center transition-all",
+                    <button
+                      key={u.value}
+                      type="button"
+                      onClick={() => setUrgencyLevel(u.value)}
+                      className={cn(
+                        "rounded-lg border-2 p-2.5 text-xs font-medium text-center transition-all",
                         urgencyLevel === u.value
-                          ? u.value === "LOW" ? "border-green-500 bg-green-50 text-green-700"
-                          : u.value === "MEDIUM" ? "border-yellow-500 bg-yellow-50 text-yellow-700"
-                          : u.value === "HIGH" ? "border-orange-500 bg-orange-50 text-orange-700"
-                          : "border-red-500 bg-red-50 text-red-700"
-                          : "border-border hover:border-muted-foreground/40")}>
+                          ? u.value === "LOW"
+                            ? "border-green-500 bg-green-50 text-green-700"
+                            : u.value === "MEDIUM"
+                              ? "border-yellow-500 bg-yellow-50 text-yellow-700"
+                              : u.value === "HIGH"
+                                ? "border-orange-500 bg-orange-50 text-orange-700"
+                                : "border-red-500 bg-red-50 text-red-700"
+                          : "border-border hover:border-muted-foreground/40",
+                      )}
+                    >
                       {u.label}
                     </button>
                   ))}
@@ -795,14 +1065,26 @@ function FreightPage() {
           )}
 
           <DialogFooter className="flex justify-between sm:justify-between">
-            <Button variant="outline" onClick={() => step === 0 ? setDialogOpen(false) : setStep(step - 1)}>
-              {step === 0 ? "Cancelar" : <><ChevronLeft className="h-4 w-4 mr-1" /> Voltar</>}
+            <Button
+              variant="outline"
+              onClick={() => (step === 0 ? setDialogOpen(false) : setStep(step - 1))}
+            >
+              {step === 0 ? (
+                "Cancelar"
+              ) : (
+                <>
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Voltar
+                </>
+              )}
             </Button>
             {step < STEPS.length - 1 ? (
-              <Button variant="vp" onClick={handleNext}>Próximo <ChevronRight className="h-4 w-4 ml-1" /></Button>
+              <Button variant="vp" onClick={handleNext}>
+                Próximo <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
             ) : (
               <Button variant="vp" onClick={() => void handleSubmit()} disabled={isSubmitting}>
-                <Truck className="h-4 w-4 mr-1" /> {isSubmitting ? "Enviando..." : "Enviar Requisição"}
+                <Truck className="h-4 w-4 mr-1" />{" "}
+                {isSubmitting ? "Enviando..." : "Enviar Requisição"}
               </Button>
             )}
           </DialogFooter>

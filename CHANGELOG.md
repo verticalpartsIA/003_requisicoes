@@ -10,6 +10,7 @@ de PRs com diff completo, ver a aba *Pull requests* do repositório.
 
 ## 2026-08-19
 
+- fix(movimentacoes): tickets de M2-M6 (Viagem, Serviço, Manutenção, Frete, Locação) podiam sumir de Movimentações e ficar sem status visível quando criados sem nenhum evento em `audit_logs` — corrige a causa raiz (M2-M6 agora logam a criação, como M1 já fazia) e adiciona rede de segurança (evento sintético pra qualquer ticket sem log nunca mais desaparecer da lista) — [relatório](docs/reports/2026-08-19-movimentacoes-tickets-invisiveis.md) (#88)
 - feat(aprovacao): seção "Aguardando Gestor" em `/approval`, visível só para admin — mostra todas as requisições do sistema travadas na etapa de ciência do gestor (não só a fila do usuário logado), com "Falta aprovação: Gestor `<nome>`" indicando quem está travando cada ticket
 - chore(dados): corrige administrativamente 2 requisições do Danilo (M4-000147, M3-000148) que ficaram no limbo em GESTOR desde antes da regra existir — [relatório](docs/reports/2026-08-18-gestor-autoaprovacao-departamento.md#correção-administrativa-de-tickets-em-limbo-2026-08-19)
 
