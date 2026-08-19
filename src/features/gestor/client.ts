@@ -1,10 +1,21 @@
-import { getManagerScope, listGestorQueue, gestorApprove, gestorReject } from "@/features/gestor/api";
-import type { GestorQueueItem, GestorScope } from "@/features/gestor/api";
+import {
+  getManagerScope,
+  listGestorQueue,
+  listAllGestorPending,
+  gestorApprove,
+  gestorReject,
+} from "@/features/gestor/api";
+import type { GestorPendingItem, GestorQueueItem, GestorScope } from "@/features/gestor/api";
 
-export type { GestorQueueItem, GestorScope };
+export type { GestorPendingItem, GestorQueueItem, GestorScope };
 
 export async function getManagerScopeClient(managerId: string): Promise<GestorScope> {
   return getManagerScope({ data: { managerId } });
+}
+
+/** Só para admin — todas as requisições travadas em GESTOR no sistema. */
+export async function listAllGestorPendingClient(adminId: string): Promise<GestorPendingItem[]> {
+  return listAllGestorPending({ data: { adminId } });
 }
 
 export async function listGestorQueueClient(managerId: string): Promise<GestorQueueItem[]> {

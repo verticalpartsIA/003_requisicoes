@@ -17,6 +17,7 @@ import {
   Search,
   Filter,
   ScrollText,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { excelTable } from "@/lib/excel-table";
@@ -57,9 +58,11 @@ import { getTierThresholds } from "@/features/admin/api";
 import {
   getManagerScopeClient,
   listGestorQueueClient,
+  listAllGestorPendingClient,
   gestorApproveClient,
   gestorRejectClient,
   type GestorQueueItem,
+  type GestorPendingItem,
 } from "@/features/gestor/client";
 
 export const Route = createFileRoute("/approval")({
@@ -185,7 +188,8 @@ function GestorSection({ gestorName }: { gestorName: string }) {
         <div>
           <h2 className="text-xl font-bold text-foreground">Ciência do Gestor</h2>
           <p className="text-sm text-muted-foreground">
-            Requisições dos seus colaboradores aguardando sua ciência — a aprovação por alçada financeira vem depois, na Cotação
+            Requisições dos seus colaboradores aguardando sua ciência — a aprovação por alçada
+            financeira vem depois, na Cotação
           </p>
         </div>
       </div>
@@ -273,10 +277,246 @@ function GestorSection({ gestorName }: { gestorName: string }) {
                         {selected.items.map((it, i) => (
                           <tr key={i} className={excelTable.row(i)}>
                             <td className={cn(excelTable.td, "text-foreground")}>
-                              {it.productCode && <span className="font-mono text-muted-foreground mr-1">[{it.productCode}]</span>}
+                              {it.productCode && (
+                                <span className="font-mono text-muted-foreground mr-1">
+                                  [{it.productCode}]
+                                </span>
+                              )}
                               {it.productName}
                             </td>
-                            <td className={cn(excelTable.tdRight, "text-foreground")}>{it.quantity ?? "—"}</td>
+                            <td className={cn(excelTable.tdRight, "text-foreground")}>
+                              {it.quantity ?? "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label className="text-sm">Observações / Justificativa de reprovação</Label>
+                <Textarea
+                  placeholder="Observações sobre a decisão (obrigatório para reprovar)..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={3}
+                />
+              </div>
+
+              <DialogFooter className="gap-2">
+                <Button variant="ghost" onClick={() => setSelected(null)}>
+                  Cancelar
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleReject}
+                  disabled={isSaving}
+                  className="gap-1"
+                >
+                  <ThumbsDown className="h-4 w-4" /> Reprovar
+                </Button>
+                <Button variant="vp" onClick={handleApprove} disabled={isSaving} className="gap-1">
+                  <ThumbsUp className="h-4 w-4" /> Dar Ciência
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// ─── Aguardando Gestor (visão de admin — todo o sistema, não só a fila do
+// usuário logado) ────────────────────────────────────────────────────────────
+
+function AguardandoGestorSection({ gestorName }: { gestorName: string }) {
+  const [pending, setPending] = useState<GestorPendingItem[]>([]);
+  const [selected, setSelected] = useState<GestorPendingItem | null>(null);
+  const [notes, setNotes] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user) return;
+    void listAllGestorPendingClient(user.id).then((items) => {
+      setPending(items);
+      setLoaded(true);
+    });
+  }, [user]);
+
+  const reload = async () => {
+    if (!user) return;
+    setPending(await listAllGestorPendingClient(user.id));
+  };
+
+  const handleApprove = async () => {
+    if (!selected || !user) return;
+    setIsSaving(true);
+    try {
+      await gestorApproveClient(selected.requisitionId, user.id, gestorName, notes);
+      toast.success("Ciência confirmada — requisição encaminhada para cotação.");
+      void notifyVpClickClient({
+        stage: "GESTOR_APPROVED",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.ticketNumber,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+      }).catch(console.warn);
+      setSelected(null);
+      setNotes("");
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao confirmar ciência.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!selected || !user) return;
+    if (!notes.trim()) {
+      toast.error("Informe uma justificativa para reprovar.");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await gestorRejectClient(selected.requisitionId, user.id, gestorName, notes);
+      toast.success("Requisição reprovada.");
+      void notifyVpClickClient({
+        stage: "GESTOR_REJECTED",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.ticketNumber,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+      }).catch(console.warn);
+      setSelected(null);
+      setNotes("");
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao reprovar.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <>
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
+          <ShieldAlert className="h-5 w-5 text-slate-700" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-foreground">Aguardando Gestor</h2>
+          <p className="text-sm text-muted-foreground">
+            Visão de admin — todas as requisições do sistema travadas na etapa de ciência do gestor,
+            com quem precisa decidir cada uma
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {pending.map((item) => (
+          <Card key={item.requisitionId} className="border-slate-200 bg-slate-50/40">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {item.ticketNumber}
+                  </Badge>
+                  <div>
+                    <p className="font-semibold text-foreground text-sm">{item.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {item.module} • {item.requesterName} • Depto: {item.requesterDepartment} •{" "}
+                      {item.createdAt}
+                    </p>
+                    <p className="text-xs font-medium text-amber-700 mt-0.5">
+                      Falta aprovação: Gestor {item.pendingManagerNames.join(" / ")}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-300 hover:bg-slate-100"
+                  onClick={() => {
+                    setSelected(item);
+                    setNotes("");
+                  }}
+                >
+                  <Eye className="h-4 w-4 mr-1" /> Analisar
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+
+        {pending.length === 0 && (
+          <Card className="border-slate-200">
+            <CardContent className="p-6 text-center text-sm text-muted-foreground">
+              Nenhuma requisição travada aguardando gestor.
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
+        <DialogContent className="max-w-lg">
+          {selected && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-lg flex items-center gap-2">
+                  <ShieldAlert className="h-5 w-5 text-slate-600" />
+                  {selected.ticketNumber} — falta ciência de{" "}
+                  {selected.pendingManagerNames.join(" / ")}
+                </DialogTitle>
+                <DialogDescription>
+                  {selected.title} • {selected.module}
+                </DialogDescription>
+              </DialogHeader>
+
+              <Card className="border-dashed border-slate-300">
+                <CardContent className="p-4">
+                  <p className="text-xs font-semibold text-muted-foreground mb-1">
+                    Justificativa — {selected.requesterName}
+                  </p>
+                  <p className="text-sm text-foreground">{selected.justification}</p>
+                </CardContent>
+              </Card>
+
+              {selected.items && selected.items.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Itens ({selected.items.length})</Label>
+                  <div className={excelTable.wrapper}>
+                    <table className={excelTable.table}>
+                      <thead className={excelTable.thead}>
+                        <tr className={excelTable.headRow}>
+                          <th className={excelTable.th}>Produto</th>
+                          <th className={cn(excelTable.thRight, "w-20")}>Qtd.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selected.items.map((it, i) => (
+                          <tr key={i} className={excelTable.row(i)}>
+                            <td className={cn(excelTable.td, "text-foreground")}>
+                              {it.productCode && (
+                                <span className="font-mono text-muted-foreground mr-1">
+                                  [{it.productCode}]
+                                </span>
+                              )}
+                              {it.productName}
+                            </td>
+                            <td className={cn(excelTable.tdRight, "text-foreground")}>
+                              {it.quantity ?? "—"}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -542,6 +782,13 @@ function ApprovalPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      {/* Aguardando Gestor — visão de admin, todo o sistema */}
+      {hasRole("admin") && <AguardandoGestorSection gestorName={gestorName} />}
+
+      {hasRole("admin") && (isGestor || hasRole("aprovador")) && (
+        <div className="border-t border-border pt-2" />
+      )}
+
       {/* Seção Gestor (aparece apenas para usuários com departamentos gerenciados) */}
       {isGestor && <GestorSection gestorName={gestorName} />}
 
@@ -598,13 +845,17 @@ function ApprovalPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {["Todos", "M1", "M2", "M3", "M4", "M5", "M6"].map((m) => (
-                      <SelectItem key={m} value={m}>{m === "Todos" ? "Módulo" : m}</SelectItem>
+                      <SelectItem key={m} value={m}>
+                        {m === "Todos" ? "Módulo" : m}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <Select
                   value={String(levelFilter)}
-                  onValueChange={(v) => setLevelFilter(v === "Todos" ? "Todos" : (Number(v) as 1 | 2 | 3))}
+                  onValueChange={(v) =>
+                    setLevelFilter(v === "Todos" ? "Todos" : (Number(v) as 1 | 2 | 3))
+                  }
                 >
                   <SelectTrigger className="w-full sm:w-[130px]">
                     <SelectValue placeholder="Alçada" />
@@ -679,9 +930,9 @@ function ApprovalPage() {
                         <>
                           <Package className="h-3.5 w-3.5 text-vp-yellow-dark" />
                           <span className="font-medium text-foreground">
-                            {(request.travelItems || []).length} item(s) — {
-                              new Set((request.travelItems || []).map((ti) => ti.supplierName)).size
-                            } fornecedor(es)
+                            {(request.travelItems || []).length} item(s) —{" "}
+                            {new Set((request.travelItems || []).map((ti) => ti.supplierName)).size}{" "}
+                            fornecedor(es)
                           </span>
                           <span>•</span>
                           <span>
@@ -762,7 +1013,8 @@ function ApprovalPage() {
                           label: ti.itemType,
                           icon: null,
                         };
-                        const label = ti.itemType === "produto" ? (ti.description || cfg.label) : cfg.label;
+                        const label =
+                          ti.itemType === "produto" ? ti.description || cfg.label : cfg.label;
                         const decision = m2Decisions[ti.approvalItemId];
                         return (
                           <Card
@@ -782,7 +1034,10 @@ function ApprovalPage() {
                                   <span className="text-sm font-semibold text-foreground">
                                     {label}
                                     {ti.itemType === "produto" && ti.quantity != null && (
-                                      <span className="text-muted-foreground font-normal"> — qtd. {ti.quantity}</span>
+                                      <span className="text-muted-foreground font-normal">
+                                        {" "}
+                                        — qtd. {ti.quantity}
+                                      </span>
                                     )}
                                   </span>
                                 </div>
@@ -792,7 +1047,9 @@ function ApprovalPage() {
                                 </span>
                               </div>
                               <p className="text-xs text-muted-foreground mt-1">
-                                {ti.itemType === "produto" && ti.productCode ? `[${ti.productCode}] ` : ""}
+                                {ti.itemType === "produto" && ti.productCode
+                                  ? `[${ti.productCode}] `
+                                  : ""}
                                 {ti.supplierName}
                               </p>
                               <div className="flex gap-2 mt-3">
