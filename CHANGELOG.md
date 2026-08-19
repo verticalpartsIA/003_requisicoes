@@ -8,6 +8,11 @@ os fixes/features mais investigativos linkam para um relatório em
 Para arquitetura e convenções do projeto, ver `CLAUDE.md`. Para o histórico
 de PRs com diff completo, ver a aba *Pull requests* do repositório.
 
+## 2026-08-19
+
+- feat(aprovacao): seção "Aguardando Gestor" em `/approval`, visível só para admin — mostra todas as requisições do sistema travadas na etapa de ciência do gestor (não só a fila do usuário logado), com "Falta aprovação: Gestor `<nome>`" indicando quem está travando cada ticket
+- chore(dados): corrige administrativamente 2 requisições do Danilo (M4-000147, M3-000148) que ficaram no limbo em GESTOR desde antes da regra existir — [relatório](docs/reports/2026-08-18-gestor-autoaprovacao-departamento.md#correção-administrativa-de-tickets-em-limbo-2026-08-19)
+
 ## 2026-08-18
 
 - chore(dados): limpa designações de gestor órfãs (Expedição, VerticalParts) e o approver_id do Gelson — Diego e Gelson já tinham todos os papéis (poder máximo já concedido via `user_roles`) — [relatório](docs/reports/2026-08-18-gestor-autoaprovacao-departamento.md)
