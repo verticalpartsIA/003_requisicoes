@@ -94,3 +94,60 @@ errado, mas não corrige retroativamente inconsistências que já existem em
 mesmo departamento). Isso exigiria migrar `department` de texto livre
 para uma lista fechada (enum ou tabela `departments`), o que é uma mudança
 maior — não fiz isso agora por ser fora do escopo do problema relatado.
+
+## Correção administrativa de tickets em limbo (2026-08-19)
+
+Como a regra de ciência do gestor (e o carimbo de `approver_id`) só passou
+a existir/funcionar corretamente a partir do fix acima, requisições criadas
+antes disso por pessoas que hoje são gestoras — mas que na hora da criação
+não tinham essa condição reconhecida — ficaram travadas em `GESTOR` sem
+nenhum gestor de fato capaz de decidi-las (autoaprovação não existia como
+conceito ainda). O usuário pediu para evidenciar esses casos e resolvê-los.
+
+Levantamento no banco (produção) de todas as requisições com
+`status = 'GESTOR'` no sistema, contra quem consegue decidir cada uma pela
+regra atual, encontrou 8 tickets travados:
+
+- **2 são o Danilo** (`M4-000147`, `M3-000148`) — requisições próprias
+  dele, criadas quando a regra de gestor ainda não existia/funcionava.
+  Sem correção, ficariam travadas para sempre: ele é o único gestor do
+  departamento delas e o sistema não tinha a noção de autoaprovação nessa
+  época.
+- **3 são decisões pendentes reais**, sem relação com o bug — Bianca
+  Mayumi/Danilo Oliveira ainda precisam decidir requisições do Caio Silva
+  (`M5-000141`, `M3-000145`, `M1-000146`). Não foram tocadas.
+- **3 são bloqueadas por falta de gestor cadastrado** para os
+  departamentos "Vendas" e "MKT" em `department_managers` — gap diferente
+  do bug de texto livre, é apenas ausência de designação. O usuário optou
+  por resolver isso ele mesmo pelo Admin (Admin → Usuários → colaborador →
+  "Gestor de:"), não foi tocado por mim.
+
+Para os 2 tickets do Danilo, o usuário escolheu resolver via **correção
+administrativa** — aprovar agora, deixando o registro de auditoria honesto
+(sem simular um clique que o Danilo nunca deu). Executado direto via SQL
+em produção:
+
+```sql
+-- M4-000147 e M3-000148: status GESTOR -> ABERTO
+update requisitions set status = 'ABERTO'
+  where ticket_number in ('M4-000147', 'M3-000148');
+
+insert into audit_logs
+  (requisition_id, ticket_number, action, old_status, new_status, actor_name, details)
+values
+  (<id>, 'M4-000147', 'GESTOR_APPROVED', 'GESTOR', 'ABERTO', 'Correção administrativa',
+   '{"notes": "Requisição própria do gestor do departamento, criada antes da regra de ciência de gestor existir/funcionar. Aprovada administrativamente para trazer o ticket de volta ao fluxo normal."}'),
+  (<id>, 'M3-000148', 'GESTOR_APPROVED', 'GESTOR', 'ABERTO', 'Correção administrativa',
+   '{"notes": "Requisição própria do gestor do departamento, criada antes da regra de ciência de gestor existir/funcionar. Aprovada administrativamente para trazer o ticket de volta ao fluxo normal."}');
+```
+
+Ambos os tickets seguiram normalmente para a etapa de Cotação (V2) depois
+disso — já dentro da regra correta, sem exigir nenhuma ação manual futura
+equivalente (com o gestor de "Logistica/ Almoxarifado" corrigido, novas
+requisições do Danilo passam pela ciência normalmente).
+
+Também implementada, no mesmo ciclo, a seção **"Aguardando Gestor"** em
+`/approval` (visível só para admin) para que Diego/Gelson vejam de cara,
+a qualquer momento, todos os tickets travados em `GESTOR` no sistema e
+quem está travando cada um — sem precisar de uma consulta SQL manual como
+esta para descobrir.
