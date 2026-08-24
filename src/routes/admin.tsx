@@ -840,7 +840,7 @@ function UserDetailContent({
     new Set(users.map((u) => u.department).filter((d): d is string => !!d?.trim())),
   ).sort((a, b) => a.localeCompare(b, "pt-BR"));
   const approver = users.find((u) => u.id === user.approver_id);
-  const approverCandidates = users.filter((u) => u.id !== user.id && u.active);
+  const approverCandidates = users;
 
   return (
     <>
