@@ -686,6 +686,11 @@ export async function correctQuotationPriceClient(
 ) {
   if (corrections.length === 0) throw new Error("Informe ao menos um preço corrigido.");
   if (!reason.trim()) throw new Error("Informe o motivo da correção.");
+  for (const c of corrections) {
+    if (!Number.isFinite(c.newPrice) || c.newPrice <= 0) {
+      throw new Error("Todo preço corrigido precisa ser um número maior que zero.");
+    }
+  }
 
   const { data: requisition, error: requisitionError } = await supabaseBrowser
     .from("requisitions")
@@ -707,25 +712,34 @@ export async function correctQuotationPriceClient(
     throw new Error("Esta requisição não tem uma aprovação concedida para reabrir.");
   }
 
-  const supplierIds = corrections.map((c) => c.supplierId);
-  const { data: currentSuppliers, error: currentSuppliersError } = await supabaseBrowser
+  // Busca TODOS os vencedores da cotação (não só os corrigidos) — é a partir
+  // desse conjunto que o novo total é calculado, então precisamos do preço
+  // atual de quem não mudou também.
+  const { data: allWinners, error: allWinnersError } = await supabaseBrowser
     .from("quotation_suppliers")
-    .select("id,supplier_name,price,quotation_id")
-    .in("id", supplierIds);
-  if (currentSuppliersError) throw new Error(friendlySupabaseError(currentSuppliersError));
+    .select("id,supplier_name,price,item_id")
+    .eq("quotation_id", approval.quotation_id)
+    .eq("is_winner", true);
+  if (allWinnersError) throw new Error(friendlySupabaseError(allWinnersError));
 
   const priceById = new Map(corrections.map((c) => [c.supplierId, c.newPrice]));
-  const changes = (currentSuppliers || [])
-    .filter((s) => s.quotation_id === approval.quotation_id)
-    .map((s) => ({
-      supplierId: s.id,
-      supplierName: s.supplier_name,
-      oldPrice: s.price || 0,
-      newPrice: priceById.get(s.id) ?? (s.price || 0),
-    }));
+  const changes = (allWinners || []).map((s) => ({
+    supplierId: s.id,
+    supplierName: s.supplier_name,
+    itemId: s.item_id as string | null,
+    oldPrice: s.price || 0,
+    newPrice: priceById.get(s.id) ?? (s.price || 0),
+  }));
+  const actualChanges = changes.filter((c) => c.newPrice !== c.oldPrice);
+  if (actualChanges.length === 0) {
+    throw new Error("Nenhum preço foi alterado.");
+  }
 
-  for (const change of changes) {
-    if (change.newPrice === change.oldPrice) continue;
+  const newTotal = changes.reduce((sum, c) => sum + c.newPrice, 0);
+  const thresholds = await getTierThresholds();
+  const newApprovalLevel = getApprovalLevelForValue(newTotal, thresholds);
+
+  for (const change of actualChanges) {
     const { error } = await supabaseBrowser
       .from("quotation_suppliers")
       .update({ price: change.newPrice })
@@ -733,16 +747,28 @@ export async function correctQuotationPriceClient(
     if (error) throw new Error(friendlySupabaseError(error));
   }
 
-  const { data: allWinners, error: allWinnersError } = await supabaseBrowser
-    .from("quotation_suppliers")
-    .select("price")
-    .eq("quotation_id", approval.quotation_id)
-    .eq("is_winner", true);
-  if (allWinnersError) throw new Error(friendlySupabaseError(allWinnersError));
+  // M1 multi-item / M2: `approval_items` guarda preço e decisão POR ITEM,
+  // separado de `quotation_suppliers` — a tela de Aprovação e a de Compra
+  // leem de lá, não daqui. Sem sincronizar, a reabertura mostraria o preço e
+  // a decisão antigos nessas telas mesmo com o preço já corrigido.
+  const itemIdsChanged = actualChanges.map((c) => c.itemId).filter(Boolean) as string[];
+  if (itemIdsChanged.length > 0) {
+    for (const change of actualChanges) {
+      if (!change.itemId) continue;
+      const { error } = await supabaseBrowser
+        .from("approval_items")
+        .update({ price: change.newPrice, decision: "pending", decided_at: null })
+        .eq("approval_id", approval.id)
+        .eq("item_id", change.itemId);
+      if (error) throw new Error(friendlySupabaseError(error));
+    }
 
-  const newTotal = (allWinners || []).reduce((sum, w) => sum + (w.price || 0), 0);
-  const thresholds = await getTierThresholds();
-  const newApprovalLevel = getApprovalLevelForValue(newTotal, thresholds);
+    const { error: itemStatusError } = await supabaseBrowser
+      .from("requisition_items")
+      .update({ status: "quoted" })
+      .in("id", itemIdsChanged);
+    if (itemStatusError) throw new Error(friendlySupabaseError(itemStatusError));
+  }
 
   const { error: approvalUpdateError } = await supabaseBrowser
     .from("approvals")
@@ -770,7 +796,7 @@ export async function correctQuotationPriceClient(
     new_status: "APROVAÇÃO",
     details: {
       reason: reason.trim(),
-      changes: changes.filter((c) => c.newPrice !== c.oldPrice),
+      changes: actualChanges,
       previous_total_value: approval.total_value,
       new_total_value: newTotal,
       previous_approval_level: approval.approval_level,
