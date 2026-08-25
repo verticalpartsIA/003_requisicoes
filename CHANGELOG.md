@@ -8,6 +8,10 @@ os fixes/features mais investigativos linkam para um relatório em
 Para arquitetura e convenções do projeto, ver `CLAUDE.md`. Para o histórico
 de PRs com diff completo, ver a aba *Pull requests* do repositório.
 
+## 2026-08-25
+
+- feat(cotacao): permite corrigir o preço de uma cotação já aprovada (V3) — reabre a aprovação (`decision` volta para `pending`, requisição volta para `APROVAÇÃO`) em vez de editar valores livremente, forçando reaprovação com o total certo — [relatório](docs/reports/2026-08-25-correcao-preco-cotacao-pos-aprovacao.md)
+
 ## 2026-08-19
 
 - fix(movimentacoes): tickets de M2-M6 (Viagem, Serviço, Manutenção, Frete, Locação) podiam sumir de Movimentações e ficar sem status visível quando criados sem nenhum evento em `audit_logs` — corrige a causa raiz (M2-M6 agora logam a criação, como M1 já fazia) e adiciona rede de segurança (evento sintético pra qualquer ticket sem log nunca mais desaparecer da lista) — [relatório](docs/reports/2026-08-19-movimentacoes-tickets-invisiveis.md) (#88)

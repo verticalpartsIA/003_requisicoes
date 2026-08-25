@@ -1,5 +1,26 @@
 import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
-import { FileSearch, Plus, Trash2, Trophy, DollarSign, Clock, Scale, CheckCircle2, ArrowRight, Plane, Hotel, Car, Package, CopyPlus, Search, ScrollText, Filter, Undo2, AlertTriangle } from "lucide-react";
+import {
+  FileSearch,
+  Plus,
+  Trash2,
+  Trophy,
+  DollarSign,
+  Clock,
+  Scale,
+  CheckCircle2,
+  ArrowRight,
+  Plane,
+  Hotel,
+  Car,
+  Package,
+  CopyPlus,
+  Search,
+  ScrollText,
+  Filter,
+  Undo2,
+  AlertTriangle,
+  PencilLine,
+} from "lucide-react";
 import { useState } from "react";
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -42,11 +63,20 @@ import {
   saveM2QuoteClient,
   saveM1ItemQuotesClient,
   returnQuotationForInfoClient,
+  listCorrectableQuotationsClient,
+  correctQuotationPriceClient,
   type M2ItemQuote,
+  type CorrectableQuotationItem,
 } from "@/features/quotations/client";
 import { useAuth } from "@/features/auth/auth-context";
+import { parseBRLNumber } from "@/lib/number";
 
-type QuotationStatus = "pending" | "quoting" | "awaiting_proposals" | "selecting_winner" | "completed";
+type QuotationStatus =
+  | "pending"
+  | "quoting"
+  | "awaiting_proposals"
+  | "selecting_winner"
+  | "completed";
 type WinCriteria = "price" | "deadline" | "price_deadline";
 type Phase = "suppliers" | "proposals" | "winner";
 
@@ -84,7 +114,8 @@ function urgBadge(u: string) {
 
 function statusBadge(s: QuotationStatus) {
   if (s === "pending") return "bg-muted text-muted-foreground border-border";
-  if (s === "quoting" || s === "awaiting_proposals") return "bg-blue-50 text-blue-700 border-blue-200";
+  if (s === "quoting" || s === "awaiting_proposals")
+    return "bg-blue-50 text-blue-700 border-blue-200";
   if (s === "selecting_winner") return "bg-amber-50 text-amber-700 border-amber-200";
   return "bg-green-50 text-green-700 border-green-200";
 }
@@ -128,7 +159,9 @@ function QuotingPage() {
 
   // M2 state
   const [m2Item, setM2Item] = useState<QuotationQueueItem | null>(null);
-  const [m2Quotes, setM2Quotes] = useState<Record<string, Omit<M2ItemQuote, "itemId" | "itemType">>>({});
+  const [m2Quotes, setM2Quotes] = useState<
+    Record<string, Omit<M2ItemQuote, "itemId" | "itemType">>
+  >({});
   const [isM2Saving, setIsM2Saving] = useState(false);
 
   // Devolver ao solicitante por falta de informação
@@ -136,10 +169,70 @@ function QuotingPage() {
   const [returnReason, setReturnReason] = useState("");
   const [isReturning, setIsReturning] = useState(false);
 
+  // Corrigir preço de cotação já aprovada (V3) e em Compra (V4)
+  const [correctableQueue, setCorrectableQueue] = useState<CorrectableQuotationItem[]>([]);
+  const [correctItem, setCorrectItem] = useState<CorrectableQuotationItem | null>(null);
+  const [correctPrices, setCorrectPrices] = useState<Record<string, string>>({});
+  const [correctReason, setCorrectReason] = useState("");
+  const [isCorrecting, setIsCorrecting] = useState(false);
+
+  const refreshCorrectableQueue = () => {
+    void listCorrectableQuotationsClient().then(setCorrectableQueue);
+  };
+
   useEffect(() => {
     if (!session) return;
     void listQuotationQueueClient().then(setQueue);
+    refreshCorrectableQueue();
   }, [session]);
+
+  const openCorrectDialog = (item: CorrectableQuotationItem) => {
+    setCorrectItem(item);
+    setCorrectPrices(
+      Object.fromEntries(
+        item.winners.map((w) => [w.supplierId, w.price.toString().replace(".", ",")]),
+      ),
+    );
+    setCorrectReason("");
+  };
+
+  const closeCorrectDialog = () => {
+    setCorrectItem(null);
+    setCorrectPrices({});
+    setCorrectReason("");
+  };
+
+  const confirmCorrection = async () => {
+    if (!correctItem || !correctReason.trim()) return;
+
+    setIsCorrecting(true);
+    try {
+      const corrections = correctItem.winners.map((w) => ({
+        supplierId: w.supplierId,
+        newPrice: parseBRLNumber(correctPrices[w.supplierId]) ?? w.price,
+      }));
+      await correctQuotationPriceClient(
+        correctItem.requisitionId,
+        corrections,
+        correctReason.trim(),
+      );
+      toast.success("Preço corrigido. A requisição foi reenviada para aprovação (V3).");
+      closeCorrectDialog();
+      refreshCorrectableQueue();
+      await router.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível corrigir o preço.");
+    } finally {
+      setIsCorrecting(false);
+    }
+  };
+
+  const correctedTotal = correctItem
+    ? correctItem.winners.reduce(
+        (sum, w) => sum + (parseBRLNumber(correctPrices[w.supplierId]) ?? w.price),
+        0,
+      )
+    : 0;
 
   const openQuotation = (item: QuotationQueueItem) => {
     // M2 (voo/hotel/carro) e M1 multi-itens (2+ produtos) cotam por item —
@@ -179,11 +272,16 @@ function QuotingPage() {
   };
 
   const updateSupplier = (index: number, field: keyof SupplierEntry, value: string | boolean) => {
-    setSuppliers((prev) => prev.map((supplier, i) => (i === index ? { ...supplier, [field]: value } : supplier)));
+    setSuppliers((prev) =>
+      prev.map((supplier, i) => (i === index ? { ...supplier, [field]: value } : supplier)),
+    );
   };
 
-  const canAdvanceToProposals = suppliers.length > 0 && suppliers.every((supplier) => supplier.name.trim() !== "");
-  const allProposalsReceived = suppliers.every((supplier) => supplier.proposalReceived && supplier.price.trim() !== "");
+  const canAdvanceToProposals =
+    suppliers.length > 0 && suppliers.every((supplier) => supplier.name.trim() !== "");
+  const allProposalsReceived = suppliers.every(
+    (supplier) => supplier.proposalReceived && supplier.price.trim() !== "",
+  );
 
   const closeDialog = () => {
     setSelectedItem(null);
@@ -221,7 +319,9 @@ function QuotingPage() {
       setQueue(await listQuotationQueueClient());
       await router.invalidate();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível devolver a requisição.");
+      toast.error(
+        error instanceof Error ? error.message : "Não foi possível devolver a requisição.",
+      );
     } finally {
       setIsReturning(false);
     }
@@ -236,7 +336,7 @@ function QuotingPage() {
       const result = await saveQuotationSuppliersClient(selectedItem.requisitionId, suppliers);
 
       setSuppliers(result.suppliers);
-      setSelectedItem((current) => (
+      setSelectedItem((current) =>
         current
           ? {
               ...current,
@@ -244,14 +344,16 @@ function QuotingPage() {
               status: result.status,
               suppliers: result.suppliers,
             }
-          : current
-      ));
+          : current,
+      );
       setPhase("proposals");
       setQueue(await listQuotationQueueClient());
       await router.invalidate();
       toast.success("Fornecedores salvos com sucesso.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível salvar os fornecedores.");
+      toast.error(
+        error instanceof Error ? error.message : "Não foi possível salvar os fornecedores.",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -271,15 +373,15 @@ function QuotingPage() {
       const result = await saveQuotationProposalsClient(selectedItem.quotationId, suppliers);
 
       setSuppliers(result.suppliers);
-      setSelectedItem((current) => (
+      setSelectedItem((current) =>
         current
           ? {
               ...current,
               status: result.status,
               suppliers: result.suppliers,
             }
-          : current
-      ));
+          : current,
+      );
       setPhase("winner");
       // Auto-seleciona vencedor quando há apenas 1 fornecedor (caso mais comum)
       if (result.suppliers.length === 1) setWinnerIndex(0);
@@ -337,7 +439,7 @@ function QuotingPage() {
   const itemLabel = (ti: TravelItem) =>
     ti.itemType === "produto"
       ? ti.description || ti.productCode || "Item"
-      : travelItemLabels[ti.itemType]?.label ?? ti.itemType;
+      : (travelItemLabels[ti.itemType]?.label ?? ti.itemType);
 
   // Copia o fornecedor/valor de um item para todos os demais ainda sem
   // fornecedor definido — atalho para quando o mesmo fornecedor cobre
@@ -418,7 +520,12 @@ function QuotingPage() {
     }
   };
 
-  const summaryStatuses: QuotationStatus[] = ["pending", "awaiting_proposals", "selecting_winner", "completed"];
+  const summaryStatuses: QuotationStatus[] = [
+    "pending",
+    "awaiting_proposals",
+    "selecting_winner",
+    "completed",
+  ];
 
   const filteredQueue = queue.filter((item) => {
     if (moduleFilter !== "Todos" && item.module !== moduleFilter) return false;
@@ -432,536 +539,795 @@ function QuotingPage() {
 
   return (
     <AccessGuard roles={["admin", "comprador"]}>
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
-          <FileSearch className="h-5 w-5 text-vp-yellow-dark" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-foreground">V2 — Cotação</h1>
-          <p className="text-sm text-muted-foreground">Gestão de cotações multi-fornecedor</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {summaryStatuses.map((status) => (
-          <Card key={status} className="card-hover-yellow">
-            <CardContent className="p-4 text-center">
-              <p className="text-2xl font-bold text-foreground">{queue.filter((item) => item.status === status).length}</p>
-              <p className="text-xs text-muted-foreground">{statusLabel[status]}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Filtros — mesmo padrão de busca+módulo usado em Movimentações */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por ticket ou título..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <Select value={moduleFilter} onValueChange={setModuleFilter}>
-              <SelectTrigger className="w-full sm:w-[130px]">
-                <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Módulo" />
-              </SelectTrigger>
-              <SelectContent>
-                {["Todos", "M1", "M2", "M3", "M4", "M5", "M6"].map((m) => (
-                  <SelectItem key={m} value={m}>{m === "Todos" ? "Módulo" : m}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
-              <SelectTrigger className="w-full sm:w-[130px]">
-                <SelectValue placeholder="Urgência" />
-              </SelectTrigger>
-              <SelectContent>
-                {["Todos", "LOW", "MEDIUM", "HIGH", "URGENT"].map((u) => (
-                  <SelectItem key={u} value={u}>{u === "Todos" ? "Urgência" : urgLabel[u] || u}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      <div className="max-w-5xl mx-auto space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
+            <FileSearch className="h-5 w-5 text-vp-yellow-dark" />
           </div>
-        </CardContent>
-      </Card>
-
-      <div className="space-y-3">
-        {filteredQueue.map((item) => (
-          <Card key={item.requisitionId} className="card-hover-yellow">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Badge variant="outline" className="font-mono text-xs">{item.ticketNumber}</Badge>
-                <div>
-                  <p className="font-semibold text-foreground text-sm">{item.title}</p>
-                  <p className="text-xs text-muted-foreground">Módulo: {item.module}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${statusBadge(item.status)}`}>
-                  {statusLabel[item.status]}
-                </span>
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${urgBadge(item.urgency)}`}>
-                  {urgLabel[item.urgency] || item.urgency}
-                </span>
-                <Link
-                  to="/movimentacoes"
-                  search={{ ticket: item.ticketNumber, module: undefined }}
-                  target="_blank"
-                  title="Ver histórico completo do ticket"
-                  className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-vp-yellow transition-colors"
-                >
-                  <ScrollText className="h-3.5 w-3.5" />
-                </Link>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
-                  title="Devolver ao solicitante por falta de informação"
-                  onClick={() => openReturnDialog(item)}
-                >
-                  <Undo2 className="h-3.5 w-3.5 mr-1" /> Devolver
-                </Button>
-                <Button variant="vp" size="sm" onClick={() => openQuotation(item)}>
-                  {item.status === "pending" ? "Cotar" : "Continuar"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-
-        {filteredQueue.length === 0 && (
-          <Card className="card-hover-yellow">
-            <CardContent className="p-8 text-center text-sm text-muted-foreground">
-              {queue.length === 0
-                ? "Nenhuma requisição aguardando cotação neste momento."
-                : "Nenhum resultado para os filtros atuais."}
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* Dialog padrão (não-M2) */}
-      <Dialog open={!!selectedItem && !confirmDialog} onOpenChange={(open) => !open && closeDialog()}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-lg">
-              Cotação — {selectedItem?.ticketNumber}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedItem?.title}
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedItem?.requesterNotes && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-              <p className="text-xs font-semibold text-amber-800 mb-1">Observações do Requisitante</p>
-              <p className="text-sm text-amber-900">{selectedItem.requesterNotes}</p>
-            </div>
-          )}
-
-          <div className="flex items-center gap-2 text-xs">
-            <span className={`rounded-full px-3 py-1 font-medium ${phase === "suppliers" ? "bg-vp-yellow text-vp-dark" : "bg-muted text-muted-foreground"}`}>1. Fornecedores</span>
-            <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            <span className={`rounded-full px-3 py-1 font-medium ${phase === "proposals" ? "bg-vp-yellow text-vp-dark" : "bg-muted text-muted-foreground"}`}>2. Propostas</span>
-            <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            <span className={`rounded-full px-3 py-1 font-medium ${phase === "winner" ? "bg-vp-yellow text-vp-dark" : "bg-muted text-muted-foreground"}`}>3. Vencedor</span>
+          <div>
+            <h1 className="text-xl font-bold text-foreground">V2 — Cotação</h1>
+            <p className="text-sm text-muted-foreground">Gestão de cotações multi-fornecedor</p>
           </div>
+        </div>
 
-          {phase === "suppliers" && (
-            <div className="space-y-4 mt-2">
-              <p className="text-sm text-muted-foreground">Selecione até <strong>3 fornecedores</strong> para esta cotação.</p>
-              {suppliers.map((supplier, index) => (
-                <Card key={supplier.id || index} className="border border-border">
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-foreground">Fornecedor {index + 1}</span>
-                      {suppliers.length > 1 && (
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" onClick={() => removeSupplier(index)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Nome do Fornecedor</Label>
-                      <Input placeholder="Ex: ABC Ltda" value={supplier.name} onChange={(e) => updateSupplier(index, "name", e.target.value)} />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-              {suppliers.length < 3 && (
-                <Button variant="outline" size="sm" className="w-full" onClick={addSupplier}>
-                  <Plus className="h-4 w-4 mr-1" /> Adicionar Fornecedor ({suppliers.length}/3)
-                </Button>
-              )}
-              <DialogFooter>
-                <Button variant="ghost" onClick={closeDialog}>Cancelar</Button>
-                <Button variant="vp" disabled={!canAdvanceToProposals || isSaving} onClick={advanceToProposals}>
-                  Enviar para Cotação <ArrowRight className="h-4 w-4 ml-1" />
-                </Button>
-              </DialogFooter>
-            </div>
-          )}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {summaryStatuses.map((status) => (
+            <Card key={status} className="card-hover-yellow">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-foreground">
+                  {queue.filter((item) => item.status === status).length}
+                </p>
+                <p className="text-xs text-muted-foreground">{statusLabel[status]}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
 
-          {phase === "proposals" && (
-            <div className="space-y-4 mt-2">
-              <p className="text-sm text-muted-foreground">Registre as propostas recebidas de cada fornecedor.</p>
-              {suppliers.map((supplier, index) => (
-                <Card key={supplier.id || index} className={`border ${supplier.proposalReceived ? "border-green-300 bg-green-50/30" : "border-border"}`}>
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-foreground">{supplier.name}</span>
-                      <label className="flex items-center gap-2 text-xs cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={supplier.proposalReceived}
-                          onChange={(e) => updateSupplier(index, "proposalReceived", e.target.checked)}
-                          className="rounded border-border"
-                        />
-                        Proposta recebida
-                      </label>
-                    </div>
-                    {supplier.proposalReceived && (
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Preço (R$)</Label>
-                          <Input placeholder="0,00" value={supplier.price} onChange={(e) => updateSupplier(index, "price", e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Prazo de Entrega</Label>
-                          <Input type="date" value={supplier.deadline} onChange={(e) => updateSupplier(index, "deadline", e.target.value)} />
-                        </div>
-                        <div className="col-span-2 space-y-1">
-                          <Label className="text-xs">Observações</Label>
-                          <Textarea placeholder="Condições, frete, garantia..." value={supplier.notes} onChange={(e) => updateSupplier(index, "notes", e.target.value)} className="min-h-[60px]" />
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-              <DialogFooter>
-                <Button variant="ghost" onClick={() => setPhase("suppliers")}>Voltar</Button>
-                <Button variant="vp" disabled={!allProposalsReceived || isSaving} onClick={advanceToWinner}>
-                  Selecionar Vencedor <ArrowRight className="h-4 w-4 ml-1" />
-                </Button>
-              </DialogFooter>
-            </div>
-          )}
-
-          {phase === "winner" && (
-            <div className="space-y-4 mt-2">
-              <p className="text-sm text-muted-foreground">Compare as propostas e selecione o fornecedor vencedor.</p>
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold">Critério de Vitória</Label>
-                <div className="flex gap-2">
-                  {(Object.keys(criteriaLabels) as WinCriteria[]).map((criteria) => (
-                    <Button
-                      key={criteria}
-                      variant={winCriteria === criteria ? "vp" : "outline"}
-                      size="sm"
-                      onClick={() => setWinCriteria(criteria)}
-                      className="text-xs"
-                    >
-                      {criteriaLabels[criteria].icon}
-                      <span className="ml-1">{criteriaLabels[criteria].label}</span>
-                    </Button>
+        {/* Filtros — mesmo padrão de busca+módulo usado em Movimentações */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por ticket ou título..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Select value={moduleFilter} onValueChange={setModuleFilter}>
+                <SelectTrigger className="w-full sm:w-[130px]">
+                  <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <SelectValue placeholder="Módulo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {["Todos", "M1", "M2", "M3", "M4", "M5", "M6"].map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {m === "Todos" ? "Módulo" : m}
+                    </SelectItem>
                   ))}
-                </div>
-              </div>
+                </SelectContent>
+              </Select>
+              <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
+                <SelectTrigger className="w-full sm:w-[130px]">
+                  <SelectValue placeholder="Urgência" />
+                </SelectTrigger>
+                <SelectContent>
+                  {["Todos", "LOW", "MEDIUM", "HIGH", "URGENT"].map((u) => (
+                    <SelectItem key={u} value={u}>
+                      {u === "Todos" ? "Urgência" : urgLabel[u] || u}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
 
-              <div className="space-y-3">
-                {suppliers.map((supplier, index) => (
-                  <Card
-                    key={supplier.id || index}
-                    className={`border-2 cursor-pointer transition-all ${winnerIndex === index ? "border-vp-yellow bg-amber-50/50 shadow-md" : "border-border hover:border-vp-yellow/50"}`}
-                    onClick={() => setWinnerIndex(index)}
+        <div className="space-y-3">
+          {filteredQueue.map((item) => (
+            <Card key={item.requisitionId} className="card-hover-yellow">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {item.ticketNumber}
+                  </Badge>
+                  <div>
+                    <p className="font-semibold text-foreground text-sm">{item.title}</p>
+                    <p className="text-xs text-muted-foreground">Módulo: {item.module}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${statusBadge(item.status)}`}
                   >
-                    <CardContent className="p-4">
+                    {statusLabel[item.status]}
+                  </span>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${urgBadge(item.urgency)}`}
+                  >
+                    {urgLabel[item.urgency] || item.urgency}
+                  </span>
+                  <Link
+                    to="/movimentacoes"
+                    search={{ ticket: item.ticketNumber, module: undefined }}
+                    target="_blank"
+                    title="Ver histórico completo do ticket"
+                    className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-vp-yellow transition-colors"
+                  >
+                    <ScrollText className="h-3.5 w-3.5" />
+                  </Link>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                    title="Devolver ao solicitante por falta de informação"
+                    onClick={() => openReturnDialog(item)}
+                  >
+                    <Undo2 className="h-3.5 w-3.5 mr-1" /> Devolver
+                  </Button>
+                  <Button variant="vp" size="sm" onClick={() => openQuotation(item)}>
+                    {item.status === "pending" ? "Cotar" : "Continuar"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+
+          {filteredQueue.length === 0 && (
+            <Card className="card-hover-yellow">
+              <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                {queue.length === 0
+                  ? "Nenhuma requisição aguardando cotação neste momento."
+                  : "Nenhum resultado para os filtros atuais."}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Cotações já aprovadas (V3) — corrigir preço errado percebido em Compra (V4) */}
+        {correctableQueue.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <h2 className="text-sm font-semibold text-foreground">
+                Cotações Aprovadas — Corrigir Preço
+              </h2>
+            </div>
+            <p className="text-xs text-muted-foreground -mt-1">
+              Preço errado descoberto depois da aprovação? Corrija aqui — a requisição volta para V3
+              e precisa ser reaprovada com o valor certo.
+            </p>
+            {correctableQueue.map((item) => (
+              <Card key={item.requisitionId} className="border-amber-200">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <Badge variant="outline" className="font-mono text-xs">
+                      {item.ticketNumber}
+                    </Badge>
+                    <div>
+                      <p className="font-semibold text-foreground text-sm">{item.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Módulo: {item.module} · Total aprovado: R${" "}
+                        {item.totalValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-amber-300 text-amber-800 hover:bg-amber-50"
+                    onClick={() => openCorrectDialog(item)}
+                  >
+                    <PencilLine className="h-3.5 w-3.5 mr-1" /> Corrigir preço
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Dialog padrão (não-M2) */}
+        <Dialog
+          open={!!selectedItem && !confirmDialog}
+          onOpenChange={(open) => !open && closeDialog()}
+        >
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-lg">Cotação — {selectedItem?.ticketNumber}</DialogTitle>
+              <DialogDescription>{selectedItem?.title}</DialogDescription>
+            </DialogHeader>
+
+            {selectedItem?.requesterNotes && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-semibold text-amber-800 mb-1">
+                  Observações do Requisitante
+                </p>
+                <p className="text-sm text-amber-900">{selectedItem.requesterNotes}</p>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 text-xs">
+              <span
+                className={`rounded-full px-3 py-1 font-medium ${phase === "suppliers" ? "bg-vp-yellow text-vp-dark" : "bg-muted text-muted-foreground"}`}
+              >
+                1. Fornecedores
+              </span>
+              <ArrowRight className="h-3 w-3 text-muted-foreground" />
+              <span
+                className={`rounded-full px-3 py-1 font-medium ${phase === "proposals" ? "bg-vp-yellow text-vp-dark" : "bg-muted text-muted-foreground"}`}
+              >
+                2. Propostas
+              </span>
+              <ArrowRight className="h-3 w-3 text-muted-foreground" />
+              <span
+                className={`rounded-full px-3 py-1 font-medium ${phase === "winner" ? "bg-vp-yellow text-vp-dark" : "bg-muted text-muted-foreground"}`}
+              >
+                3. Vencedor
+              </span>
+            </div>
+
+            {phase === "suppliers" && (
+              <div className="space-y-4 mt-2">
+                <p className="text-sm text-muted-foreground">
+                  Selecione até <strong>3 fornecedores</strong> para esta cotação.
+                </p>
+                {suppliers.map((supplier, index) => (
+                  <Card key={supplier.id || index} className="border border-border">
+                    <CardContent className="p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          {winnerIndex === index
-                            ? <Trophy className="h-5 w-5 text-vp-yellow-dark shrink-0" />
-                            : <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/40 shrink-0" />}
-                          <div>
-                            <p className="font-semibold text-sm text-foreground">{supplier.name}</p>
-                            <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
-                              <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" /> R$ {supplier.price || "0,00"}</span>
-                              <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {supplier.deadline || "—"}</span>
-                            </div>
-                            {supplier.notes && <p className="text-xs text-muted-foreground mt-1">{supplier.notes}</p>}
-                          </div>
-                        </div>
-                        {winnerIndex === index
-                          ? <Badge className="bg-vp-yellow text-vp-dark border-vp-yellow-dark">Vencedor ✓</Badge>
-                          : <Badge variant="outline" className="text-muted-foreground text-xs">Selecionar</Badge>}
+                        <span className="text-sm font-semibold text-foreground">
+                          Fornecedor {index + 1}
+                        </span>
+                        {suppliers.length > 1 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-destructive"
+                            onClick={() => removeSupplier(index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Nome do Fornecedor</Label>
+                        <Input
+                          placeholder="Ex: ABC Ltda"
+                          value={supplier.name}
+                          onChange={(e) => updateSupplier(index, "name", e.target.value)}
+                        />
                       </div>
                     </CardContent>
                   </Card>
                 ))}
+                {suppliers.length < 3 && (
+                  <Button variant="outline" size="sm" className="w-full" onClick={addSupplier}>
+                    <Plus className="h-4 w-4 mr-1" /> Adicionar Fornecedor ({suppliers.length}/3)
+                  </Button>
+                )}
+                <DialogFooter>
+                  <Button variant="ghost" onClick={closeDialog}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    variant="vp"
+                    disabled={!canAdvanceToProposals || isSaving}
+                    onClick={advanceToProposals}
+                  >
+                    Enviar para Cotação <ArrowRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </DialogFooter>
               </div>
-
-              <DialogFooter>
-                <Button variant="ghost" onClick={() => setPhase("proposals")}>Voltar</Button>
-                <Button variant="vp" disabled={winnerIndex === null || isSaving} onClick={() => setConfirmDialog(true)}>
-                  <CheckCircle2 className="h-4 w-4 mr-1" /> Finalizar Cotação
-                </Button>
-              </DialogFooter>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={confirmDialog} onOpenChange={setConfirmDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Confirmar Vencedor</DialogTitle>
-            <DialogDescription>
-              Esta ação enviará os dados ao Módulo V3 — Aprovação.
-            </DialogDescription>
-          </DialogHeader>
-          {winnerIndex !== null && suppliers[winnerIndex] && (
-            <div className="rounded-lg border border-vp-yellow bg-amber-50 p-4 space-y-2">
-              <div className="flex items-center gap-2">
-                <Trophy className="h-5 w-5 text-vp-yellow-dark" />
-                <span className="font-semibold text-foreground">{suppliers[winnerIndex].name}</span>
-              </div>
-              <div className="text-sm text-muted-foreground space-y-1">
-                <p>Valor: <strong className="text-foreground">R$ {suppliers[winnerIndex].price}</strong></p>
-                <p>Prazo: <strong className="text-foreground">{suppliers[winnerIndex].deadline || "—"}</strong></p>
-                <p>Critério: <strong className="text-foreground">{criteriaLabels[winCriteria].label}</strong></p>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setConfirmDialog(false)}>Cancelar</Button>
-            <Button variant="vp" onClick={handleConfirmWinner} disabled={isSaving}>
-              Confirmar e Enviar ao V3
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog M2 — cotação por item de viagem */}
-      <Dialog open={!!m2Item} onOpenChange={(open) => !open && closeM2Dialog()}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-lg flex items-center gap-2">
-              {isM1Fractioned ? <Package className="h-5 w-5 text-vp-yellow-dark" /> : <Plane className="h-5 w-5 text-vp-yellow-dark" />}
-              {isM1Fractioned ? "Cotação Fracionada" : "Cotação de Viagem"} — {m2Item?.ticketNumber}
-            </DialogTitle>
-            <DialogDescription>{m2Item?.title}</DialogDescription>
-          </DialogHeader>
-
-          {m2Item?.requesterNotes && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-              <p className="text-xs font-semibold text-amber-800 mb-1">Observações do Requisitante</p>
-              <p className="text-sm text-amber-900">{m2Item.requesterNotes}</p>
-            </div>
-          )}
-
-          <p className="text-sm text-muted-foreground">
-            {isM1Fractioned
-              ? "Atribua um fornecedor e valor para cada produto. Você pode usar fornecedores diferentes por item para fracionar a compra."
-              : "Atribua um fornecedor para cada item de viagem abaixo."}
-          </p>
-
-          <div className={isM1Fractioned ? "space-y-2" : "space-y-4"}>
-            {(m2Item?.travelItems || []).map((ti) => {
-              const cfg = travelItemLabels[ti.itemType] ?? { label: ti.itemType, icon: null };
-              const q = m2Quotes[ti.id] ?? { supplierName: "", price: 0, deadline: "", notes: "" };
-              const update = (field: string, value: string | number) =>
-                setM2Quotes((prev) => ({ ...prev, [ti.id]: { ...prev[ti.id], [field]: value } }));
-
-              if (isM1Fractioned) {
-                return (
-                  <div key={ti.id} className="rounded-lg border border-border p-3 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="text-xs">
-                        {ti.productCode && (
-                          <span className="font-mono text-muted-foreground mr-1">[{ti.productCode}]</span>
-                        )}
-                        <span className="font-semibold text-foreground">{ti.description || "Item"}</span>
-                        {ti.quantity != null && (
-                          <span className="text-muted-foreground"> — qtd. {ti.quantity}</span>
-                        )}
-                      </div>
-                      {q.supplierName?.trim() && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2 text-[10px] text-muted-foreground shrink-0"
-                          title="Aplicar este fornecedor aos itens ainda sem fornecedor"
-                          onClick={() => applySupplierToAll(ti.id)}
-                        >
-                          <CopyPlus className="h-3 w-3 mr-1" />
-                          Aplicar a todos
-                        </Button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Fornecedor *</Label>
-                        <Input
-                          className="h-8 text-sm"
-                          placeholder="Fornecedor"
-                          value={q.supplierName}
-                          onChange={(e) => update("supplierName", e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Valor (R$) *</Label>
-                        <Input
-                          className="h-8 text-sm"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="0,00"
-                          value={q.price || ""}
-                          onChange={(e) => update("price", parseFloat(e.target.value) || 0)}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Prazo</Label>
-                        <Input
-                          className="h-8 text-sm"
-                          type="date"
-                          value={q.deadline}
-                          onChange={(e) => update("deadline", e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              return (
-                <Card key={ti.id} className="border border-border">
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                      {cfg.icon}
-                      {cfg.label}
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="col-span-2 space-y-1">
-                        <Label className="text-xs">Fornecedor / Empresa *</Label>
-                        <Input
-                          placeholder="Ex.: LATAM Airlines, Hoteis.com, Localiza..."
-                          value={q.supplierName}
-                          onChange={(e) => update("supplierName", e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Valor (R$) *</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="0,00"
-                          value={q.price || ""}
-                          onChange={(e) => update("price", parseFloat(e.target.value) || 0)}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Data / Prazo</Label>
-                        <Input
-                          type="date"
-                          value={q.deadline}
-                          onChange={(e) => update("deadline", e.target.value)}
-                        />
-                      </div>
-                      <div className="col-span-2 space-y-1">
-                        <Label className="text-xs">Observações</Label>
-                        <Textarea
-                          placeholder="Número do voo, condições, categoria do hotel..."
-                          value={q.notes}
-                          onChange={(e) => update("notes", e.target.value)}
-                          className="min-h-[56px]"
-                        />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-
-            {(m2Item?.travelItems || []).length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                Nenhum item encontrado. A requisição pode ter sido criada antes desta funcionalidade.
-              </p>
             )}
-          </div>
 
-          {isM1Fractioned && (m2Item?.travelItems?.length ?? 0) > 0 && (
+            {phase === "proposals" && (
+              <div className="space-y-4 mt-2">
+                <p className="text-sm text-muted-foreground">
+                  Registre as propostas recebidas de cada fornecedor.
+                </p>
+                {suppliers.map((supplier, index) => (
+                  <Card
+                    key={supplier.id || index}
+                    className={`border ${supplier.proposalReceived ? "border-green-300 bg-green-50/30" : "border-border"}`}
+                  >
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-foreground">
+                          {supplier.name}
+                        </span>
+                        <label className="flex items-center gap-2 text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={supplier.proposalReceived}
+                            onChange={(e) =>
+                              updateSupplier(index, "proposalReceived", e.target.checked)
+                            }
+                            className="rounded border-border"
+                          />
+                          Proposta recebida
+                        </label>
+                      </div>
+                      {supplier.proposalReceived && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Preço (R$)</Label>
+                            <Input
+                              placeholder="0,00"
+                              value={supplier.price}
+                              onChange={(e) => updateSupplier(index, "price", e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Prazo de Entrega</Label>
+                            <Input
+                              type="date"
+                              value={supplier.deadline}
+                              onChange={(e) => updateSupplier(index, "deadline", e.target.value)}
+                            />
+                          </div>
+                          <div className="col-span-2 space-y-1">
+                            <Label className="text-xs">Observações</Label>
+                            <Textarea
+                              placeholder="Condições, frete, garantia..."
+                              value={supplier.notes}
+                              onChange={(e) => updateSupplier(index, "notes", e.target.value)}
+                              className="min-h-[60px]"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setPhase("suppliers")}>
+                    Voltar
+                  </Button>
+                  <Button
+                    variant="vp"
+                    disabled={!allProposalsReceived || isSaving}
+                    onClick={advanceToWinner}
+                  >
+                    Selecionar Vencedor <ArrowRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </DialogFooter>
+              </div>
+            )}
+
+            {phase === "winner" && (
+              <div className="space-y-4 mt-2">
+                <p className="text-sm text-muted-foreground">
+                  Compare as propostas e selecione o fornecedor vencedor.
+                </p>
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">Critério de Vitória</Label>
+                  <div className="flex gap-2">
+                    {(Object.keys(criteriaLabels) as WinCriteria[]).map((criteria) => (
+                      <Button
+                        key={criteria}
+                        variant={winCriteria === criteria ? "vp" : "outline"}
+                        size="sm"
+                        onClick={() => setWinCriteria(criteria)}
+                        className="text-xs"
+                      >
+                        {criteriaLabels[criteria].icon}
+                        <span className="ml-1">{criteriaLabels[criteria].label}</span>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {suppliers.map((supplier, index) => (
+                    <Card
+                      key={supplier.id || index}
+                      className={`border-2 cursor-pointer transition-all ${winnerIndex === index ? "border-vp-yellow bg-amber-50/50 shadow-md" : "border-border hover:border-vp-yellow/50"}`}
+                      onClick={() => setWinnerIndex(index)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            {winnerIndex === index ? (
+                              <Trophy className="h-5 w-5 text-vp-yellow-dark shrink-0" />
+                            ) : (
+                              <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/40 shrink-0" />
+                            )}
+                            <div>
+                              <p className="font-semibold text-sm text-foreground">
+                                {supplier.name}
+                              </p>
+                              <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <DollarSign className="h-3 w-3" /> R$ {supplier.price || "0,00"}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" /> {supplier.deadline || "—"}
+                                </span>
+                              </div>
+                              {supplier.notes && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {supplier.notes}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          {winnerIndex === index ? (
+                            <Badge className="bg-vp-yellow text-vp-dark border-vp-yellow-dark">
+                              Vencedor ✓
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-muted-foreground text-xs">
+                              Selecionar
+                            </Badge>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setPhase("proposals")}>
+                    Voltar
+                  </Button>
+                  <Button
+                    variant="vp"
+                    disabled={winnerIndex === null || isSaving}
+                    onClick={() => setConfirmDialog(true)}
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-1" /> Finalizar Cotação
+                  </Button>
+                </DialogFooter>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={confirmDialog} onOpenChange={setConfirmDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Confirmar Vencedor</DialogTitle>
+              <DialogDescription>
+                Esta ação enviará os dados ao Módulo V3 — Aprovação.
+              </DialogDescription>
+            </DialogHeader>
+            {winnerIndex !== null && suppliers[winnerIndex] && (
+              <div className="rounded-lg border border-vp-yellow bg-amber-50 p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Trophy className="h-5 w-5 text-vp-yellow-dark" />
+                  <span className="font-semibold text-foreground">
+                    {suppliers[winnerIndex].name}
+                  </span>
+                </div>
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <p>
+                    Valor:{" "}
+                    <strong className="text-foreground">R$ {suppliers[winnerIndex].price}</strong>
+                  </p>
+                  <p>
+                    Prazo:{" "}
+                    <strong className="text-foreground">
+                      {suppliers[winnerIndex].deadline || "—"}
+                    </strong>
+                  </p>
+                  <p>
+                    Critério:{" "}
+                    <strong className="text-foreground">{criteriaLabels[winCriteria].label}</strong>
+                  </p>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setConfirmDialog(false)}>
+                Cancelar
+              </Button>
+              <Button variant="vp" onClick={handleConfirmWinner} disabled={isSaving}>
+                Confirmar e Enviar ao V3
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog M2 — cotação por item de viagem */}
+        <Dialog open={!!m2Item} onOpenChange={(open) => !open && closeM2Dialog()}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-lg flex items-center gap-2">
+                {isM1Fractioned ? (
+                  <Package className="h-5 w-5 text-vp-yellow-dark" />
+                ) : (
+                  <Plane className="h-5 w-5 text-vp-yellow-dark" />
+                )}
+                {isM1Fractioned ? "Cotação Fracionada" : "Cotação de Viagem"} —{" "}
+                {m2Item?.ticketNumber}
+              </DialogTitle>
+              <DialogDescription>{m2Item?.title}</DialogDescription>
+            </DialogHeader>
+
+            {m2Item?.requesterNotes && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-semibold text-amber-800 mb-1">
+                  Observações do Requisitante
+                </p>
+                <p className="text-sm text-amber-900">{m2Item.requesterNotes}</p>
+              </div>
+            )}
+
+            <p className="text-sm text-muted-foreground">
+              {isM1Fractioned
+                ? "Atribua um fornecedor e valor para cada produto. Você pode usar fornecedores diferentes por item para fracionar a compra."
+                : "Atribua um fornecedor para cada item de viagem abaixo."}
+            </p>
+
+            <div className={isM1Fractioned ? "space-y-2" : "space-y-4"}>
+              {(m2Item?.travelItems || []).map((ti) => {
+                const cfg = travelItemLabels[ti.itemType] ?? { label: ti.itemType, icon: null };
+                const q = m2Quotes[ti.id] ?? {
+                  supplierName: "",
+                  price: 0,
+                  deadline: "",
+                  notes: "",
+                };
+                const update = (field: string, value: string | number) =>
+                  setM2Quotes((prev) => ({ ...prev, [ti.id]: { ...prev[ti.id], [field]: value } }));
+
+                if (isM1Fractioned) {
+                  return (
+                    <div key={ti.id} className="rounded-lg border border-border p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-xs">
+                          {ti.productCode && (
+                            <span className="font-mono text-muted-foreground mr-1">
+                              [{ti.productCode}]
+                            </span>
+                          )}
+                          <span className="font-semibold text-foreground">
+                            {ti.description || "Item"}
+                          </span>
+                          {ti.quantity != null && (
+                            <span className="text-muted-foreground"> — qtd. {ti.quantity}</span>
+                          )}
+                        </div>
+                        {q.supplierName?.trim() && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-[10px] text-muted-foreground shrink-0"
+                            title="Aplicar este fornecedor aos itens ainda sem fornecedor"
+                            onClick={() => applySupplierToAll(ti.id)}
+                          >
+                            <CopyPlus className="h-3 w-3 mr-1" />
+                            Aplicar a todos
+                          </Button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Fornecedor *</Label>
+                          <Input
+                            className="h-8 text-sm"
+                            placeholder="Fornecedor"
+                            value={q.supplierName}
+                            onChange={(e) => update("supplierName", e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Valor (R$) *</Label>
+                          <Input
+                            className="h-8 text-sm"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0,00"
+                            value={q.price || ""}
+                            onChange={(e) => update("price", parseFloat(e.target.value) || 0)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Prazo</Label>
+                          <Input
+                            className="h-8 text-sm"
+                            type="date"
+                            value={q.deadline}
+                            onChange={(e) => update("deadline", e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <Card key={ti.id} className="border border-border">
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                        {cfg.icon}
+                        {cfg.label}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="col-span-2 space-y-1">
+                          <Label className="text-xs">Fornecedor / Empresa *</Label>
+                          <Input
+                            placeholder="Ex.: LATAM Airlines, Hoteis.com, Localiza..."
+                            value={q.supplierName}
+                            onChange={(e) => update("supplierName", e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Valor (R$) *</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0,00"
+                            value={q.price || ""}
+                            onChange={(e) => update("price", parseFloat(e.target.value) || 0)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Data / Prazo</Label>
+                          <Input
+                            type="date"
+                            value={q.deadline}
+                            onChange={(e) => update("deadline", e.target.value)}
+                          />
+                        </div>
+                        <div className="col-span-2 space-y-1">
+                          <Label className="text-xs">Observações</Label>
+                          <Textarea
+                            placeholder="Número do voo, condições, categoria do hotel..."
+                            value={q.notes}
+                            onChange={(e) => update("notes", e.target.value)}
+                            className="min-h-[56px]"
+                          />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+
+              {(m2Item?.travelItems || []).length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Nenhum item encontrado. A requisição pode ter sido criada antes desta
+                  funcionalidade.
+                </p>
+              )}
+            </div>
+
+            {isM1Fractioned && (m2Item?.travelItems?.length ?? 0) > 0 && (
+              <div className="rounded-lg bg-accent/50 p-3 text-xs text-muted-foreground">
+                Fornecedores distintos nesta cotação:{" "}
+                <strong className="text-foreground">
+                  {new Set(
+                    Object.values(m2Quotes)
+                      .map((q) => q.supplierName?.trim())
+                      .filter(Boolean),
+                  ).size || 0}
+                </strong>
+              </div>
+            )}
+
             <div className="rounded-lg bg-accent/50 p-3 text-xs text-muted-foreground">
-              Fornecedores distintos nesta cotação:{" "}
+              Valor total estimado:{" "}
               <strong className="text-foreground">
-                {new Set(Object.values(m2Quotes).map((q) => q.supplierName?.trim()).filter(Boolean)).size || 0}
+                R${" "}
+                {Object.values(m2Quotes)
+                  .reduce((sum, q) => sum + (q.price || 0), 0)
+                  .toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
               </strong>
             </div>
-          )}
 
-          <div className="rounded-lg bg-accent/50 p-3 text-xs text-muted-foreground">
-            Valor total estimado:{" "}
-            <strong className="text-foreground">
-              R$ {Object.values(m2Quotes).reduce((sum, q) => sum + (q.price || 0), 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-            </strong>
-          </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={closeM2Dialog}>
+                Cancelar
+              </Button>
+              <Button
+                variant="vp"
+                disabled={isM2Saving || (m2Item?.travelItems || []).length === 0}
+                onClick={handleM2Submit}
+              >
+                <CheckCircle2 className="h-4 w-4 mr-1" />
+                {isM2Saving
+                  ? "Salvando..."
+                  : isM1Fractioned
+                    ? "Finalizar Cotação Fracionada"
+                    : "Finalizar Cotação de Viagem"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-          <DialogFooter>
-            <Button variant="ghost" onClick={closeM2Dialog}>Cancelar</Button>
-            <Button
-              variant="vp"
-              disabled={isM2Saving || (m2Item?.travelItems || []).length === 0}
-              onClick={handleM2Submit}
-            >
-              <CheckCircle2 className="h-4 w-4 mr-1" />
-              {isM2Saving ? "Salvando..." : isM1Fractioned ? "Finalizar Cotação Fracionada" : "Finalizar Cotação de Viagem"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        {/* Dialog — devolver ao solicitante por falta de informação */}
+        <Dialog open={!!returnItem} onOpenChange={(open) => !open && closeReturnDialog()}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-700">
+                <AlertTriangle className="h-5 w-5" /> Devolver ao Solicitante
+              </DialogTitle>
+              <DialogDescription>
+                {returnItem?.ticketNumber} — {returnItem?.title}. A requisição sai da fila de
+                cotação e só volta depois que o solicitante corrigir e reenviar.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-1">
+              <Label className="text-xs">Motivo (o que falta ou precisa ser corrigido) *</Label>
+              <Textarea
+                placeholder="Ex.: Faltou anexar os documentos de viagem do passageiro."
+                value={returnReason}
+                onChange={(e) => setReturnReason(e.target.value)}
+                className="min-h-[100px]"
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={closeReturnDialog}>
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={!returnReason.trim() || isReturning}
+                onClick={confirmReturnForInfo}
+              >
+                <Undo2 className="h-4 w-4 mr-1" /> Devolver ao Solicitante
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-      {/* Dialog — devolver ao solicitante por falta de informação */}
-      <Dialog open={!!returnItem} onOpenChange={(open) => !open && closeReturnDialog()}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-700">
-              <AlertTriangle className="h-5 w-5" /> Devolver ao Solicitante
-            </DialogTitle>
-            <DialogDescription>
-              {returnItem?.ticketNumber} — {returnItem?.title}. A requisição sai da fila de cotação e só volta depois que o solicitante corrigir e reenviar.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-1">
-            <Label className="text-xs">Motivo (o que falta ou precisa ser corrigido) *</Label>
-            <Textarea
-              placeholder="Ex.: Faltou anexar os documentos de viagem do passageiro."
-              value={returnReason}
-              onChange={(e) => setReturnReason(e.target.value)}
-              className="min-h-[100px]"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={closeReturnDialog}>Cancelar</Button>
-            <Button
-              variant="destructive"
-              disabled={!returnReason.trim() || isReturning}
-              onClick={confirmReturnForInfo}
-            >
-              <Undo2 className="h-4 w-4 mr-1" /> Devolver ao Solicitante
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+        {/* Dialog — corrigir preço de cotação já aprovada */}
+        <Dialog open={!!correctItem} onOpenChange={(open) => !open && closeCorrectDialog()}>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-amber-800">
+                <PencilLine className="h-5 w-5" /> Corrigir Preço da Cotação
+              </DialogTitle>
+              <DialogDescription>
+                {correctItem?.ticketNumber} — {correctItem?.title}. Esta ação reabre a aprovação
+                (V3) com o novo total — a requisição sai da fila de Compra até ser reaprovada.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3">
+              {correctItem?.winners.map((winner) => (
+                <div key={winner.supplierId} className="space-y-1">
+                  <Label className="text-xs">
+                    {winner.itemDescription
+                      ? `${winner.itemDescription} — ${winner.supplierName}`
+                      : winner.supplierName}
+                  </Label>
+                  <Input
+                    placeholder="0,00"
+                    value={correctPrices[winner.supplierId] ?? ""}
+                    onChange={(e) =>
+                      setCorrectPrices((prev) => ({ ...prev, [winner.supplierId]: e.target.value }))
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-lg bg-accent/50 p-3 text-xs text-muted-foreground">
+              Novo total:{" "}
+              <strong className="text-foreground">
+                R$ {correctedTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              </strong>
+              {correctItem && correctedTotal !== correctItem.totalValue && (
+                <span>
+                  {" "}
+                  (era R${" "}
+                  {correctItem.totalValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })})
+                </span>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Motivo da correção *</Label>
+              <Textarea
+                placeholder="Ex.: preço do item digitado errado na cotação — valor correto confirmado com o fornecedor."
+                value={correctReason}
+                onChange={(e) => setCorrectReason(e.target.value)}
+                className="min-h-[80px]"
+              />
+            </div>
+
+            <DialogFooter>
+              <Button variant="ghost" onClick={closeCorrectDialog}>
+                Cancelar
+              </Button>
+              <Button
+                variant="vp"
+                disabled={!correctReason.trim() || isCorrecting}
+                onClick={confirmCorrection}
+              >
+                <PencilLine className="h-4 w-4 mr-1" /> Corrigir e Reenviar para Aprovação
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
     </AccessGuard>
   );
 }
