@@ -79,6 +79,7 @@ const DIALOG_KEY = "vpreq_m3";
 export const Route = createFileRoute("/services")({
   validateSearch: (search: Record<string, unknown>) => ({
     edit: typeof search.edit === "string" ? search.edit : undefined,
+    duplicate: typeof search.duplicate === "string" ? search.duplicate : undefined,
   }),
   head: () => ({
     meta: [
@@ -90,7 +91,7 @@ export const Route = createFileRoute("/services")({
 });
 
 function ServicesPage() {
-  const { edit: editTicketNumber } = Route.useSearch();
+  const { edit: editTicketNumber, duplicate: duplicateTicketNumber } = Route.useSearch();
   const router = useRouter();
   const { session, profile, user } = useAuth();
   const [tickets, setTickets] = useState<TicketRow[]>([]);
@@ -104,6 +105,7 @@ function ServicesPage() {
   const [editMode, setEditMode] = useState(false);
   const [editReqId, setEditReqId] = useState<string | null>(null);
   const [editEdition, setEditEdition] = useState(1);
+  const [duplicateFrom, setDuplicateFrom] = useState<string | null>(null);
 
   // Step 0 — Serviço
   const [serviceName, setServiceName] = useState("");
@@ -174,21 +176,30 @@ function ServicesPage() {
   }, [session]);
 
   useEffect(() => {
-    if (!editTicketNumber || !session) return;
+    const sourceTicketNumber = editTicketNumber || duplicateTicketNumber;
+    if (!sourceTicketNumber || !session) return;
+    const isDuplicate = !editTicketNumber && !!duplicateTicketNumber;
     void (async () => {
       const { data } = await supabaseBrowser
         .from("requisitions")
         .select("id,title,description,justification,urgency,desired_date,module_data,edition")
-        .eq("ticket_number", editTicketNumber)
+        .eq("ticket_number", sourceTicketNumber)
         .maybeSingle();
       if (!data) {
         toast.error("Requisição não encontrada.");
         return;
       }
       const md = (data.module_data ?? {}) as Record<string, unknown>;
-      setEditMode(true);
-      setEditReqId(data.id as string);
-      setEditEdition((data.edition as number | undefined) ?? 1);
+      if (isDuplicate) {
+        setDuplicateFrom(sourceTicketNumber);
+        toast.info(
+          `Dados copiados de ${sourceTicketNumber} — revise e envie como uma nova requisição.`,
+        );
+      } else {
+        setEditMode(true);
+        setEditReqId(data.id as string);
+        setEditEdition((data.edition as number | undefined) ?? 1);
+      }
       const rawTitle = (data.title as string) ?? "";
       const parenIdx = rawTitle.lastIndexOf(" (");
       setServiceName(parenIdx > 0 ? rawTitle.slice(0, parenIdx) : rawTitle);
@@ -202,11 +213,15 @@ function ServicesPage() {
       if (Array.isArray(md.milestones)) setMilestones(md.milestones as Milestone[]);
       setUrgencyLevel((data.urgency as string) ?? "");
       setJustification((data.justification as string) ?? "");
-      if (data.desired_date) setDeadline(parseLocalDate(data.desired_date as string));
+      // Duplicar não copia o prazo antigo — um ticket concluído/cancelado
+      // pode ter data no passado; deixa em branco para escolher uma data nova.
+      if (!isDuplicate && data.desired_date) {
+        setDeadline(parseLocalDate(data.desired_date as string));
+      }
       setStep(0);
       setDialogOpen(true);
     })();
-  }, [editTicketNumber, session]);
+  }, [editTicketNumber, duplicateTicketNumber, session]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -279,6 +294,7 @@ function ServicesPage() {
     setDeadline(undefined);
     setUrgencyLevel("");
     setJustification("");
+    setDuplicateFrom(null);
   };
 
   const validateStep = (): boolean => {
@@ -479,7 +495,9 @@ function ServicesPage() {
             <DialogTitle>
               {editMode
                 ? `Editando ${editTicketNumber} — ${editEdition + 1}ª Edição`
-                : "Nova Requisição de Serviço"}
+                : duplicateFrom
+                  ? `Nova Requisição de Serviço — copiada de ${duplicateFrom}`
+                  : "Nova Requisição de Serviço"}
             </DialogTitle>
             <DialogDescription>
               {editMode

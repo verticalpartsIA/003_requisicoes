@@ -119,6 +119,7 @@ const STEPS = [
 export const Route = createFileRoute("/trips")({
   validateSearch: (search: Record<string, unknown>) => ({
     edit: typeof search.edit === "string" ? search.edit : undefined,
+    duplicate: typeof search.duplicate === "string" ? search.duplicate : undefined,
   }),
   head: () => ({
     meta: [
@@ -132,7 +133,7 @@ export const Route = createFileRoute("/trips")({
 const DIALOG_KEY = "vpreq_m2";
 
 function TripsPage() {
-  const { edit: editTicketNumber } = Route.useSearch();
+  const { edit: editTicketNumber, duplicate: duplicateTicketNumber } = Route.useSearch();
   const router = useRouter();
   const { session, profile, user } = useAuth();
   const [tickets, setTickets] = useState<TicketRow[]>([]);
@@ -146,6 +147,7 @@ function TripsPage() {
   const [editMode, setEditMode] = useState(false);
   const [editReqId, setEditReqId] = useState<string | null>(null);
   const [editEdition, setEditEdition] = useState(1);
+  const [duplicateFrom, setDuplicateFrom] = useState<string | null>(null);
   const [travelerExistingPaths, setTravelerExistingPaths] = useState<Record<string, string | null>>(
     {},
   );
@@ -277,25 +279,38 @@ function TripsPage() {
   }, [session]);
 
   useEffect(() => {
-    if (!editTicketNumber || !session) return;
+    const sourceTicketNumber = editTicketNumber || duplicateTicketNumber;
+    if (!sourceTicketNumber || !session) return;
+    const isDuplicate = !editTicketNumber && !!duplicateTicketNumber;
     void (async () => {
       const { data } = await supabaseBrowser
         .from("requisitions")
         .select("id,title,description,justification,urgency,desired_date,module_data,edition")
-        .eq("ticket_number", editTicketNumber)
+        .eq("ticket_number", sourceTicketNumber)
         .maybeSingle();
       if (!data) {
         toast.error("Requisição não encontrada.");
         return;
       }
       const md = (data.module_data ?? {}) as Record<string, unknown>;
-      setEditMode(true);
-      setEditReqId(data.id as string);
-      setEditEdition((data.edition as number | undefined) ?? 1);
+      if (isDuplicate) {
+        setDuplicateFrom(sourceTicketNumber);
+        toast.info(
+          `Dados copiados de ${sourceTicketNumber} — revise e envie como uma nova requisição.`,
+        );
+      } else {
+        setEditMode(true);
+        setEditReqId(data.id as string);
+        setEditEdition((data.edition as number | undefined) ?? 1);
+      }
       setOriginCity((md.origin_city as string | undefined) ?? "");
       setDestinationCity((md.destination_city as string | undefined) ?? "");
-      if (md.departure_date) setDepartureDate(parseLocalDate(md.departure_date as string));
-      if (md.return_date) setReturnDate(parseLocalDate(md.return_date as string));
+      // Duplicar não copia as datas antigas — um ticket concluído/cancelado
+      // pode ter datas no passado; deixa em branco para escolher datas novas.
+      if (!isDuplicate) {
+        if (md.departure_date) setDepartureDate(parseLocalDate(md.departure_date as string));
+        if (md.return_date) setReturnDate(parseLocalDate(md.return_date as string));
+      }
       setTransportMode((md.transport_mode as string | undefined) ?? "");
       setFlightClass((md.flight_class as string | undefined) ?? "ECONOMICA");
       setFlightTimePreference((md.flight_time_preference as string | undefined) ?? "QUALQUER");
@@ -336,7 +351,7 @@ function TripsPage() {
       setStep(0);
       setDialogOpen(true);
     })();
-  }, [editTicketNumber, session]);
+  }, [editTicketNumber, duplicateTicketNumber, session]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -417,6 +432,7 @@ function TripsPage() {
     setProjectNumber("");
     setJustification("");
     setShortNoticeJustification("");
+    setDuplicateFrom(null);
   };
 
   const togglePurpose = (val: string) => {
@@ -715,7 +731,9 @@ function TripsPage() {
             <DialogTitle>
               {editMode
                 ? `Editando ${editTicketNumber} — ${editEdition + 1}ª Edição`
-                : "Nova Requisição de Viagem"}
+                : duplicateFrom
+                  ? `Nova Requisição de Viagem — copiada de ${duplicateFrom}`
+                  : "Nova Requisição de Viagem"}
             </DialogTitle>
             <DialogDescription>
               {editMode

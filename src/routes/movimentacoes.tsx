@@ -31,6 +31,7 @@ import {
   Check,
   Pencil,
   Trash2,
+  Copy,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -208,10 +209,26 @@ const slaOptions = ["Todos", "ok", "warning", "breach"];
 type StatusQuickFilter = "Todos" | "OPEN" | "COTAÇÃO" | "APROVAÇÃO" | "CONCLUÍDO";
 const OPEN_STATUS_SET = new Set<string>(OPEN_STATUSES);
 const quickFilterCards: { key: StatusQuickFilter; label: string; icon: React.ReactNode }[] = [
-  { key: "OPEN", label: "Tickets Abertos", icon: <Clock className="h-5 w-5 text-vp-yellow-dark" /> },
-  { key: "COTAÇÃO", label: "Em Cotação", icon: <FileText className="h-5 w-5 text-vp-yellow-dark" /> },
-  { key: "APROVAÇÃO", label: "Em Aprovação", icon: <AlertTriangle className="h-5 w-5 text-vp-yellow-dark" /> },
-  { key: "CONCLUÍDO", label: "Concluídos", icon: <CheckCircle2 className="h-5 w-5 text-vp-yellow-dark" /> },
+  {
+    key: "OPEN",
+    label: "Tickets Abertos",
+    icon: <Clock className="h-5 w-5 text-vp-yellow-dark" />,
+  },
+  {
+    key: "COTAÇÃO",
+    label: "Em Cotação",
+    icon: <FileText className="h-5 w-5 text-vp-yellow-dark" />,
+  },
+  {
+    key: "APROVAÇÃO",
+    label: "Em Aprovação",
+    icon: <AlertTriangle className="h-5 w-5 text-vp-yellow-dark" />,
+  },
+  {
+    key: "CONCLUÍDO",
+    label: "Concluídos",
+    icon: <CheckCircle2 className="h-5 w-5 text-vp-yellow-dark" />,
+  },
 ];
 function matchesQuickFilter(status: string, filter: StatusQuickFilter): boolean {
   if (filter === "Todos") return true;
@@ -227,7 +244,9 @@ function mapActionToDescription(action: string, details: Record<string, unknown>
     (action === "GESTOR_REJECTED" || action === "QUOTATION_RETURNED_FOR_INFO") &&
     typeof details.reason === "string"
       ? ` — motivo: ${details.reason}`
-      : action === "APPROVAL_REJECTED" && typeof details.justification === "string" && details.justification
+      : action === "APPROVAL_REJECTED" &&
+          typeof details.justification === "string" &&
+          details.justification
         ? ` — motivo: ${details.justification}`
         : "";
   return base + suppliersCount + reason;
@@ -339,7 +358,8 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
           </h3>
           {data.delivery_location != null && data.delivery_location !== "" && (
             <p className="text-[11px] text-muted-foreground">
-              Local de Entrega: <span className="font-medium text-foreground">{f(data.delivery_location)}</span>
+              Local de Entrega:{" "}
+              <span className="font-medium text-foreground">{f(data.delivery_location)}</span>
             </p>
           )}
           <Card className="p-0 overflow-hidden">
@@ -361,20 +381,33 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
                         it.technical_specs ? `Espec.: ${f(it.technical_specs)}` : null,
                         it.brand_preference ? `Marca: ${f(it.brand_preference)}` : null,
                         it.model_reference ? `Ref.: ${f(it.model_reference)}` : null,
-                      ].filter(Boolean).join(" · ");
+                      ]
+                        .filter(Boolean)
+                        .join(" · ");
                       return (
                         <tr key={i} className={excelTable.row(i)}>
                           <td className={cn(excelTable.td, "text-muted-foreground")}>{i + 1}</td>
-                          <td className={cn(excelTable.td, "font-mono text-foreground")}>{f(it.product_code)}</td>
-                          <td className={cn(excelTable.td, "font-medium text-foreground")}>{f(it.product_name)}</td>
+                          <td className={cn(excelTable.td, "font-mono text-foreground")}>
+                            {f(it.product_code)}
+                          </td>
+                          <td className={cn(excelTable.td, "font-medium text-foreground")}>
+                            {f(it.product_name)}
+                          </td>
                           <td className={cn(excelTable.td, "text-foreground")}>
                             {f(it.description)}
-                            {details && <p className="text-[10px] text-muted-foreground mt-0.5">{details}</p>}
+                            {details && (
+                              <p className="text-[10px] text-muted-foreground mt-0.5">{details}</p>
+                            )}
                             {typeof it.photo_path === "string" && it.photo_path && (
-                              <StoragePhoto path={it.photo_path} alt={`Foto — ${f(it.product_name)}`} />
+                              <StoragePhoto
+                                path={it.photo_path}
+                                alt={`Foto — ${f(it.product_name)}`}
+                              />
                             )}
                           </td>
-                          <td className={cn(excelTable.tdRight, "text-foreground")}>{f(it.quantity)}</td>
+                          <td className={cn(excelTable.tdRight, "text-foreground")}>
+                            {f(it.quantity)}
+                          </td>
                         </tr>
                       );
                     })}
@@ -910,6 +943,18 @@ function MovimentacoesPage() {
     void router.navigate({ to: route, search: { edit: liveDetail.ticket_id } });
   };
 
+  /** Cria uma requisição nova pré-preenchida a partir desta — diferente de
+   *  "Editar", que atualiza a própria requisição (só permitido em
+   *  RASCUNHO/ABERTO/REJEITADO). Duplicar funciona em qualquer status,
+   *  inclusive CANCELADO/CONCLUÍDO, porque gera um ticket novo do zero. */
+  const handleNavigateDuplicate = () => {
+    if (!liveDetail) return;
+    const route = MODULE_ROUTES[liveDetail.module];
+    if (!route) return;
+    setSelectedTicket(null);
+    void router.navigate({ to: route, search: { duplicate: liveDetail.ticket_id } });
+  };
+
   /** Motivo da recusa — busca no histórico o evento de reprovação (gestor,
    * comprador na cotação, ou alçada) para o requisitante entender o que
    * precisa corrigir antes de reenviar. GESTOR_REJECTED e
@@ -919,12 +964,13 @@ function MovimentacoesPage() {
    * recente entre os três — um ticket pode ser devolvido na Cotação, corrigido,
    * seguir até a Aprovação e ser reprovado lá; sem isso o painel continuaria
    * atribuindo a reprovação mais recente ao evento antigo da Cotação. */
-  const rejectionEvents = liveDetail?.ticket_audit_logs.filter(
-    (l) =>
-      l.action === "GESTOR_REJECTED" ||
-      l.action === "QUOTATION_RETURNED_FOR_INFO" ||
-      l.action === "APPROVAL_REJECTED",
-  ) ?? [];
+  const rejectionEvents =
+    liveDetail?.ticket_audit_logs.filter(
+      (l) =>
+        l.action === "GESTOR_REJECTED" ||
+        l.action === "QUOTATION_RETURNED_FOR_INFO" ||
+        l.action === "APPROVAL_REJECTED",
+    ) ?? [];
   const rejectionEvent = rejectionEvents[rejectionEvents.length - 1];
   const isQuotationReturn = rejectionEvent?.action === "QUOTATION_RETURNED_FOR_INFO";
   const rejectionReason =
@@ -1175,7 +1221,13 @@ function MovimentacoesPage() {
   // Contagens do conjunto completo de tickets (não só os eventos carregados)
   // pros cards de resumo — os mesmos números que antes só existiam, estáticos,
   // no Dashboard.
-  const quickFilterCounts: Record<StatusQuickFilter, number> = { Todos: 0, OPEN: 0, COTAÇÃO: 0, APROVAÇÃO: 0, CONCLUÍDO: 0 };
+  const quickFilterCounts: Record<StatusQuickFilter, number> = {
+    Todos: 0,
+    OPEN: 0,
+    COTAÇÃO: 0,
+    APROVAÇÃO: 0,
+    CONCLUÍDO: 0,
+  };
   Object.values(ticketMeta).forEach((meta) => {
     if (OPEN_STATUS_SET.has(meta.status)) quickFilterCounts.OPEN++;
     if (meta.status === "COTAÇÃO") quickFilterCounts["COTAÇÃO"]++;
@@ -1224,7 +1276,9 @@ function MovimentacoesPage() {
                       {c.icon}
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-foreground">{quickFilterCounts[c.key]}</p>
+                      <p className="text-2xl font-bold text-foreground">
+                        {quickFilterCounts[c.key]}
+                      </p>
                       <p className="text-xs text-muted-foreground">{c.label}</p>
                     </div>
                   </CardContent>
@@ -1510,7 +1564,9 @@ function MovimentacoesPage() {
           {(detailLoading || !liveDetail) && (
             <SheetHeader className="sr-only">
               <SheetTitle>
-                {detailLoading ? "Carregando detalhes do ticket" : `Ticket ${selectedTicket} não encontrado`}
+                {detailLoading
+                  ? "Carregando detalhes do ticket"
+                  : `Ticket ${selectedTicket} não encontrado`}
               </SheetTitle>
             </SheetHeader>
           )}
@@ -1611,6 +1667,18 @@ function MovimentacoesPage() {
                     <Pencil className="h-4 w-4" />
                     Editar
                   </Button>
+                  {MODULE_ROUTES[liveDetail.module] && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 gap-2"
+                      title="Cria uma requisição nova com os mesmos dados — funciona mesmo se este ticket estiver cancelado ou concluído"
+                      onClick={handleNavigateDuplicate}
+                    >
+                      <Copy className="h-4 w-4" />
+                      Duplicar
+                    </Button>
+                  )}
                   {isAdmin && (
                     <Button
                       variant="outline"
@@ -1635,7 +1703,14 @@ function MovimentacoesPage() {
                   <Card>
                     <CardContent className="p-4 space-y-2">
                       <p className="text-sm font-semibold text-foreground">{liveDetail.title}</p>
-                      {!(liveDetail.module === "M1" && Array.isArray((liveDetail.module_data as Record<string, unknown> | null)?.items) && ((liveDetail.module_data as Record<string, unknown>).items as unknown[]).length > 0) && (
+                      {!(
+                        liveDetail.module === "M1" &&
+                        Array.isArray(
+                          (liveDetail.module_data as Record<string, unknown> | null)?.items,
+                        ) &&
+                        ((liveDetail.module_data as Record<string, unknown>).items as unknown[])
+                          .length > 0
+                      ) && (
                         <p className="text-xs text-muted-foreground">{liveDetail.description}</p>
                       )}
                       {liveDetail.justification && (

@@ -10,6 +10,8 @@ de PRs com diff completo, ver a aba *Pull requests* do repositório.
 
 ## 2026-08-25
 
+- feat(requisicoes): botão "Duplicar" em Movimentações cria uma requisição nova pré-preenchida a partir de qualquer ticket, inclusive CANCELADO/CONCLUÍDO — diferente de "Editar" (que atualiza o ticket original e só funciona em RASCUNHO/ABERTO/REJEITADO), duplicar sempre gera um ticket novo via `?duplicate=<ticket>` nos 6 módulos (M1-M6)
+
 - feat(cotacao): permite corrigir o preço de uma cotação já aprovada (V3) — reabre a aprovação (`decision` volta para `pending`, requisição volta para `APROVAÇÃO`) em vez de editar valores livremente, forçando reaprovação com o total certo — [relatório](docs/reports/2026-08-25-correcao-preco-cotacao-pos-aprovacao.md)
 
 ## 2026-08-19

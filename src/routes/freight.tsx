@@ -81,6 +81,7 @@ const DIALOG_KEY = "vpreq_m5";
 export const Route = createFileRoute("/freight")({
   validateSearch: (search: Record<string, unknown>) => ({
     edit: typeof search.edit === "string" ? search.edit : undefined,
+    duplicate: typeof search.duplicate === "string" ? search.duplicate : undefined,
   }),
   head: () => ({
     meta: [
@@ -92,7 +93,7 @@ export const Route = createFileRoute("/freight")({
 });
 
 function FreightPage() {
-  const { edit: editTicketNumber } = Route.useSearch();
+  const { edit: editTicketNumber, duplicate: duplicateTicketNumber } = Route.useSearch();
   const router = useRouter();
   const { session, profile, user } = useAuth();
   const [tickets, setTickets] = useState<TicketRow[]>([]);
@@ -108,6 +109,7 @@ function FreightPage() {
   const [editEdition, setEditEdition] = useState(1);
   const [editCargoPhotoPath, setEditCargoPhotoPath] = useState<string | null>(null);
   const [editCargoPicPaths, setEditCargoPicPaths] = useState<string[]>([]);
+  const [duplicateFrom, setDuplicateFrom] = useState<string | null>(null);
 
   const [originAddress, setOriginAddress] = useState("");
   const [destinationAddress, setDestinationAddress] = useState("");
@@ -221,23 +223,38 @@ function FreightPage() {
   }, [session]);
 
   useEffect(() => {
-    if (!editTicketNumber || !session) return;
+    const sourceTicketNumber = editTicketNumber || duplicateTicketNumber;
+    if (!sourceTicketNumber || !session) return;
+    const isDuplicate = !editTicketNumber && !!duplicateTicketNumber;
     void (async () => {
       const { data } = await supabaseBrowser
         .from("requisitions")
         .select("id,description,justification,urgency,desired_date,module_data,edition")
-        .eq("ticket_number", editTicketNumber)
+        .eq("ticket_number", sourceTicketNumber)
         .maybeSingle();
       if (!data) {
         toast.error("Requisição não encontrada.");
         return;
       }
       const md = (data.module_data ?? {}) as Record<string, unknown>;
-      setEditMode(true);
-      setEditReqId(data.id as string);
-      setEditEdition((data.edition as number | undefined) ?? 1);
-      setEditCargoPhotoPath((md.cargo_photo_path as string | null) ?? null);
-      setEditCargoPicPaths((md.cargo_photos_paths as string[] | undefined) ?? []);
+      if (isDuplicate) {
+        setDuplicateFrom(sourceTicketNumber);
+        toast.info(
+          `Dados copiados de ${sourceTicketNumber} — revise e envie como uma nova requisição.`,
+        );
+      } else {
+        setEditMode(true);
+        setEditReqId(data.id as string);
+        setEditEdition((data.edition as number | undefined) ?? 1);
+      }
+      // Duplicar não reaproveita as fotos antigas em silêncio — o comprador
+      // precisa anexar fotos novas (a UI não expõe/permite remover a foto
+      // "herdada" de editCargoPhotoPath, então herdar aqui a deixaria presa
+      // sem controle até o próximo envio).
+      if (!isDuplicate) {
+        setEditCargoPhotoPath((md.cargo_photo_path as string | null) ?? null);
+        setEditCargoPicPaths((md.cargo_photos_paths as string[] | undefined) ?? []);
+      }
       setOriginAddress((md.origin_address as string | undefined) ?? "");
       setDestinationAddress((md.destination_address as string | undefined) ?? "");
       setVehicleType((md.vehicle_type as string | undefined) ?? "");
@@ -262,12 +279,16 @@ function FreightPage() {
       );
       setUrgencyLevel((data.urgency as string) ?? "");
       setJustification((data.justification as string) ?? "");
-      if (data.desired_date) setPickupDate(parseLocalDate(data.desired_date as string));
-      if (md.unloading_date) setUnloadingDate(parseLocalDate(md.unloading_date as string));
+      // Duplicar não copia as datas antigas — um ticket concluído/cancelado
+      // pode ter data no passado; deixa em branco para escolher datas novas.
+      if (!isDuplicate) {
+        if (data.desired_date) setPickupDate(parseLocalDate(data.desired_date as string));
+        if (md.unloading_date) setUnloadingDate(parseLocalDate(md.unloading_date as string));
+      }
       setStep(0);
       setDialogOpen(true);
     })();
-  }, [editTicketNumber, session]);
+  }, [editTicketNumber, duplicateTicketNumber, session]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -348,6 +369,7 @@ function FreightPage() {
     cargoPicPreviews.forEach((p) => URL.revokeObjectURL(p));
     setCargoPicFiles([]);
     setCargoPicPreviews([]);
+    setEditCargoPhotoPath(null);
     setEditCargoPicPaths([]);
     setWeight("");
     setDimensions("");
@@ -360,6 +382,7 @@ function FreightPage() {
     setNeedsCityHallAuthorization(false);
     setUrgencyLevel("");
     setJustification("");
+    setDuplicateFrom(null);
   };
 
   const validateStep = (): boolean => {
@@ -612,7 +635,9 @@ function FreightPage() {
             <DialogTitle>
               {editMode
                 ? `Editando ${editTicketNumber} — ${editEdition + 1}ª Edição`
-                : "Nova Requisição de Frete"}
+                : duplicateFrom
+                  ? `Nova Requisição de Frete — copiada de ${duplicateFrom}`
+                  : "Nova Requisição de Frete"}
             </DialogTitle>
             <DialogDescription>Informe os dados do transporte.</DialogDescription>
           </DialogHeader>
