@@ -249,9 +249,14 @@ function RentalPage() {
       if (typeof md.art_status === "string") setArtStatus(md.art_status);
       if (typeof md.needs_security_induction === "boolean")
         setNeedsSecurityInduction(md.needs_security_induction);
-      setEditClientNormPath((md.client_norm_path as string | null) ?? null);
-      if (typeof md.start_date === "string") setStartDate(parseLocalDate(md.start_date));
-      if (typeof md.end_date === "string") setEndDate(parseLocalDate(md.end_date));
+      // Duplicar não reaproveita datas nem o documento antigo em silêncio —
+      // um ticket concluído/cancelado pode ter datas no passado, e a UI não
+      // expõe/permite remover um "client_norm_path" herdado.
+      if (!isDuplicate) {
+        setEditClientNormPath((md.client_norm_path as string | null) ?? null);
+        if (typeof md.start_date === "string") setStartDate(parseLocalDate(md.start_date));
+        if (typeof md.end_date === "string") setEndDate(parseLocalDate(md.end_date));
+      }
       if (typeof md.delivery_location === "string") setDeliveryLocation(md.delivery_location);
       if (typeof data.urgency === "string") setUrgencyLevel(data.urgency);
       if (typeof data.justification === "string") setJustification(data.justification);

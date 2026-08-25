@@ -213,7 +213,11 @@ function ServicesPage() {
       if (Array.isArray(md.milestones)) setMilestones(md.milestones as Milestone[]);
       setUrgencyLevel((data.urgency as string) ?? "");
       setJustification((data.justification as string) ?? "");
-      if (data.desired_date) setDeadline(parseLocalDate(data.desired_date as string));
+      // Duplicar não copia o prazo antigo — um ticket concluído/cancelado
+      // pode ter data no passado; deixa em branco para escolher uma data nova.
+      if (!isDuplicate && data.desired_date) {
+        setDeadline(parseLocalDate(data.desired_date as string));
+      }
       setStep(0);
       setDialogOpen(true);
     })();

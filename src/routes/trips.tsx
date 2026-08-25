@@ -305,8 +305,12 @@ function TripsPage() {
       }
       setOriginCity((md.origin_city as string | undefined) ?? "");
       setDestinationCity((md.destination_city as string | undefined) ?? "");
-      if (md.departure_date) setDepartureDate(parseLocalDate(md.departure_date as string));
-      if (md.return_date) setReturnDate(parseLocalDate(md.return_date as string));
+      // Duplicar não copia as datas antigas — um ticket concluído/cancelado
+      // pode ter datas no passado; deixa em branco para escolher datas novas.
+      if (!isDuplicate) {
+        if (md.departure_date) setDepartureDate(parseLocalDate(md.departure_date as string));
+        if (md.return_date) setReturnDate(parseLocalDate(md.return_date as string));
+      }
       setTransportMode((md.transport_mode as string | undefined) ?? "");
       setFlightClass((md.flight_class as string | undefined) ?? "ECONOMICA");
       setFlightTimePreference((md.flight_time_preference as string | undefined) ?? "QUALQUER");

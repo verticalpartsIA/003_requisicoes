@@ -247,8 +247,14 @@ function FreightPage() {
         setEditReqId(data.id as string);
         setEditEdition((data.edition as number | undefined) ?? 1);
       }
-      setEditCargoPhotoPath((md.cargo_photo_path as string | null) ?? null);
-      setEditCargoPicPaths((md.cargo_photos_paths as string[] | undefined) ?? []);
+      // Duplicar não reaproveita as fotos antigas em silêncio — o comprador
+      // precisa anexar fotos novas (a UI não expõe/permite remover a foto
+      // "herdada" de editCargoPhotoPath, então herdar aqui a deixaria presa
+      // sem controle até o próximo envio).
+      if (!isDuplicate) {
+        setEditCargoPhotoPath((md.cargo_photo_path as string | null) ?? null);
+        setEditCargoPicPaths((md.cargo_photos_paths as string[] | undefined) ?? []);
+      }
       setOriginAddress((md.origin_address as string | undefined) ?? "");
       setDestinationAddress((md.destination_address as string | undefined) ?? "");
       setVehicleType((md.vehicle_type as string | undefined) ?? "");
@@ -273,8 +279,12 @@ function FreightPage() {
       );
       setUrgencyLevel((data.urgency as string) ?? "");
       setJustification((data.justification as string) ?? "");
-      if (data.desired_date) setPickupDate(parseLocalDate(data.desired_date as string));
-      if (md.unloading_date) setUnloadingDate(parseLocalDate(md.unloading_date as string));
+      // Duplicar não copia as datas antigas — um ticket concluído/cancelado
+      // pode ter data no passado; deixa em branco para escolher datas novas.
+      if (!isDuplicate) {
+        if (data.desired_date) setPickupDate(parseLocalDate(data.desired_date as string));
+        if (md.unloading_date) setUnloadingDate(parseLocalDate(md.unloading_date as string));
+      }
       setStep(0);
       setDialogOpen(true);
     })();
@@ -359,6 +369,7 @@ function FreightPage() {
     cargoPicPreviews.forEach((p) => URL.revokeObjectURL(p));
     setCargoPicFiles([]);
     setCargoPicPreviews([]);
+    setEditCargoPhotoPath(null);
     setEditCargoPicPaths([]);
     setWeight("");
     setDimensions("");

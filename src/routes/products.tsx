@@ -274,7 +274,11 @@ function ProductsPage() {
           photo_file: null,
           photo_preview: null,
           photo_path: (i.photo_path as string | null) ?? null,
-          stock_snapshot: (i.stock_snapshot as StockSnapshot | null) ?? null,
+          // Duplicar nunca carrega o snapshot de estoque antigo — a posição
+          // pode ter mudado desde então (ticket concluído/cancelado pode ser
+          // de meses atrás); força o comprador a revalidar cada item de
+          // estoque (handleSubmit bloqueia envio sem isso, ver abaixo).
+          stock_snapshot: isDuplicate ? null : ((i.stock_snapshot as StockSnapshot | null) ?? null),
         }));
         setItems(legacyItems);
       } else if (md.product_name) {
@@ -314,7 +318,12 @@ function ProductsPage() {
       setDeliveryLocation(String(md.delivery_location ?? ""));
       setUrgencyLevel((data.urgency as string) ?? "");
       setJustification((data.justification as string) ?? "");
-      if (data.desired_date) setDeliveryDeadline(parseLocalDate(data.desired_date as string));
+      // Duplicar não copia o prazo antigo — um ticket concluído/cancelado
+      // pode ter data no passado, que o seletor não aceitaria de qualquer
+      // forma; deixa em branco para o comprador escolher uma data válida.
+      if (!isDuplicate && data.desired_date) {
+        setDeliveryDeadline(parseLocalDate(data.desired_date as string));
+      }
       setTriageCompleted(true); // edição/duplicação pula triagem
       setStep(0);
       setDialogOpen(true);
@@ -607,6 +616,18 @@ function ProductsPage() {
     if (!validateStep() || !deliveryDeadline) {
       setStepAttempted(true);
       return;
+    }
+    // Reposição de estoque só pode ser enviada com a posição revalidada no
+    // Omie — em especial após "Duplicar" (que zera o snapshot de propósito,
+    // porque a posição pode ter mudado desde o ticket original).
+    if (requestKind === "estoque") {
+      const staleItem = items.find((i) => !i.stock_snapshot);
+      if (staleItem) {
+        toast.error(
+          `Revalide o estoque de "${staleItem.product_name}" antes de enviar — edite o item e confirme o código novamente.`,
+        );
+        return;
+      }
     }
     setIsSubmitting(true);
 
