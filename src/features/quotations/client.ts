@@ -72,7 +72,9 @@ export async function listQuotationQueueClient() {
   const m2Requisitions = requisitions.filter((r) => r.module === "M2");
   const m1MultiItens = (r: (typeof requisitions)[number]) => {
     const md = (r.module_data as Record<string, unknown> | null) ?? {};
-    return Array.isArray(md.items) && md.items.length >= 2 ? (md.items as Record<string, unknown>[]) : null;
+    return Array.isArray(md.items) && md.items.length >= 2
+      ? (md.items as Record<string, unknown>[])
+      : null;
   };
   const m1Requisitions = requisitions.filter((r) => r.module === "M1" && m1MultiItens(r));
   const itemRequisitionIds = [...m2Requisitions, ...m1Requisitions].map((r) => r.id);
@@ -145,12 +147,17 @@ export async function listQuotationQueueClient() {
         const { data: inserted } = await supabaseBrowser
           .from("requisition_items")
           .insert(toInsert)
-          .select("id,requisition_id,item_type,description,status,sort_order,product_code,quantity");
+          .select(
+            "id,requisition_id,item_type,description,status,sort_order,product_code,quantity",
+          );
         if (inserted) travelItemRows.push(...inserted);
       }
 
       const staleIds = existingRows
-        .filter((r, idx) => r.status === "pending" && !expectedKeys.has(keyOf(r.product_code, r.description, idx)))
+        .filter(
+          (r, idx) =>
+            r.status === "pending" && !expectedKeys.has(keyOf(r.product_code, r.description, idx)),
+        )
         .map((r) => r.id);
       if (staleIds.length > 0) {
         await supabaseBrowser.from("requisition_items").delete().in("id", staleIds);
@@ -565,7 +572,231 @@ export async function saveM1ItemQuotesClient(requisitionId: string, itemQuotes: 
   return saveItemQuotes(requisitionId, itemQuotes, "M1_ITEMS_QUOTE_COMPLETED");
 }
 
-async function saveItemQuotes(requisitionId: string, itemQuotes: M2ItemQuote[], auditAction: string) {
+export interface CorrectableQuotationWinner {
+  supplierId: string;
+  supplierName: string;
+  price: number;
+  itemId: string | null;
+  itemDescription: string | null;
+}
+
+export interface CorrectableQuotationItem {
+  requisitionId: string;
+  quotationId: string;
+  approvalId: string;
+  ticketNumber: string;
+  title: string;
+  module: string;
+  totalValue: number;
+  approvalLevel: 1 | 2 | 3;
+  decidedAt: string | null;
+  winners: CorrectableQuotationWinner[];
+}
+
+/** Cotações já aprovadas (V3) e em Compra (V4) cujo preço vencedor pode ser
+ *  corrigido — ex.: erro de digitação só percebido depois da aprovação (caso
+ *  M1-000155: cotado errado, aprovado, e só depois descoberto em Compra). Só
+ *  entram aqui requisições com `approvals.decision = 'approved'` — uma vez
+ *  corrigidas, `correctQuotationPriceClient` devolve para 'pending' e elas
+ *  saem desta lista até serem reaprovadas. */
+export async function listCorrectableQuotationsClient(): Promise<CorrectableQuotationItem[]> {
+  const { data: approvals, error: approvalsError } = await supabaseBrowser
+    .from("approvals")
+    .select("id,requisition_id,quotation_id,approval_level,total_value,decided_at")
+    .eq("decision", "approved")
+    .order("decided_at", { ascending: false });
+  if (approvalsError) throw new Error(friendlySupabaseError(approvalsError));
+  if (!approvals?.length) return [];
+
+  const requisitionIds = approvals.map((a) => a.requisition_id);
+  const { data: requisitions, error: requisitionsError } = await supabaseBrowser
+    .from("requisitions")
+    .select("id,ticket_number,module,title,status")
+    .in("id", requisitionIds)
+    .eq("status", "COMPRA");
+  if (requisitionsError) throw new Error(friendlySupabaseError(requisitionsError));
+  if (!requisitions?.length) return [];
+
+  const requisitionById = new Map(requisitions.map((r) => [r.id, r]));
+
+  const quotationIds = approvals.map((a) => a.quotation_id).filter(Boolean) as string[];
+  const { data: suppliers, error: suppliersError } =
+    quotationIds.length === 0
+      ? { data: [], error: null }
+      : await supabaseBrowser
+          .from("quotation_suppliers")
+          .select("id,quotation_id,supplier_name,price,item_id")
+          .in("quotation_id", quotationIds)
+          .eq("is_winner", true);
+  if (suppliersError) throw new Error(friendlySupabaseError(suppliersError));
+
+  const itemIds = (suppliers || []).map((s) => s.item_id).filter(Boolean) as string[];
+  const { data: items, error: itemsError } =
+    itemIds.length === 0
+      ? { data: [], error: null }
+      : await supabaseBrowser.from("requisition_items").select("id,description").in("id", itemIds);
+  if (itemsError) throw new Error(friendlySupabaseError(itemsError));
+  const descriptionByItemId = new Map((items || []).map((i) => [i.id, i.description]));
+
+  const winnersByQuotation = new Map<string, CorrectableQuotationWinner[]>();
+  (suppliers || []).forEach((supplier) => {
+    const current = winnersByQuotation.get(supplier.quotation_id) || [];
+    current.push({
+      supplierId: supplier.id,
+      supplierName: supplier.supplier_name,
+      price: supplier.price || 0,
+      itemId: supplier.item_id ?? null,
+      itemDescription: supplier.item_id
+        ? (descriptionByItemId.get(supplier.item_id) ?? null)
+        : null,
+    });
+    winnersByQuotation.set(supplier.quotation_id, current);
+  });
+
+  return approvals
+    .filter((a) => requisitionById.has(a.requisition_id) && a.quotation_id)
+    .map((a) => {
+      const requisition = requisitionById.get(a.requisition_id)!;
+      return {
+        requisitionId: a.requisition_id,
+        quotationId: a.quotation_id!,
+        approvalId: a.id,
+        ticketNumber: requisition.ticket_number,
+        title: requisition.title,
+        module: requisition.module,
+        totalValue: a.total_value || 0,
+        approvalLevel: a.approval_level as 1 | 2 | 3,
+        decidedAt: a.decided_at,
+        winners: winnersByQuotation.get(a.quotation_id!) || [],
+      };
+    })
+    .filter((item) => item.winners.length > 0);
+}
+
+/** Corrige o preço de um ou mais fornecedores vencedores de uma cotação já
+ *  aprovada, recalcula o total/alçada e devolve a aprovação para 'pending' —
+ *  a requisição some da fila de Compra até ser reaprovada em V3 com o valor
+ *  correto. Não altera nem apaga nada em `purchases`: se o comprador já
+ *  tinha preenchido PO/nota fiscal antes de notar o erro, esses dados ficam
+ *  intactos e voltam a aparecer quando a reaprovação sair. */
+export async function correctQuotationPriceClient(
+  requisitionId: string,
+  corrections: { supplierId: string; newPrice: number }[],
+  reason: string,
+) {
+  if (corrections.length === 0) throw new Error("Informe ao menos um preço corrigido.");
+  if (!reason.trim()) throw new Error("Informe o motivo da correção.");
+
+  const { data: requisition, error: requisitionError } = await supabaseBrowser
+    .from("requisitions")
+    .select("ticket_number,status")
+    .eq("id", requisitionId)
+    .single();
+  if (requisitionError) throw new Error(friendlySupabaseError(requisitionError));
+  if (requisition.status !== "COMPRA") {
+    throw new Error("Só é possível corrigir o preço de requisições que já estão em Compra (V4).");
+  }
+
+  const { data: approval, error: approvalError } = await supabaseBrowser
+    .from("approvals")
+    .select("id,quotation_id,decision,total_value,approval_level")
+    .eq("requisition_id", requisitionId)
+    .single();
+  if (approvalError) throw new Error(friendlySupabaseError(approvalError));
+  if (approval.decision !== "approved" || !approval.quotation_id) {
+    throw new Error("Esta requisição não tem uma aprovação concedida para reabrir.");
+  }
+
+  const supplierIds = corrections.map((c) => c.supplierId);
+  const { data: currentSuppliers, error: currentSuppliersError } = await supabaseBrowser
+    .from("quotation_suppliers")
+    .select("id,supplier_name,price,quotation_id")
+    .in("id", supplierIds);
+  if (currentSuppliersError) throw new Error(friendlySupabaseError(currentSuppliersError));
+
+  const priceById = new Map(corrections.map((c) => [c.supplierId, c.newPrice]));
+  const changes = (currentSuppliers || [])
+    .filter((s) => s.quotation_id === approval.quotation_id)
+    .map((s) => ({
+      supplierId: s.id,
+      supplierName: s.supplier_name,
+      oldPrice: s.price || 0,
+      newPrice: priceById.get(s.id) ?? (s.price || 0),
+    }));
+
+  for (const change of changes) {
+    if (change.newPrice === change.oldPrice) continue;
+    const { error } = await supabaseBrowser
+      .from("quotation_suppliers")
+      .update({ price: change.newPrice })
+      .eq("id", change.supplierId);
+    if (error) throw new Error(friendlySupabaseError(error));
+  }
+
+  const { data: allWinners, error: allWinnersError } = await supabaseBrowser
+    .from("quotation_suppliers")
+    .select("price")
+    .eq("quotation_id", approval.quotation_id)
+    .eq("is_winner", true);
+  if (allWinnersError) throw new Error(friendlySupabaseError(allWinnersError));
+
+  const newTotal = (allWinners || []).reduce((sum, w) => sum + (w.price || 0), 0);
+  const thresholds = await getTierThresholds();
+  const newApprovalLevel = getApprovalLevelForValue(newTotal, thresholds);
+
+  const { error: approvalUpdateError } = await supabaseBrowser
+    .from("approvals")
+    .update({
+      total_value: newTotal,
+      approval_level: newApprovalLevel,
+      decision: "pending",
+      decided_at: null,
+      approver_id: null,
+    })
+    .eq("id", approval.id);
+  if (approvalUpdateError) throw new Error(friendlySupabaseError(approvalUpdateError));
+
+  const { error: requisitionUpdateError } = await supabaseBrowser
+    .from("requisitions")
+    .update({ status: "APROVAÇÃO" })
+    .eq("id", requisitionId);
+  if (requisitionUpdateError) throw new Error(friendlySupabaseError(requisitionUpdateError));
+
+  const { error: firstLogError } = await supabaseBrowser.from("audit_logs").insert({
+    requisition_id: requisitionId,
+    ticket_number: requisition.ticket_number,
+    action: "QUOTATION_PRICE_CORRECTED",
+    old_status: "COMPRA",
+    new_status: "APROVAÇÃO",
+    details: {
+      reason: reason.trim(),
+      changes: changes.filter((c) => c.newPrice !== c.oldPrice),
+      previous_total_value: approval.total_value,
+      new_total_value: newTotal,
+      previous_approval_level: approval.approval_level,
+      new_approval_level: newApprovalLevel,
+    },
+  });
+  if (firstLogError)
+    console.warn("[audit_logs] QUOTATION_PRICE_CORRECTED failed:", firstLogError.message);
+
+  const { error: secondLogError } = await supabaseBrowser.from("audit_logs").insert({
+    requisition_id: requisitionId,
+    ticket_number: requisition.ticket_number,
+    action: "APPROVAL_REQUESTED",
+    old_status: "COMPRA",
+    new_status: "APROVAÇÃO",
+    details: { approval_level: newApprovalLevel, total_value: newTotal, reopened: true },
+  });
+  if (secondLogError)
+    console.warn("[audit_logs] APPROVAL_REQUESTED failed:", secondLogError.message);
+}
+
+async function saveItemQuotes(
+  requisitionId: string,
+  itemQuotes: M2ItemQuote[],
+  auditAction: string,
+) {
   // 1. Cria ou busca cotação
   const quotationId = await ensureQuotation(requisitionId, "completed");
 
