@@ -90,6 +90,7 @@ const LONG_RENTAL_DAYS = 30;
 export const Route = createFileRoute("/rental")({
   validateSearch: (search: Record<string, unknown>) => ({
     edit: typeof search.edit === "string" ? search.edit : undefined,
+    duplicate: typeof search.duplicate === "string" ? search.duplicate : undefined,
   }),
   head: () => ({
     meta: [
@@ -101,7 +102,7 @@ export const Route = createFileRoute("/rental")({
 });
 
 function RentalPage() {
-  const { edit: editTicketNumber } = Route.useSearch();
+  const { edit: editTicketNumber, duplicate: duplicateTicketNumber } = Route.useSearch();
   const router = useRouter();
   const { session, profile, user } = useAuth();
   const [tickets, setTickets] = useState<TicketRow[]>([]);
@@ -115,6 +116,7 @@ function RentalPage() {
   const [editMode, setEditMode] = useState(false);
   const [editReqId, setEditReqId] = useState<string | null>(null);
   const [editEdition, setEditEdition] = useState(1);
+  const [duplicateFrom, setDuplicateFrom] = useState<string | null>(null);
 
   const [categories, setCategories] = useState<string[]>([]);
   const [specs, setSpecs] = useState("");
@@ -209,12 +211,14 @@ function RentalPage() {
   }, [session]);
 
   useEffect(() => {
-    if (!editTicketNumber || !session) return;
+    const sourceTicketNumber = editTicketNumber || duplicateTicketNumber;
+    if (!sourceTicketNumber || !session) return;
+    const isDuplicate = !editTicketNumber && !!duplicateTicketNumber;
     const load = async () => {
       const { data } = await supabaseBrowser
         .from("requisitions")
         .select("id,edition,urgency,justification,desired_date,module_data")
-        .eq("ticket_number", editTicketNumber)
+        .eq("ticket_number", sourceTicketNumber)
         .eq("module", "M6")
         .maybeSingle();
       if (!data) {
@@ -222,9 +226,16 @@ function RentalPage() {
         return;
       }
       const md = (data.module_data ?? {}) as Record<string, unknown>;
-      setEditMode(true);
-      setEditReqId(data.id as string);
-      setEditEdition((data.edition as number | undefined) ?? 1);
+      if (isDuplicate) {
+        setDuplicateFrom(sourceTicketNumber);
+        toast.info(
+          `Dados copiados de ${sourceTicketNumber} — revise e envie como uma nova requisição.`,
+        );
+      } else {
+        setEditMode(true);
+        setEditReqId(data.id as string);
+        setEditEdition((data.edition as number | undefined) ?? 1);
+      }
       if (Array.isArray(md.categories)) setCategories(md.categories as string[]);
       else if (typeof md.category === "string" && md.category)
         setCategories([md.category as string]);
@@ -248,7 +259,7 @@ function RentalPage() {
       setDialogOpen(true);
     };
     void load();
-  }, [editTicketNumber, session]);
+  }, [editTicketNumber, duplicateTicketNumber, session]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -312,6 +323,7 @@ function RentalPage() {
     setEditMode(false);
     setEditReqId(null);
     setEditEdition(1);
+    setDuplicateFrom(null);
   };
 
   const validateStep = (): boolean => {
@@ -534,7 +546,9 @@ function RentalPage() {
             <DialogTitle>
               {editMode
                 ? `Editando ${editTicketNumber} — ${editEdition + 1}ª Edição`
-                : "Nova Requisição de Locação"}
+                : duplicateFrom
+                  ? `Nova Requisição de Locação — copiada de ${duplicateFrom}`
+                  : "Nova Requisição de Locação"}
             </DialogTitle>
             <DialogDescription>Informe o equipamento e período de locação.</DialogDescription>
           </DialogHeader>

@@ -96,7 +96,7 @@ function Index() {
             const Icon = moduleIcons[m.tag];
 
             return (
-              <Link key={m.tag} to={m.url} search={{ edit: undefined }}>
+              <Link key={m.tag} to={m.url} search={{ edit: undefined, duplicate: undefined }}>
                 <Card className="card-hover-yellow cursor-pointer h-full">
                   <CardContent className="p-4 text-center flex flex-col items-center gap-2">
                     <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent">
@@ -132,7 +132,12 @@ function Index() {
             variant="ghost"
             size="sm"
             className="text-xs text-muted-foreground"
-            onClick={() => void navigate({ to: "/movimentacoes", search: { ticket: undefined, module: undefined } })}
+            onClick={() =>
+              void navigate({
+                to: "/movimentacoes",
+                search: { ticket: undefined, module: undefined },
+              })
+            }
           >
             Ver tudo em Movimentações <ArrowRight className="h-3 w-3 ml-1" />
           </Button>
@@ -146,7 +151,12 @@ function Index() {
                   key={t.id}
                   type="button"
                   className="w-full flex items-center gap-3 p-3 text-left hover:bg-accent/50 transition-colors"
-                  onClick={() => void navigate({ to: "/movimentacoes", search: { ticket: t.id, module: undefined } })}
+                  onClick={() =>
+                    void navigate({
+                      to: "/movimentacoes",
+                      search: { ticket: t.id, module: undefined },
+                    })
+                  }
                 >
                   <span className="font-mono text-xs font-semibold text-foreground shrink-0">
                     {t.id}
@@ -167,9 +177,7 @@ function Index() {
                   >
                     {pendency.tone === "action" && <Clock className="h-3 w-3 shrink-0" />}
                     {pendency.tone === "done" && <CheckCircle2 className="h-3 w-3 shrink-0" />}
-                    {pendency.tone === "blocked" && (
-                      <AlertTriangle className="h-3 w-3 shrink-0" />
-                    )}
+                    {pendency.tone === "blocked" && <AlertTriangle className="h-3 w-3 shrink-0" />}
                     {pendency.label}
                   </span>
                   <span className="text-muted-foreground text-xs shrink-0">{t.date}</span>

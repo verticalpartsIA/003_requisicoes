@@ -64,6 +64,7 @@ const DIALOG_KEY = "vpreq_m4";
 export const Route = createFileRoute("/maintenance")({
   validateSearch: (search: Record<string, unknown>) => ({
     edit: typeof search.edit === "string" ? search.edit : undefined,
+    duplicate: typeof search.duplicate === "string" ? search.duplicate : undefined,
   }),
   head: () => ({
     meta: [
@@ -75,7 +76,7 @@ export const Route = createFileRoute("/maintenance")({
 });
 
 function MaintenancePage() {
-  const { edit: editTicketNumber } = Route.useSearch();
+  const { edit: editTicketNumber, duplicate: duplicateTicketNumber } = Route.useSearch();
   const router = useRouter();
   const { session, profile, user } = useAuth();
   const [tickets, setTickets] = useState<TicketRow[]>([]);
@@ -89,6 +90,7 @@ function MaintenancePage() {
   const [editMode, setEditMode] = useState(false);
   const [editReqId, setEditReqId] = useState<string | null>(null);
   const [editEdition, setEditEdition] = useState(1);
+  const [duplicateFrom, setDuplicateFrom] = useState<string | null>(null);
 
   const [equipmentName, setEquipmentName] = useState("");
   const [equipmentTag, setEquipmentTag] = useState("");
@@ -147,21 +149,30 @@ function MaintenancePage() {
   }, [session]);
 
   useEffect(() => {
-    if (!editTicketNumber || !session) return;
+    const sourceTicketNumber = editTicketNumber || duplicateTicketNumber;
+    if (!sourceTicketNumber || !session) return;
+    const isDuplicate = !editTicketNumber && !!duplicateTicketNumber;
     void (async () => {
       const { data } = await supabaseBrowser
         .from("requisitions")
         .select("id,description,justification,urgency,module_data,edition")
-        .eq("ticket_number", editTicketNumber)
+        .eq("ticket_number", sourceTicketNumber)
         .maybeSingle();
       if (!data) {
         toast.error("Requisição não encontrada.");
         return;
       }
       const md = (data.module_data ?? {}) as Record<string, unknown>;
-      setEditMode(true);
-      setEditReqId(data.id as string);
-      setEditEdition((data.edition as number | undefined) ?? 1);
+      if (isDuplicate) {
+        setDuplicateFrom(sourceTicketNumber);
+        toast.info(
+          `Dados copiados de ${sourceTicketNumber} — revise e envie como uma nova requisição.`,
+        );
+      } else {
+        setEditMode(true);
+        setEditReqId(data.id as string);
+        setEditEdition((data.edition as number | undefined) ?? 1);
+      }
       setEquipmentName((md.equipment_name as string | undefined) ?? "");
       setEquipmentTag((md.equipment_tag as string | undefined) ?? "");
       setSector((md.sector as string | undefined) ?? "");
@@ -173,7 +184,7 @@ function MaintenancePage() {
       setStep(0);
       setDialogOpen(true);
     })();
-  }, [editTicketNumber, session]);
+  }, [editTicketNumber, duplicateTicketNumber, session]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -226,6 +237,7 @@ function MaintenancePage() {
     setMachineDown(false);
     setUrgencyLevel("");
     setJustification("");
+    setDuplicateFrom(null);
   };
 
   const validateStep = (): boolean => {
@@ -409,7 +421,9 @@ function MaintenancePage() {
             <DialogTitle>
               {editMode
                 ? `Editando ${editTicketNumber} — ${editEdition + 1}ª Edição`
-                : "Nova Requisição de Manutenção"}
+                : duplicateFrom
+                  ? `Nova Requisição de Manutenção — copiada de ${duplicateFrom}`
+                  : "Nova Requisição de Manutenção"}
             </DialogTitle>
             <DialogDescription>
               {editMode
