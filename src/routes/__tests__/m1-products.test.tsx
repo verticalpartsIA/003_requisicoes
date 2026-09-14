@@ -61,10 +61,15 @@ vi.mock("@/features/auth/auth-context", () => ({
   }),
 }));
 
+const getOmieStockPositionClient = vi.fn(async (_codigo: string) => null as unknown);
+
 vi.mock("@/features/omie/client", () => ({
   validateOmieOrderClient: vi.fn(async () => ({ valid: true })),
-  validateOmieProductClient: vi.fn(async () => ({ valid: true })),
-  getOmieStockPositionClient: vi.fn(async () => null),
+  validateOmieProductClient: vi.fn(async (codigo: string) => ({
+    codigo,
+    descricao: "Guia Trefilada, sem Retífica - T75-3/A - 5000mm N",
+  })),
+  getOmieStockPositionClient: (codigo: string) => getOmieStockPositionClient(codigo),
 }));
 
 vi.mock("@/features/vpclick/client", () => ({
@@ -107,6 +112,7 @@ describe("M1 - Requisição de Produtos", () => {
     listProductRequisitionsClient.mockClear();
     createProductRequisitionClient.mockClear();
     updateRequisitionClient.mockClear();
+    getOmieStockPositionClient.mockClear();
   });
 
   // Diálogos do Radix usam portal em document.body; garante DOM limpo entre
@@ -183,6 +189,54 @@ describe("M1 - Requisição de Produtos", () => {
         expect(
           screen.getByPlaceholderText("Descreva o material e contexto de uso..."),
         ).toBeInTheDocument();
+      });
+    });
+
+    // Regressão: um produto sem estoque mínimo configurado no Omie (0) não
+    // pode ficar travado como se já estivesse "no mínimo ou acima" — isso
+    // impedia informar a quantidade e adicionar o item na requisição de
+    // Estoque (https://vprequisicoes.vpsistema.com/products).
+    it("Estoque: permite informar quantidade e adicionar item quando o mínimo não está configurado no Omie (0)", async () => {
+      getOmieStockPositionClient.mockResolvedValueOnce({
+        codigo: "vpel-240n",
+        descricao: "Guia Trefilada, sem Retífica - T75-3/A - 5000mm N",
+        estoqueFisico: 0,
+        estoqueReservado: 0,
+        estoqueDisponivel: 0,
+        estoqueMinimo: 0,
+        quantidadeMaxima: 0,
+      });
+
+      const { container } = renderProductsPage();
+      await openDialog(container);
+      const kind = await waitFor(() => screen.getByRole("button", { name: /Estoque/i }));
+      await user.click(kind);
+      const addBtn = await waitFor(() =>
+        screen.getByRole("button", { name: /Adicionar produto/i }),
+      );
+      await user.click(addBtn);
+
+      const codeInput = await waitFor(() => screen.getByPlaceholderText("Ex.: VPCON-677"));
+      await user.type(codeInput, "vpel-240n");
+      await user.click(screen.getByRole("button", { name: /Verificar/i }));
+
+      await waitFor(() => {
+        expect(getOmieStockPositionClient).toHaveBeenCalledWith("vpel-240n");
+      });
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Estoque mínimo não configurado no Omie para este produto/i),
+        ).toBeInTheDocument();
+      });
+
+      const qtyInput = screen.getByPlaceholderText("0") as HTMLInputElement;
+      expect(qtyInput).toBeEnabled();
+      await user.type(qtyInput, "5");
+
+      await user.click(screen.getByRole("button", { name: /^Adicionar$/i }));
+
+      await waitFor(() => {
+        expect(screen.queryByPlaceholderText("Ex.: VPCON-677")).not.toBeInTheDocument();
       });
     });
   });

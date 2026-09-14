@@ -8,6 +8,10 @@ os fixes/features mais investigativos linkam para um relatório em
 Para arquitetura e convenções do projeto, ver `CLAUDE.md`. Para o histórico
 de PRs com diff completo, ver a aba *Pull requests* do repositório.
 
+## 2026-09-14
+
+- fix(m1-produtos): requisição de **Estoque** ficava travada em produtos sem estoque mínimo configurado no Omie (`estoque_minimo = 0`) — a quantidade máxima calculada (`max(0, mínimo - disponível)`) dava 0 e o campo Quantidade ficava desabilitado, sem deixar adicionar o item; agora o teto só é aplicado quando há um mínimo de fato configurado, e sem ele a quantidade é informada livremente
+
 ## 2026-08-25
 
 - feat(requisicoes): botão "Duplicar" em Movimentações cria uma requisição nova pré-preenchida a partir de qualquer ticket, inclusive CANCELADO/CONCLUÍDO — diferente de "Editar" (que atualiza o ticket original e só funciona em RASCUNHO/ABERTO/REJEITADO), duplicar sempre gera um ticket novo via `?duplicate=<ticket>` nos 6 módulos (M1-M6)

@@ -495,18 +495,23 @@ function ProductsPage() {
         toast.error("Verifique o código do produto antes de adicionar.");
         return;
       }
-      if (stockInfo.quantidade_maxima <= 0) {
-        toast.error(
-          "Este produto já está no estoque mínimo ou acima — não é possível pedir reposição agora.",
-        );
-        return;
-      }
-      if (parseFloat(draftQty) > stockInfo.quantidade_maxima) {
-        setDraftAttemptedSave(true);
-        toast.error(
-          `Quantidade máxima que pode ser pedida agora: ${stockInfo.quantidade_maxima} (para não passar do estoque mínimo).`,
-        );
-        return;
+      // Estoque mínimo não configurado no Omie (0) não significa "já está no
+      // mínimo" — significa que não há teto definido, então não bloqueamos
+      // nem limitamos a quantidade nesse caso.
+      if (stockInfo.estoque_minimo > 0) {
+        if (stockInfo.quantidade_maxima <= 0) {
+          toast.error(
+            "Este produto já está no estoque mínimo ou acima — não é possível pedir reposição agora.",
+          );
+          return;
+        }
+        if (parseFloat(draftQty) > stockInfo.quantidade_maxima) {
+          setDraftAttemptedSave(true);
+          toast.error(
+            `Quantidade máxima que pode ser pedida agora: ${stockInfo.quantidade_maxima} (para não passar do estoque mínimo).`,
+          );
+          return;
+        }
       }
     } else if (draftDesc.trim().length < 5) {
       setDraftAttemptedSave(true);
@@ -1148,7 +1153,12 @@ function ProductsPage() {
                                   </p>
                                 </div>
                               </div>
-                              {stockInfo.quantidade_maxima > 0 ? (
+                              {stockInfo.estoque_minimo <= 0 ? (
+                                <p className="text-xs text-center text-muted-foreground">
+                                  Estoque mínimo não configurado no Omie para este produto — informe
+                                  a quantidade necessária manualmente.
+                                </p>
+                              ) : stockInfo.quantidade_maxima > 0 ? (
                                 <p className="text-xs text-center text-vp-yellow-dark font-medium">
                                   Você pode pedir até{" "}
                                   <span className="font-bold">{stockInfo.quantidade_maxima}</span>{" "}
@@ -1191,11 +1201,18 @@ function ProductsPage() {
                             type="number"
                             min="0"
                             step="1"
-                            max={stockInfo?.quantidade_maxima ?? undefined}
+                            max={
+                              stockInfo && stockInfo.estoque_minimo > 0
+                                ? stockInfo.quantidade_maxima
+                                : undefined
+                            }
                             placeholder="0"
                             value={draftQty}
                             onChange={(e) => setDraftQty(e.target.value)}
-                            disabled={!stockInfo || stockInfo.quantidade_maxima <= 0}
+                            disabled={
+                              !stockInfo ||
+                              (stockInfo.estoque_minimo > 0 && stockInfo.quantidade_maxima <= 0)
+                            }
                             className={cn(
                               draftAttemptedSave &&
                                 (!draftQty || parseFloat(draftQty) <= 0) &&
