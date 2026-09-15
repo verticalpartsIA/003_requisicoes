@@ -8,6 +8,7 @@ export interface UserWithRoles {
   department: string | null;
   approver_id: string | null;
   active: boolean;
+  whatsapp_number: string | null;
   roles: { role: AppRole; approval_tier: 1 | 2 | 3 | null }[];
 }
 
@@ -21,7 +22,7 @@ export interface TierThresholds {
 export async function listUsersWithRoles(): Promise<UserWithRoles[]> {
   const { data: profiles, error: profilesError } = await supabaseBrowser
     .from("profiles")
-    .select("id, full_name, email, department, approver_id, active")
+    .select("id, full_name, email, department, approver_id, active, whatsapp_number")
     .order("full_name");
 
   if (profilesError) throw profilesError;
@@ -39,6 +40,7 @@ export async function listUsersWithRoles(): Promise<UserWithRoles[]> {
     department: p.department,
     approver_id: p.approver_id ?? null,
     active: p.active !== false,
+    whatsapp_number: p.whatsapp_number ?? null,
     roles: (userRoles ?? [])
       .filter((r) => r.user_id === p.id)
       .map((r) => ({
@@ -119,6 +121,17 @@ export async function setUserDepartment(userId: string, department: string): Pro
   const { error } = await supabaseBrowser
     .from("profiles")
     .update({ department: department.trim() || null })
+    .eq("id", userId);
+  if (error) throw error;
+}
+
+// ─── WhatsApp do colaborador (notificações automáticas) ────────────────────────
+
+export async function setUserWhatsapp(userId: string, whatsappNumber: string): Promise<void> {
+  const digits = whatsappNumber.replace(/\D/g, "");
+  const { error } = await supabaseBrowser
+    .from("profiles")
+    .update({ whatsapp_number: digits || null })
     .eq("id", userId);
   if (error) throw error;
 }

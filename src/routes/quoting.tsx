@@ -55,6 +55,7 @@ import {
 import { toast } from "sonner";
 import { AccessGuard } from "@/components/access-guard";
 import { notifyVpClickClient } from "@/features/vpclick/client";
+import { notifyWhatsappClient } from "@/features/whatsapp/client";
 import {
   finalizeQuotationClient,
   listQuotationQueueClient,
@@ -424,6 +425,15 @@ function QuotingPage() {
         module: selectedItem.module,
         requesterName: "",
       }).catch(console.warn);
+      void notifyWhatsappClient({
+        stage: "APROVACAO_PENDENTE",
+        requisitionId: selectedItem.requisitionId,
+        ticketNumber: selectedItem.ticketNumber,
+        title: selectedItem.title,
+        module: selectedItem.module,
+        requesterName: "",
+        totalValue: parseBRLNumber(winner.price) ?? 0,
+      }).catch(console.warn);
       closeDialog();
       setQueue(await listQuotationQueueClient());
       await router.invalidate();
@@ -509,6 +519,15 @@ function QuotingPage() {
         title: m2Item.title,
         module: m2Item.module,
         requesterName: "",
+      }).catch(console.warn);
+      void notifyWhatsappClient({
+        stage: "APROVACAO_PENDENTE",
+        requisitionId: m2Item.requisitionId,
+        ticketNumber: m2Item.ticketNumber,
+        title: m2Item.title,
+        module: m2Item.module,
+        requesterName: "",
+        totalValue: itemQuotes.reduce((sum, q) => sum + q.price, 0),
       }).catch(console.warn);
       closeM2Dialog();
       setQueue(await listQuotationQueueClient());

@@ -54,6 +54,7 @@ import {
 import { useAuth } from "@/features/auth/auth-context";
 import { notifyVpClickClient } from "@/features/vpclick/client";
 import { approvalLevelLabels, DEFAULT_TIER_THRESHOLDS, type TierThresholds } from "@/lib/approval";
+import { notifyWhatsappClient } from "@/features/whatsapp/client";
 import { getTierThresholds } from "@/features/admin/api";
 import {
   getManagerScopeClient,
@@ -133,6 +134,14 @@ function GestorSection({ gestorName }: { gestorName: string }) {
       toast.success("Ciência confirmada — requisição encaminhada para cotação.");
       void notifyVpClickClient({
         stage: "GESTOR_APPROVED",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.ticketNumber,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+      }).catch(console.warn);
+      void notifyWhatsappClient({
+        stage: "COMPRADOR_COTAR",
         requisitionId: selected.requisitionId,
         ticketNumber: selected.ticketNumber,
         title: selected.title,
@@ -362,6 +371,14 @@ function AguardandoGestorSection({ gestorName }: { gestorName: string }) {
       toast.success("Ciência confirmada — requisição encaminhada para cotação.");
       void notifyVpClickClient({
         stage: "GESTOR_APPROVED",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.ticketNumber,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+      }).catch(console.warn);
+      void notifyWhatsappClient({
+        stage: "COMPRADOR_COTAR",
         requisitionId: selected.requisitionId,
         ticketNumber: selected.ticketNumber,
         title: selected.title,
@@ -642,6 +659,14 @@ function ApprovalPage() {
         module: selected.module,
         requesterName: selected.requesterName,
       }).catch(console.warn);
+      void notifyWhatsappClient({
+        stage: "COMPRA_APROVADA",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.id,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+      }).catch(console.warn);
       setSelected(null);
       setJustification("");
       setApprovals(await listPendingApprovalsClient());
@@ -728,6 +753,16 @@ function ApprovalPage() {
         module: selected.module,
         requesterName: selected.requesterName,
       }).catch(console.warn);
+      if (approvedCount > 0) {
+        void notifyWhatsappClient({
+          stage: "COMPRA_APROVADA",
+          requisitionId: selected.requisitionId,
+          ticketNumber: selected.id,
+          title: selected.title,
+          module: selected.module,
+          requesterName: selected.requesterName,
+        }).catch(console.warn);
+      }
 
       setSelected(null);
       setJustification("");
