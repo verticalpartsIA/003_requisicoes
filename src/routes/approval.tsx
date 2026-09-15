@@ -55,6 +55,7 @@ import { useAuth } from "@/features/auth/auth-context";
 import { notifyVpClickClient } from "@/features/vpclick/client";
 import { approvalLevelLabels, DEFAULT_TIER_THRESHOLDS, type TierThresholds } from "@/lib/approval";
 import { notifyWhatsappClient } from "@/features/whatsapp/client";
+import { getOmieProductCostClient } from "@/features/omie/client";
 import { getTierThresholds } from "@/features/admin/api";
 import {
   getManagerScopeClient,
@@ -611,6 +612,49 @@ function ApprovalPage() {
   // M2 per-item decisions: approvalItemId → 'approved' | 'rejected'
   const [m2Decisions, setM2Decisions] = useState<Record<string, "approved" | "rejected">>({});
 
+  // Custo Omie por código de produto (M1) — vivo, buscado só quando o
+  // aprovador abre uma requisição M1, não em lote na listagem.
+  type OmieCostState =
+    | { status: "loading" }
+    | { status: "ok"; custoMedio: number; fornecedor: string | null }
+    | { status: "error"; message: string };
+  const [omieCosts, setOmieCosts] = useState<Record<string, OmieCostState>>({});
+
+  useEffect(() => {
+    if (!selected || selected.moduleCode !== "M1") return;
+    const codes = Array.from(
+      new Set((selected.m1Products ?? []).map((p) => p.code).filter((c): c is string => !!c)),
+    );
+    if (codes.length === 0) return;
+
+    setOmieCosts((prev) => {
+      const next = { ...prev };
+      codes.forEach((code) => {
+        next[code] = { status: "loading" };
+      });
+      return next;
+    });
+
+    codes.forEach((code) => {
+      getOmieProductCostClient(code)
+        .then((result) => {
+          setOmieCosts((prev) => ({
+            ...prev,
+            [code]: { status: "ok", custoMedio: result.custoMedio, fornecedor: result.fornecedor },
+          }));
+        })
+        .catch((err) => {
+          setOmieCosts((prev) => ({
+            ...prev,
+            [code]: {
+              status: "error",
+              message: err instanceof Error ? err.message : "Produto não encontrado no Omie.",
+            },
+          }));
+        });
+    });
+  }, [selected]);
+
   useEffect(() => {
     if (!session) return;
     void listPendingApprovalsClient().then(setApprovals);
@@ -1034,6 +1078,48 @@ function ApprovalPage() {
                       <p className="text-sm text-foreground">{selected.requesterNotes}</p>
                     </CardContent>
                   </Card>
+
+                  {/* Custo Omie — comparação ao vivo, só para M1 (produtos) */}
+                  {selected.moduleCode === "M1" && (selected.m1Products?.length ?? 0) > 0 && (
+                    <Card className="border-dashed border-blue-300/60 bg-blue-50/30">
+                      <CardContent className="p-4 space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground">
+                          Custo Omie (ao vivo)
+                        </p>
+                        {(selected.m1Products ?? []).map((product, i) => {
+                          const cost = product.code ? omieCosts[product.code] : undefined;
+                          return (
+                            <div
+                              key={`${product.code ?? "sem-codigo"}-${i}`}
+                              className="flex items-center justify-between text-xs gap-2"
+                            >
+                              <span className="text-muted-foreground truncate">
+                                {product.code ? `[${product.code}] ` : ""}
+                                {product.name}
+                              </span>
+                              {!product.code ? (
+                                <span className="text-muted-foreground shrink-0">Sem código</span>
+                              ) : !cost || cost.status === "loading" ? (
+                                <span className="text-muted-foreground shrink-0">Buscando...</span>
+                              ) : cost.status === "error" ? (
+                                <span className="text-red-600 font-medium shrink-0">
+                                  Produto não encontrado no Omie
+                                </span>
+                              ) : (
+                                <span className="font-mono font-semibold text-foreground shrink-0">
+                                  Custo médio: R${" "}
+                                  {cost.custoMedio.toLocaleString("pt-BR", {
+                                    minimumFractionDigits: 2,
+                                  })}
+                                  {cost.fornecedor ? ` — ${cost.fornecedor}` : ""}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </CardContent>
+                    </Card>
+                  )}
 
                   {/* Aprovação por item — M2 (viagem) e M1 multi-itens (produtos) */}
                   {hasItemDecisions ? (

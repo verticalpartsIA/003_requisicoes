@@ -10,6 +10,11 @@ de PRs com diff completo, ver a aba *Pull requests* do repositório.
 
 ## 2026-09-15
 
+- feat(approval): campo "Custo Omie (ao vivo)" na tela de aprovação, só para módulo M1 — busca ao vivo (por produto, não em lote) o custo médio contábil (`cmc`, via `estoque/consulta`) e o fornecedor do pedido pendente mais recente (cache `omie_purchase_suggestions`); quando o código não existe no Omie, mostra "Produto não encontrado no Omie" em vez de quebrar a tela
+
+
+## 2026-09-15
+
 - feat(whatsapp): notificações automáticas por WhatsApp nas etapas de decisão — líder direto avisado na criação da requisição (ciência), comprador avisado após a ciência (cotar), aprovador da alçada certa avisado ao finalizar a cotação, e comprador avisado de volta quando aprovado; usa a instância Evolution API `pv360` e reaproveita a mesma resolução de líder/departamento já usada em `gestor/api.ts`. Cadastro do número de WhatsApp por colaborador adicionado no Admin (`profiles.whatsapp_number`, migração `026`)
 
 ## 2026-09-14

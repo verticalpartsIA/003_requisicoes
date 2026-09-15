@@ -34,33 +34,46 @@ export async function listPendingApprovalsClient() {
     .eq("decision", "pending")
     .order("created_at", { ascending: true });
   if (approvalsError) throw approvalsError;
-  const filteredApprovals = (approvals || []).filter((item) => hasAdminRole || item.approval_level <= maxApprovalTier);
+  const filteredApprovals = (approvals || []).filter(
+    (item) => hasAdminRole || item.approval_level <= maxApprovalTier,
+  );
   if (!filteredApprovals.length) return [] satisfies ApprovalRequestItem[];
 
   const requisitionIds = filteredApprovals.map((item) => item.requisition_id);
   const { data: requisitions, error: requisitionsError } = await supabaseBrowser
     .from("requisitions")
-    .select("id,ticket_number,module,title,justification,requester_name,status,created_at")
+    .select(
+      "id,ticket_number,module,title,justification,requester_name,status,created_at,module_data",
+    )
     .in("id", requisitionIds)
     .eq("status", "APROVAÇÃO");
   if (requisitionsError) throw requisitionsError;
 
-  const quotationIds = filteredApprovals.map((item) => item.quotation_id).filter(Boolean) as string[];
-  const { data: quotations, error: quotationsError } = quotationIds.length === 0
-    ? { data: [], error: null }
-    : await supabaseBrowser.from("quotations").select("id,requisition_id,win_criteria").in("id", quotationIds);
+  const quotationIds = filteredApprovals
+    .map((item) => item.quotation_id)
+    .filter(Boolean) as string[];
+  const { data: quotations, error: quotationsError } =
+    quotationIds.length === 0
+      ? { data: [], error: null }
+      : await supabaseBrowser
+          .from("quotations")
+          .select("id,requisition_id,win_criteria")
+          .in("id", quotationIds);
   if (quotationsError) throw quotationsError;
 
-  const { data: suppliers, error: suppliersError } = quotationIds.length === 0
-    ? { data: [], error: null }
-    : await supabaseBrowser
-        .from("quotation_suppliers")
-        .select("quotation_id,supplier_name,price,deadline,notes,is_winner")
-        .in("quotation_id", quotationIds);
+  const { data: suppliers, error: suppliersError } =
+    quotationIds.length === 0
+      ? { data: [], error: null }
+      : await supabaseBrowser
+          .from("quotation_suppliers")
+          .select("quotation_id,supplier_name,price,deadline,notes,is_winner")
+          .in("quotation_id", quotationIds);
   if (suppliersError) throw suppliersError;
 
   const requisitionById = new Map((requisitions || []).map((item) => [item.id, item]));
-  const quotationByRequisition = new Map((quotations || []).map((item) => [item.requisition_id, item]));
+  const quotationByRequisition = new Map(
+    (quotations || []).map((item) => [item.requisition_id, item]),
+  );
   const suppliersByQuotation = new Map<string, typeof suppliers>();
 
   (suppliers || []).forEach((supplier) => {
@@ -86,7 +99,10 @@ export async function listPendingApprovalsClient() {
       .in("approval_id", itemApprovalIds);
 
     const requisitionItemIds = (approvalItemRows || []).map((row) => row.item_id);
-    const requisitionItemById = new Map<string, { product_code: string | null; description: string | null; quantity: number | null }>();
+    const requisitionItemById = new Map<
+      string,
+      { product_code: string | null; description: string | null; quantity: number | null }
+    >();
     if (requisitionItemIds.length > 0) {
       const { data: requisitionItemRows } = await supabaseBrowser
         .from("requisition_items")
@@ -144,15 +160,35 @@ export async function listPendingApprovalsClient() {
           isWinner: supplier.is_winner,
         })),
         createdAt: new Date(requisition.created_at).toLocaleDateString("pt-BR"),
-        travelItems: hasItemApprovals && (travelItemsByApproval.get(approval.id) || []).length > 0
-          ? travelItemsByApproval.get(approval.id)
-          : undefined,
+        travelItems:
+          hasItemApprovals && (travelItemsByApproval.get(approval.id) || []).length > 0
+            ? travelItemsByApproval.get(approval.id)
+            : undefined,
+        // Custo Omie (comparação na tela de aprovação) — só faz sentido pra
+        // M1 (produtos), e usa module_data.items direto (sempre presente),
+        // em vez de requisition_items (só existe no fluxo fracionado).
+        m1Products:
+          requisition.module === "M1"
+            ? (
+                ((requisition.module_data as { items?: unknown[] } | null)?.items ?? []) as Array<
+                  Record<string, unknown>
+                >
+              ).map((it) => ({
+                code: (it.product_code as string | null) ?? null,
+                name: String(it.product_name ?? it.description ?? ""),
+                quantity: (it.quantity as number | null) ?? null,
+              }))
+            : undefined,
       };
     })
     .filter(Boolean) as ApprovalRequestItem[];
 }
 
-export async function approveRequisitionClient(approvalId: string, requisitionId: string, justification: string) {
+export async function approveRequisitionClient(
+  approvalId: string,
+  requisitionId: string,
+  justification: string,
+) {
   const { data: requisition, error: requisitionError } = await supabaseBrowser
     .from("requisitions")
     .select("ticket_number,status")
@@ -188,7 +224,11 @@ export async function approveRequisitionClient(approvalId: string, requisitionId
   if (logError) console.warn("[audit_logs] failed:", logError.message);
 }
 
-export async function rejectRequisitionClient(approvalId: string, requisitionId: string, justification: string) {
+export async function rejectRequisitionClient(
+  approvalId: string,
+  requisitionId: string,
+  justification: string,
+) {
   const { data: requisition, error: requisitionError } = await supabaseBrowser
     .from("requisitions")
     .select("ticket_number,status")
@@ -227,7 +267,12 @@ export async function rejectRequisitionClient(approvalId: string, requisitionId:
 export async function decideItemsClient(
   approvalId: string,
   requisitionId: string,
-  decisions: { approvalItemId: string; itemId: string; decision: 'approved' | 'rejected'; notes: string }[],
+  decisions: {
+    approvalItemId: string;
+    itemId: string;
+    decision: "approved" | "rejected";
+    notes: string;
+  }[],
 ) {
   const { data: requisition, error: requisitionError } = await supabaseBrowser
     .from("requisitions")
@@ -250,10 +295,16 @@ export async function decideItemsClient(
   const rejectedIds = decisions.filter((d) => d.decision === "rejected").map((d) => d.itemId);
 
   if (approvedIds.length > 0) {
-    await supabaseBrowser.from("requisition_items").update({ status: "approved" }).in("id", approvedIds);
+    await supabaseBrowser
+      .from("requisition_items")
+      .update({ status: "approved" })
+      .in("id", approvedIds);
   }
   if (rejectedIds.length > 0) {
-    await supabaseBrowser.from("requisition_items").update({ status: "rejected" }).in("id", rejectedIds);
+    await supabaseBrowser
+      .from("requisition_items")
+      .update({ status: "rejected" })
+      .in("id", rejectedIds);
   }
 
   const allRejected = decisions.every((d) => d.decision === "rejected");

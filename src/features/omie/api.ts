@@ -1,21 +1,33 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { supabaseRest } from "@/lib/supabase-rest";
 
-function omieKey() { return process.env.OMIE_APP_KEY ?? "8463170967"; }
-function omieSecret() { return process.env.OMIE_APP_SECRET ?? "69e22b773842044fdb218178521cac59"; }
+function omieKey() {
+  return process.env.OMIE_APP_KEY ?? "8463170967";
+}
+function omieSecret() {
+  return process.env.OMIE_APP_SECRET ?? "69e22b773842044fdb218178521cac59";
+}
 
-function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 // A API do Omie bloqueia rajadas de chamadas com "Consumo redundante
 // detectado" (rate limit), inclusive entre páginas de uma mesma listagem
 // se disparadas rápido demais. Faz retry com espera crescente nesse caso.
-async function omiePost<T>(endpoint: string, call: string, param: unknown[], attempt = 1): Promise<T> {
+async function omiePost<T>(
+  endpoint: string,
+  call: string,
+  param: unknown[],
+  attempt = 1,
+): Promise<T> {
   const resp = await fetch(`https://app.omie.com.br/api/v1/${endpoint}/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ call, app_key: omieKey(), app_secret: omieSecret(), param }),
   });
-  const data = await resp.json() as { faultstring?: string } & T;
+  const data = (await resp.json()) as { faultstring?: string } & T;
   if (data.faultstring) {
     const isRateLimit = /redundante|redundant/i.test(data.faultstring);
     if (isRateLimit && attempt < 4) {
@@ -132,6 +144,53 @@ export const getOmieStockPosition = createServerFn({ method: "POST" })
     };
   });
 
+export interface OmieProductCost {
+  codigo: string;
+  descricao: string;
+  /** Custo médio contábil (cmc) do Omie — média ponderada do estoque atual. */
+  custoMedio: number;
+  /** Fornecedor do pedido de compra pendente mais recente para este produto,
+   *  quando disponível no cache de sugestão de compra (Omie não expõe
+   *  fornecedor da última compra num único endpoint consultável ao vivo por
+   *  produto). Null quando não há pedido pendente cacheado. */
+  fornecedor: string | null;
+}
+
+/** Custo + fornecedor para comparação na tela de aprovação (M1). Usada ao
+ *  vivo (não cacheada) — um único produto por vez, então não esbarra no
+ *  rate limit do Omie como uma varredura em massa esbarraria. */
+export const getOmieProductCost = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ codigoProduto: z.string().min(1) }))
+  .handler(async ({ data }): Promise<OmieProductCost> => {
+    type ProdutoResp = { codigo_produto: number; codigo: string; descricao: string };
+    const produto = await omiePost<ProdutoResp>("geral/produtos", "ConsultarProduto", [
+      { codigo: data.codigoProduto },
+    ]);
+    if (!produto.descricao) throw new Error("Produto não encontrado no Omie.");
+
+    type PosicaoResp = { cmc: number };
+    const hoje = new Date();
+    const dataConsulta = `${String(hoje.getDate()).padStart(2, "0")}/${String(hoje.getMonth() + 1).padStart(2, "0")}/${hoje.getFullYear()}`;
+    const posicao = await omiePost<PosicaoResp>("estoque/consulta", "PosicaoEstoque", [
+      { id_prod: produto.codigo_produto, data: dataConsulta, apenas_saldo: "N" },
+    ]);
+
+    type PedidoDetail = { fornecedor?: string };
+    const suggestionResp = await supabaseRest<{ pedidos: PedidoDetail[] | null }[]>(
+      `omie_purchase_suggestions?select=pedidos&codigo=eq.${encodeURIComponent(produto.codigo)}&limit=1`,
+    );
+    const pedidos = suggestionResp.data?.[0]?.pedidos ?? [];
+    const fornecedor =
+      pedidos.length > 0 ? (pedidos[pedidos.length - 1]?.fornecedor ?? null) : null;
+
+    return {
+      codigo: produto.codigo || data.codigoProduto,
+      descricao: produto.descricao,
+      custoMedio: posicao.cmc ?? 0,
+      fornecedor,
+    };
+  });
+
 export interface OmieStockItem {
   codigo: string;
   descricao: string;
@@ -155,7 +214,12 @@ export const listOmieActiveStock = createServerFn({ method: "GET" }).handler(asy
   let totalPaginas = 1;
   do {
     const resp = await omiePost<ListarProdutosResp>("geral/produtos", "ListarProdutos", [
-      { pagina, registros_por_pagina: REGISTROS_POR_PAGINA, apenas_importado_api: "N", filtrar_apenas_omiepdv: "N" },
+      {
+        pagina,
+        registros_por_pagina: REGISTROS_POR_PAGINA,
+        apenas_importado_api: "N",
+        filtrar_apenas_omiepdv: "N",
+      },
     ]);
     produtos.push(...(resp.produto_servico_cadastro ?? []));
     totalPaginas = resp.total_de_paginas ?? 1;
@@ -241,7 +305,12 @@ export const criarRequisicaoCompraOmie = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }): Promise<CriarRequisicaoCompraResultado> => {
-    type ProdutoResp = { codigo_produto: number; codigo: string; descricao: string; inativo: string };
+    type ProdutoResp = {
+      codigo_produto: number;
+      codigo: string;
+      descricao: string;
+      inativo: string;
+    };
 
     const itensValidos: { codProd: number; qtde: number; obsItem: string }[] = [];
     const itensComErro: { codigo: string; motivo: string }[] = [];
@@ -260,7 +329,10 @@ export const criarRequisicaoCompraOmie = createServerFn({ method: "POST" })
           obsItem: "Sugestão automática — VPRequisições (Estoque Omie)",
         });
       } catch (e) {
-        itensComErro.push({ codigo: item.codigo, motivo: e instanceof Error ? e.message : "Erro desconhecido" });
+        itensComErro.push({
+          codigo: item.codigo,
+          motivo: e instanceof Error ? e.message : "Erro desconhecido",
+        });
       }
       if (i < data.itens.length - 1) await sleep(PAUSA_ENTRE_ITENS_MS);
     }
@@ -272,7 +344,12 @@ export const criarRequisicaoCompraOmie = createServerFn({ method: "POST" })
     const hoje = new Date();
     const dtSugestao = `${String(hoje.getDate()).padStart(2, "0")}/${String(hoje.getMonth() + 1).padStart(2, "0")}/${hoje.getFullYear()}`;
 
-    type IncluirReqResp = { codReqCompra: number; codIntReqCompra: string; cCodStatus: string; cDesStatus: string };
+    type IncluirReqResp = {
+      codReqCompra: number;
+      codIntReqCompra: string;
+      cCodStatus: string;
+      cDesStatus: string;
+    };
     const resp = await omiePost<IncluirReqResp>("produtos/requisicaocompra", "IncluirReq", [
       {
         codCateg: "2.01.01", // Compras de Mercadorias para Revenda Nacional (mesma categoria usada nas requisições manuais de reposição de estoque)
