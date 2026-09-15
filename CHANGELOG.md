@@ -5,6 +5,14 @@ linha por entrega — para o contexto completo (logs, causa raiz, decisões),
 os fixes/features mais investigativos linkam para um relatório em
 `docs/reports/`.
 
+## 2026-09-15 (5)
+
+- fix(db): comprador sem permissão para finalizar cotação fracionada de um M1 reaberto após reprovação do aprovador ("Sem permissão para realizar esta ação") — a policy RLS `approvals_reopen_comprador` só cobria `decision = 'approved'`, nunca `'rejected'`, um gap deixado pela correção anterior que passou a reabrir reprovações. Ver `docs/reports/2026-09-15-edicao-pos-reprovacao-aprovador-nao-reabria.md`
+
+## 2026-09-15 (4)
+
+- fix(build): build de validação da Hostinger falhava com panic do `rayon-core` (Rust) mesmo com `GOMAXPROCS` limitado — `GOMAXPROCS` só controla os binários nativos em Go (esbuild); o Vite 7 também usa Rust (lightningcss/oxc) via `rayon`, que só respeita `RAYON_NUM_THREADS`. Adicionado em `scripts/build.mjs`
+
 ## 2026-09-15 (3)
 
 - fix(ui): botão "Ver histórico completo do ticket" (ícone de papiro/ScrollText) em Aprovação, Cotação, Compra e Recebimento abria `/movimentacoes` em nova aba (`target="_blank"`), o que sempre força um carregamento completo (nunca navegação instantânea do app) e some sem feedback quando o navegador bloqueia pop-up. Removido o `target="_blank"` nos 4 lugares — agora navega na mesma aba, instantâneo
