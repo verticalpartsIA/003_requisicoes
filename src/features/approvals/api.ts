@@ -51,13 +51,13 @@ interface ApprovalSupplierQuote {
 export interface ApprovalTravelItem {
   approvalItemId: string;
   itemId: string;
-  itemType: 'voo' | 'hotel' | 'carro' | 'produto';
+  itemType: "voo" | "hotel" | "carro" | "produto";
   productCode?: string | null;
   quantity?: number | null;
   description?: string | null;
   supplierName: string;
   price: number;
-  decision: 'pending' | 'approved' | 'rejected';
+  decision: "pending" | "approved" | "rejected";
   notes: string;
 }
 
@@ -77,6 +77,8 @@ export interface ApprovalRequestItem {
   suppliers: ApprovalSupplierQuote[];
   createdAt: string;
   travelItems?: ApprovalTravelItem[];
+  /** Itens do M1 (produtos), pro campo de custo Omie na tela de aprovação — só populado para module === "M1". */
+  m1Products?: { code: string | null; name: string; quantity: number | null }[];
 }
 
 const decisionSchema = z.object({
@@ -101,12 +103,17 @@ function mapApprovalRequest(
     id: requisition.ticket_number,
     title: requisition.title,
     module: `${requisition.module} — ${
-      requisition.module === "M1" ? "Produtos"
-      : requisition.module === "M2" ? "Viagens"
-      : requisition.module === "M3" ? "Serviços"
-      : requisition.module === "M4" ? "Manutenção"
-      : requisition.module === "M5" ? "Frete"
-      : "Locação"
+      requisition.module === "M1"
+        ? "Produtos"
+        : requisition.module === "M2"
+          ? "Viagens"
+          : requisition.module === "M3"
+            ? "Serviços"
+            : requisition.module === "M4"
+              ? "Manutenção"
+              : requisition.module === "M5"
+                ? "Frete"
+                : "Locação"
     }`,
     moduleCode: requisition.module,
     requesterName: requisition.requester_name,
@@ -167,17 +174,19 @@ export const listPendingApprovals = createServerFn({ method: "GET" }).handler(as
   );
   const requisitions = requisitionsResponse.data;
   const quotationIds = approvals.map((item) => item.quotation_id).filter(Boolean) as string[];
-  const quotationsResponse = quotationIds.length === 0
-    ? { data: [] as QuotationRow[] }
-    : await supabaseRest<QuotationRow[]>(
-        `quotations?select=id,requisition_id,win_criteria&id=in.(${quotationIds.join(",")})`,
-      );
-  const suppliersResponse = quotationIds.length === 0
-    ? { data: [] as SupplierRow[] }
-    : await supabaseRest<SupplierRow[]>(
-        `quotation_suppliers?select=id,quotation_id,supplier_name,price,deadline,notes,is_winner&` +
-          `quotation_id=in.(${quotationIds.join(",")})`,
-      );
+  const quotationsResponse =
+    quotationIds.length === 0
+      ? { data: [] as QuotationRow[] }
+      : await supabaseRest<QuotationRow[]>(
+          `quotations?select=id,requisition_id,win_criteria&id=in.(${quotationIds.join(",")})`,
+        );
+  const suppliersResponse =
+    quotationIds.length === 0
+      ? { data: [] as SupplierRow[] }
+      : await supabaseRest<SupplierRow[]>(
+          `quotation_suppliers?select=id,quotation_id,supplier_name,price,deadline,notes,is_winner&` +
+            `quotation_id=in.(${quotationIds.join(",")})`,
+        );
 
   const requisitionById = new Map(requisitions.map((item) => [item.id, item]));
   const quotationByRequisition = new Map(

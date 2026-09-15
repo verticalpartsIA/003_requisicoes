@@ -3,6 +3,7 @@ import {
   validateOmieProduct,
   listOmieActiveStock,
   getOmieStockPosition,
+  getOmieProductCost,
   criarRequisicaoCompraOmie,
 } from "@/features/omie/api";
 import { supabaseBrowser } from "@/lib/supabase-browser";
@@ -13,7 +14,10 @@ import type { OmieStockItem, CriarRequisicaoCompraItem } from "@/features/omie/a
 // ~1800 produtos) voltam truncadas silenciosamente, sem erro, e a tela some
 // com o restante dos produtos. Busca página a página até esgotar os dados.
 async function fetchAllRows<T>(
-  build: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  build: (
+    from: number,
+    to: number,
+  ) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
 ): Promise<T[]> {
   const PAGE_SIZE = 1000;
   const rows: T[] = [];
@@ -45,6 +49,13 @@ export async function getOmieStockPositionClient(codigoProduto: string) {
   return getOmieStockPosition({ data: { codigoProduto } });
 }
 
+/** Custo médio + fornecedor do Omie, para comparação na tela de aprovação
+ *  (M1). Lança erro "Produto não encontrado no Omie." quando o código não
+ *  existe no cadastro — a tela mostra essa mensagem no lugar do valor. */
+export async function getOmieProductCostClient(codigoProduto: string) {
+  return getOmieProductCost({ data: { codigoProduto } });
+}
+
 /** Cria uma única Requisição de Compra no Omie com vários produtos de uma vez —
  *  usada para enviar em massa os itens selecionados na tela de Sugestão de Compra. */
 export async function criarRequisicaoCompraOmieClient(itens: CriarRequisicaoCompraItem[]) {
@@ -68,7 +79,9 @@ export async function listOmieStockFromCacheClient(): Promise<OmieStockCacheResu
   }>((from, to) =>
     supabaseBrowser
       .from("omie_stock_cache")
-      .select("codigo,descricao,estoque_fisico,estoque_reservado,estoque_disponivel,estoque_minimo,updated_at")
+      .select(
+        "codigo,descricao,estoque_fisico,estoque_reservado,estoque_disponivel,estoque_minimo,updated_at",
+      )
       .order("descricao", { ascending: true })
       .range(from, to),
   );
@@ -214,7 +227,11 @@ export async function listOmiePurchaseSuggestionsClient(): Promise<OmiePurchaseS
       return latest;
     }, null);
 
-  return { items, lastSyncedAt: latestOf("estoqueAtualizadoEm"), lastVelocitySyncedAt: latestOf("giroCalculadoEm") };
+  return {
+    items,
+    lastSyncedAt: latestOf("estoqueAtualizadoEm"),
+    lastVelocitySyncedAt: latestOf("giroCalculadoEm"),
+  };
 }
 
 export interface SalvarLoteInput {
