@@ -8,6 +8,10 @@ os fixes/features mais investigativos linkam para um relatório em
 Para arquitetura e convenções do projeto, ver `CLAUDE.md`. Para o histórico
 de PRs com diff completo, ver a aba *Pull requests* do repositório.
 
+## 2026-09-15 (2)
+
+- fix(requisitions): editar uma requisição M1 reprovada pelo aprovador ficava presa em `REJEITADO` para sempre — devolve agora para a fila de Cotação (`ABERTO`), e a quantidade editada passa a sincronizar de fato em `requisition_items` (antes só o `module_data` mudava, a cotação continuava lendo a quantidade antiga). Ver `docs/reports/2026-09-15-edicao-pos-reprovacao-aprovador-nao-reabria.md`
+
 ## 2026-09-15
 
 - feat(approval): campo "Custo Omie (ao vivo)" na tela de aprovação, só para módulo M1 — busca ao vivo (por produto, não em lote) o custo médio contábil (`cmc`, via `estoque/consulta`) e o fornecedor do pedido pendente mais recente (cache `omie_purchase_suggestions`); quando o código não existe no Omie, mostra "Produto não encontrado no Omie" em vez de quebrar a tela
