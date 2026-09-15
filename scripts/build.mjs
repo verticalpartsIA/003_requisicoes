@@ -59,10 +59,18 @@ const result = spawnSync("npx", ["vite", "build"], {
   env: {
     ...process.env,
     NODE_OPTIONS: "--max-old-space-size=2048",
-    // Limita as threads que os binários nativos do esbuild/rollup (Go/Rust)
-    // tentam criar — evita o panic de runtime ao bater no limite de
-    // processos/threads (ulimit -u) da conta compartilhada da Hostinger.
+    // Limita as threads que os binários nativos do esbuild (Go) tentam criar —
+    // evita o panic de runtime ao bater no limite de processos/threads
+    // (ulimit -u) da conta compartilhada da Hostinger.
     GOMAXPROCS: "2",
+    // GOMAXPROCS não tem efeito nos binários nativos em Rust do Vite 7
+    // (lightningcss/oxc, via o crate `rayon-core`) — esses respeitam
+    // RAYON_NUM_THREADS. Sem isso, rayon tenta abrir 1 thread por CPU
+    // relatada pelo host e falha com "ThreadPoolBuildError ... Resource
+    // temporarily unavailable" quando bate no mesmo ulimit compartilhado
+    // (2026-09-15: build falhou 2x seguidas nos merges do PR #97 e #98,
+    // hbuilds/current ficou sem atualizar por horas).
+    RAYON_NUM_THREADS: "2",
   },
 });
 
