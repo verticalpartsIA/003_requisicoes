@@ -22,17 +22,21 @@ export const updateRequisition = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
-    const current = await supabaseRest<Array<{ edition: number; ticket_number: string; status: string }>>(
-      `requisitions?select=edition,ticket_number,status&id=eq.${data.requisitionId}`,
-    );
+    const current = await supabaseRest<
+      Array<{ edition: number; ticket_number: string; status: string; module: string }>
+    >(`requisitions?select=edition,ticket_number,status,module&id=eq.${data.requisitionId}`);
     const rec = current.data?.[0];
     const newEdition = (rec?.edition ?? 1) + 1;
     const ticketNumber = rec?.ticket_number ?? "";
 
     // Se a requisição foi devolvida pelo comprador na Cotação por falta de
-    // informação, reenviar precisa trazê-la de volta pra fila de Cotação —
-    // senão o ticket fica preso em REJEITADO para sempre (não mexe nos casos
-    // de reprovação por Gestor/Aprovação, que seguem o comportamento atual).
+    // informação, OU reprovada pelo aprovador (item a item ou geral),
+    // reenviar precisa trazê-la de volta pra fila de Cotação — senão o
+    // ticket fica preso em REJEITADO para sempre. Volta para Cotação (não
+    // direto pra Aprovação) porque a edição pode mudar quantidade/produto, e
+    // o preço por unidade cotado antes pode não valer mais para a nova
+    // quantidade — o comprador confirma de novo antes de reenviar pro
+    // aprovador (não mexe em reprovação do Gestor, que segue fora de escopo).
     let resumeStatus: string | undefined;
     if (rec?.status === "REJEITADO") {
       const lastRejection = await supabaseRest<Array<{ action: string }>>(
@@ -40,7 +44,10 @@ export const updateRequisition = createServerFn({ method: "POST" })
           `&action=in.(GESTOR_REJECTED,APPROVAL_REJECTED,QUOTATION_RETURNED_FOR_INFO)` +
           `&order=created_at.desc&limit=1`,
       );
-      if (lastRejection.data[0]?.action === "QUOTATION_RETURNED_FOR_INFO") resumeStatus = "ABERTO";
+      const lastAction = lastRejection.data[0]?.action;
+      if (lastAction === "QUOTATION_RETURNED_FOR_INFO" || lastAction === "APPROVAL_REJECTED") {
+        resumeStatus = "ABERTO";
+      }
     }
 
     await supabaseRest(`requisitions?id=eq.${data.requisitionId}`, {
@@ -58,6 +65,39 @@ export const updateRequisition = createServerFn({ method: "POST" })
         ...(resumeStatus ? { status: resumeStatus } : {}),
       },
     });
+
+    // Ao reabrir um M1 reprovado na Aprovação, a fila de Cotação casa itens
+    // por código+descrição e nunca atualiza a quantidade de um item que já
+    // existe (só insere o que falta e remove pendente que sumiu) — então a
+    // quantidade editada nunca chegava na cotação. Sincroniza aqui direto:
+    // atualiza quantidade/descrição dos itens já cotados/reprovados e devolve
+    // pra 'pending' pra entrarem de novo no fluxo de cotação por item.
+    if (resumeStatus && rec?.module === "M1") {
+      const items = (data.moduleData as { items?: unknown[] } | null)?.items ?? [];
+      const existingItems = await supabaseRest<Array<{ id: string; product_code: string | null }>>(
+        `requisition_items?select=id,product_code&requisition_id=eq.${data.requisitionId}`,
+      );
+      const existingByCode = new Map(
+        (existingItems.data ?? [])
+          .filter((row) => row.product_code)
+          .map((row) => [row.product_code as string, row.id]),
+      );
+      for (const raw of items as Array<Record<string, unknown>>) {
+        const productCode = raw.product_code as string | null;
+        if (!productCode) continue;
+        const itemId = existingByCode.get(productCode);
+        if (!itemId) continue;
+        await supabaseRest(`requisition_items?id=eq.${itemId}`, {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: {
+            quantity: raw.quantity ?? null,
+            description: raw.product_name ?? raw.description ?? null,
+            status: "pending",
+          },
+        });
+      }
+    }
 
     await supabaseRest("audit_logs", {
       method: "POST",
@@ -197,7 +237,8 @@ export const createProductRequisition = createServerFn({ method: "POST" })
     });
 
     const created = response.data[0];
-    if (!created) throw new Error("A requisição foi enviada, mas o Supabase não retornou o registro criado.");
+    if (!created)
+      throw new Error("A requisição foi enviada, mas o Supabase não retornou o registro criado.");
 
     await supabaseRest("audit_logs", {
       method: "POST",
