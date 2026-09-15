@@ -5,6 +5,10 @@ linha por entrega — para o contexto completo (logs, causa raiz, decisões),
 os fixes/features mais investigativos linkam para um relatório em
 `docs/reports/`.
 
+## 2026-09-15 (3)
+
+- fix(ui): botão "Ver histórico completo do ticket" (ícone de papiro/ScrollText) em Aprovação, Cotação, Compra e Recebimento abria `/movimentacoes` em nova aba (`target="_blank"`), o que sempre força um carregamento completo (nunca navegação instantânea do app) e some sem feedback quando o navegador bloqueia pop-up. Removido o `target="_blank"` nos 4 lugares — agora navega na mesma aba, instantâneo
+
 Para arquitetura e convenções do projeto, ver `CLAUDE.md`. Para o histórico
 de PRs com diff completo, ver a aba *Pull requests* do repositório.
 
