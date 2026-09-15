@@ -63,3 +63,34 @@ e `requisitions.status` voltou para `ABERTO`.
   no fluxo, antes de qualquer cotação existir).
 - Não foi criada uma tela nova nem um fluxo de "reenvio" explícito — a
   correção é no mesmo botão de editar que já existe.
+
+## Continuação — RLS de `approvals` não acompanhou a reabertura
+
+Depois da correção acima, Andréia (comprador) tentou "Finalizar Cotação
+Fracionada" no M1-000160 já reaberto e recebeu **"Sem permissão para
+realizar esta ação. Contate o administrador do sistema."**
+
+**Causa:** `saveItemQuotes`/`finalizeQuotation`
+(`src/features/quotations/client.ts`) fazem upsert em `approvals`
+(`onConflict: requisition_id`), o que vira um `UPDATE` na linha já
+`rejected`. A policy `approvals_reopen_comprador`
+(`database/025_reopen_quotation_correction.sql`) só permitia ao
+comprador/admin levar uma aprovação de volta para `pending` quando
+`decision = 'approved'` — o caso de origem daquela migration era corrigir
+preço pós-aprovação, e reabrir uma **reprovação** foi explicitamente
+deixado fora de escopo (ver
+`docs/reports/2026-08-25-correcao-preco-cotacao-pos-aprovacao.md`). A
+correção de código descrita acima passou a reabrir reprovações do
+aprovador, mas o RLS de `approvals` não foi atualizado junto — gap
+introduzido pela própria correção anterior.
+
+O trigger `enforce_approvals_reopen_transition` (mesma migration 025) já
+tratava `'approved'` e `'rejected'` da mesma forma; só faltava a policy.
+
+**Correção (`database/027_reopen_quotation_after_rejection.sql`):**
+recria `approvals_reopen_comprador` com `USING (... and decision in
+('approved', 'rejected'))`, mantendo o `WITH CHECK` restrito a
+`decision = 'pending'`. Aplicado diretamente em produção (Supabase) antes
+do commit, para desbloquear Andréia sem esperar deploy; o arquivo de
+migration foi commitado depois, para manter o histórico do repositório
+consistente com o estado do banco.
