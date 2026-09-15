@@ -20,6 +20,7 @@ import {
   Loader2,
   List,
   Users,
+  MessageCircle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,7 @@ import {
   getTierThresholds,
   saveTierThresholds,
   setUserApprover,
+  setUserWhatsapp,
   type UserWithRoles,
   type TierThresholds,
 } from "@/features/admin/api";
@@ -180,6 +182,7 @@ function UsersTab() {
   const [deptManagers, setDeptManagers] = useState<DeptManagerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingDept, setEditingDept] = useState<Record<string, string>>({});
+  const [editingWhatsapp, setEditingWhatsapp] = useState<Record<string, string>>({});
   const [newGestorDept, setNewGestorDept] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<"Todos" | AppRole>("Todos");
@@ -265,6 +268,17 @@ function UsersTab() {
       toast.success("Departamento atualizado.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao salvar departamento.");
+    }
+  };
+
+  const handleSaveWhatsapp = async (userId: string) => {
+    try {
+      const number = (editingWhatsapp[userId] ?? "").trim();
+      await setUserWhatsapp(userId, number);
+      patchUser(userId, { whatsapp_number: number.replace(/\D/g, "") || null });
+      toast.success("WhatsApp atualizado.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao salvar WhatsApp.");
     }
   };
 
@@ -582,12 +596,15 @@ function UsersTab() {
               deptManagers={deptManagers}
               editingDept={editingDept}
               setEditingDept={setEditingDept}
+              editingWhatsapp={editingWhatsapp}
+              setEditingWhatsapp={setEditingWhatsapp}
               newGestorDept={newGestorDept}
               setNewGestorDept={setNewGestorDept}
               onAddRole={handleAddRole}
               onRemoveRole={handleRemoveRole}
               onSetTier={handleSetTier}
               onSaveDept={handleSaveDept}
+              onSaveWhatsapp={handleSaveWhatsapp}
               onSetApprover={handleSetApprover}
               onAddGestor={handleAddGestor}
               onRemoveGestor={handleRemoveGestor}
@@ -798,12 +815,15 @@ function UserDetailContent({
   deptManagers,
   editingDept,
   setEditingDept,
+  editingWhatsapp,
+  setEditingWhatsapp,
   newGestorDept,
   setNewGestorDept,
   onAddRole,
   onRemoveRole,
   onSetTier,
   onSaveDept,
+  onSaveWhatsapp,
   onSetApprover,
   onAddGestor,
   onRemoveGestor,
@@ -813,12 +833,15 @@ function UserDetailContent({
   deptManagers: DeptManagerEntry[];
   editingDept: Record<string, string>;
   setEditingDept: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  editingWhatsapp: Record<string, string>;
+  setEditingWhatsapp: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   newGestorDept: Record<string, string>;
   setNewGestorDept: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   onAddRole: (userId: string, role: AppRole) => Promise<void>;
   onRemoveRole: (userId: string, role: AppRole) => Promise<void>;
   onSetTier: (userId: string, tier: 1 | 2 | 3 | null) => Promise<void>;
   onSaveDept: (userId: string) => Promise<void>;
+  onSaveWhatsapp: (userId: string) => Promise<void>;
   onSetApprover: (userId: string, approverId: string | null) => Promise<void>;
   onAddGestor: (userId: string) => Promise<void>;
   onRemoveGestor: (entryId: string) => Promise<void>;
@@ -830,6 +853,9 @@ function UserDetailContent({
   const currentDept = editingDept[user.id] ?? user.department ?? "";
   const savedDept = user.department ?? "";
   const deptChanged = currentDept !== savedDept;
+  const currentWhatsapp = editingWhatsapp[user.id] ?? user.whatsapp_number ?? "";
+  const savedWhatsapp = user.whatsapp_number ?? "";
+  const whatsappChanged = currentWhatsapp !== savedWhatsapp;
   // Departamento é texto livre tanto aqui (profiles.department) quanto na
   // designação de gestor (department_managers.department) — sem essa lista
   // como guia, pequenas variações de digitação ("Logistica" vs "Logistica/
@@ -987,6 +1013,30 @@ function UserDetailContent({
               variant="outline"
               className="h-8 text-xs px-2 shrink-0"
               onClick={() => void onSaveDept(user.id)}
+            >
+              <Save className="h-3 w-3 mr-1" />
+              Salvar
+            </Button>
+          )}
+        </div>
+
+        {/* WhatsApp — usado nas notificações automáticas de requisições
+            (ciência do líder, cotação, aprovação por alçada) */}
+        <div className="flex items-center gap-2">
+          <MessageCircle className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-xs text-muted-foreground w-24 shrink-0">WhatsApp:</span>
+          <Input
+            className="h-8 text-xs flex-1"
+            placeholder="Ex: 5511999999999"
+            value={currentWhatsapp}
+            onChange={(e) => setEditingWhatsapp((prev) => ({ ...prev, [user.id]: e.target.value }))}
+          />
+          {whatsappChanged && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs px-2 shrink-0"
+              onClick={() => void onSaveWhatsapp(user.id)}
             >
               <Save className="h-3 w-3 mr-1" />
               Salvar

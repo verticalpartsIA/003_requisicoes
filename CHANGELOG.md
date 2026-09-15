@@ -8,6 +8,10 @@ os fixes/features mais investigativos linkam para um relatório em
 Para arquitetura e convenções do projeto, ver `CLAUDE.md`. Para o histórico
 de PRs com diff completo, ver a aba *Pull requests* do repositório.
 
+## 2026-09-15
+
+- feat(whatsapp): notificações automáticas por WhatsApp nas etapas de decisão — líder direto avisado na criação da requisição (ciência), comprador avisado após a ciência (cotar), aprovador da alçada certa avisado ao finalizar a cotação, e comprador avisado de volta quando aprovado; usa a instância Evolution API `pv360` e reaproveita a mesma resolução de líder/departamento já usada em `gestor/api.ts`. Cadastro do número de WhatsApp por colaborador adicionado no Admin (`profiles.whatsapp_number`, migração `026`)
+
 ## 2026-09-14
 
 - fix(m1-produtos): requisição de **Estoque** ficava travada em produtos sem estoque mínimo configurado no Omie (`estoque_minimo = 0`) — a quantidade máxima calculada (`max(0, mínimo - disponível)`) dava 0 e o campo Quantidade ficava desabilitado, sem deixar adicionar o item; agora o teto só é aplicado quando há um mínimo de fato configurado, e sem ele a quantidade é informada livremente

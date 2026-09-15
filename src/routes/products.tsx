@@ -58,6 +58,7 @@ import {
 } from "@/features/omie/client";
 import { useAuth } from "@/features/auth/auth-context";
 import { notifyVpClickClient } from "@/features/vpclick/client";
+import { notifyWhatsappClient } from "@/features/whatsapp/client";
 import type { TicketRow } from "@/components/tickets-table";
 
 const URGENCY = [
@@ -741,6 +742,16 @@ function ProductsPage() {
         title,
         module: "M1",
         requesterName: profile?.full_name || user?.email || "Usuário VP",
+      }).catch(console.warn);
+      void notifyWhatsappClient({
+        stage: "LIDER_CIENCIA",
+        requisitionId: result.id,
+        ticketNumber: result.ticketNumber,
+        title,
+        module: "M1",
+        requesterName: profile?.full_name || user?.email || "Usuário VP",
+        requesterId: user?.id,
+        requesterDepartment: profile?.department ?? undefined,
       }).catch(console.warn);
       setDialogOpen(false);
       resetForm();

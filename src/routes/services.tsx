@@ -42,6 +42,7 @@ import { friendlySupabaseError } from "@/lib/supabase-error";
 import { useAuth } from "@/features/auth/auth-context";
 import { toast } from "sonner";
 import { notifyVpClickClient } from "@/features/vpclick/client";
+import { notifyWhatsappClient } from "@/features/whatsapp/client";
 import { updateRequisitionClient } from "@/features/requisitions/client";
 import { useRouter } from "@tanstack/react-router";
 
@@ -441,6 +442,16 @@ function ServicesPage() {
         title: `${serviceName} (${SERVICE_TYPES.find((t) => t.value === serviceType)?.label ?? serviceType})`,
         module: "M3",
         requesterName: profile?.full_name || user?.email || "Usuário VP",
+      }).catch(console.warn);
+      void notifyWhatsappClient({
+        stage: "LIDER_CIENCIA",
+        requisitionId: created?.id ?? "",
+        ticketNumber: created?.ticket_number ?? "",
+        title: `${serviceName} (${SERVICE_TYPES.find((t) => t.value === serviceType)?.label ?? serviceType})`,
+        module: "M3",
+        requesterName: profile?.full_name || user?.email || "Usuário VP",
+        requesterId: user?.id,
+        requesterDepartment: profile?.department ?? undefined,
       }).catch(console.warn);
       setDialogOpen(false);
       resetForm();
