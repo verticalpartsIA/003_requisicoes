@@ -11,7 +11,12 @@ export type WhatsappStage =
   | "LIDER_CIENCIA"
   | "COMPRADOR_COTAR"
   | "APROVACAO_PENDENTE"
-  | "COMPRA_APROVADA";
+  | "COMPRA_APROVADA"
+  | "REQUISITANTE_CIENCIA_OK"
+  | "REQUISITANTE_REPROVADO_GESTOR"
+  | "REQUISITANTE_APROVADO_FINANCEIRO"
+  | "REQUISITANTE_REPROVADO_FINANCEIRO"
+  | "REQUISITANTE_COMPRADO";
 
 export interface WhatsappNotifyInput {
   stage: WhatsappStage;
@@ -21,11 +26,14 @@ export interface WhatsappNotifyInput {
   module: string;
   requesterName: string;
   /** LIDER_CIENCIA: resolve o aprovador pessoal designado do solicitante,
-   *  ou os gestores do departamento como fallback. */
+   *  ou os gestores do departamento como fallback.
+   *  REQUISITANTE_*: manda direto pro whatsapp desse perfil. */
   requesterId?: string;
   requesterDepartment?: string;
   /** APROVACAO_PENDENTE: define a alçada (nível 1/2/3) que deve ser notificada. */
   totalValue?: number;
+  /** REQUISITANTE_REPROVADO_*: motivo informado por quem reprovou. */
+  rejectionReason?: string;
 }
 
 export async function notifyWhatsappClient(input: WhatsappNotifyInput): Promise<void> {

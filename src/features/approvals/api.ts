@@ -20,6 +20,7 @@ interface RequisitionRow {
   title: string;
   justification: string;
   requester_name: string;
+  requester_profile_id: string | null;
   status: string;
   created_at: string;
 }
@@ -70,6 +71,7 @@ export interface ApprovalRequestItem {
   module: string;
   moduleCode?: string;
   requesterName: string;
+  requesterProfileId: string | null;
   requesterNotes: string;
   totalValue: number;
   approvalLevel: 1 | 2 | 3;
@@ -117,6 +119,7 @@ function mapApprovalRequest(
     }`,
     moduleCode: requisition.module,
     requesterName: requisition.requester_name,
+    requesterProfileId: requisition.requester_profile_id,
     requesterNotes: requisition.justification,
     totalValue: approval.total_value || 0,
     approvalLevel: approval.approval_level,
@@ -170,7 +173,7 @@ export const listPendingApprovals = createServerFn({ method: "GET" }).handler(as
 
   const requisitionIds = approvals.map((item) => item.requisition_id);
   const requisitionsResponse = await supabaseRest<RequisitionRow[]>(
-    `requisitions?select=id,ticket_number,module,title,justification,requester_name,status,created_at&id=in.(${requisitionIds.join(",")})&status=eq.APROVAÇÃO`,
+    `requisitions?select=id,ticket_number,module,title,justification,requester_name,requester_profile_id,status,created_at&id=in.(${requisitionIds.join(",")})&status=eq.APROVAÇÃO`,
   );
   const requisitions = requisitionsResponse.data;
   const quotationIds = approvals.map((item) => item.quotation_id).filter(Boolean) as string[];

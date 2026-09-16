@@ -50,6 +50,7 @@ import { AccessGuard } from "@/components/access-guard";
 import { confirmPurchaseClient, listPendingPurchasesClient } from "@/features/purchases/client";
 import { useAuth } from "@/features/auth/auth-context";
 import { notifyVpClickClient } from "@/features/vpclick/client";
+import { notifyWhatsappClient } from "@/features/whatsapp/client";
 
 export const Route = createFileRoute("/purchasing")({
   head: () => ({
@@ -241,6 +242,15 @@ function PurchasingPage() {
         module: selected.module,
         requesterName: selected.requesterName,
         requiresReceipt: sendToV5,
+      }).catch(console.warn);
+      void notifyWhatsappClient({
+        stage: "REQUISITANTE_COMPRADO",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.id,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+        requesterId: selected.requesterProfileId ?? undefined,
       }).catch(console.warn);
       closeDialog();
       setItems(await listPendingPurchasesClient());

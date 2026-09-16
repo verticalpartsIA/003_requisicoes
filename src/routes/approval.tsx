@@ -149,6 +149,15 @@ function GestorSection({ gestorName }: { gestorName: string }) {
         module: selected.module,
         requesterName: selected.requesterName,
       }).catch(console.warn);
+      void notifyWhatsappClient({
+        stage: "REQUISITANTE_CIENCIA_OK",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.ticketNumber,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+        requesterId: selected.requesterProfileId ?? undefined,
+      }).catch(console.warn);
       setSelected(null);
       setNotes("");
       await reload();
@@ -176,6 +185,16 @@ function GestorSection({ gestorName }: { gestorName: string }) {
         title: selected.title,
         module: selected.module,
         requesterName: selected.requesterName,
+      }).catch(console.warn);
+      void notifyWhatsappClient({
+        stage: "REQUISITANTE_REPROVADO_GESTOR",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.ticketNumber,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+        requesterId: selected.requesterProfileId ?? undefined,
+        rejectionReason: notes,
       }).catch(console.warn);
       setSelected(null);
       setNotes("");
@@ -386,6 +405,15 @@ function AguardandoGestorSection({ gestorName }: { gestorName: string }) {
         module: selected.module,
         requesterName: selected.requesterName,
       }).catch(console.warn);
+      void notifyWhatsappClient({
+        stage: "REQUISITANTE_CIENCIA_OK",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.ticketNumber,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+        requesterId: selected.requesterProfileId ?? undefined,
+      }).catch(console.warn);
       setSelected(null);
       setNotes("");
       await reload();
@@ -413,6 +441,16 @@ function AguardandoGestorSection({ gestorName }: { gestorName: string }) {
         title: selected.title,
         module: selected.module,
         requesterName: selected.requesterName,
+      }).catch(console.warn);
+      void notifyWhatsappClient({
+        stage: "REQUISITANTE_REPROVADO_GESTOR",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.ticketNumber,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+        requesterId: selected.requesterProfileId ?? undefined,
+        rejectionReason: notes,
       }).catch(console.warn);
       setSelected(null);
       setNotes("");
@@ -711,6 +749,15 @@ function ApprovalPage() {
         module: selected.module,
         requesterName: selected.requesterName,
       }).catch(console.warn);
+      void notifyWhatsappClient({
+        stage: "REQUISITANTE_APROVADO_FINANCEIRO",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.id,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+        requesterId: selected.requesterProfileId ?? undefined,
+      }).catch(console.warn);
       setSelected(null);
       setJustification("");
       setApprovals(await listPendingApprovalsClient());
@@ -742,6 +789,16 @@ function ApprovalPage() {
         title: selected.title,
         module: selected.module,
         requesterName: selected.requesterName,
+      }).catch(console.warn);
+      void notifyWhatsappClient({
+        stage: "REQUISITANTE_REPROVADO_FINANCEIRO",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.id,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+        requesterId: selected.requesterProfileId ?? undefined,
+        rejectionReason: justification,
       }).catch(console.warn);
       setSelected(null);
       setJustification("");
@@ -805,6 +862,26 @@ function ApprovalPage() {
           title: selected.title,
           module: selected.module,
           requesterName: selected.requesterName,
+        }).catch(console.warn);
+        void notifyWhatsappClient({
+          stage: "REQUISITANTE_APROVADO_FINANCEIRO",
+          requisitionId: selected.requisitionId,
+          ticketNumber: selected.id,
+          title: selected.title,
+          module: selected.module,
+          requesterName: selected.requesterName,
+          requesterId: selected.requesterProfileId ?? undefined,
+        }).catch(console.warn);
+      } else {
+        void notifyWhatsappClient({
+          stage: "REQUISITANTE_REPROVADO_FINANCEIRO",
+          requisitionId: selected.requisitionId,
+          ticketNumber: selected.id,
+          title: selected.title,
+          module: selected.module,
+          requesterName: selected.requesterName,
+          requesterId: selected.requesterProfileId ?? undefined,
+          rejectionReason: justification,
         }).catch(console.warn);
       }
 
