@@ -210,8 +210,8 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
         const userIds = await getUserIdsByRole("comprador");
         const numbers = await getWhatsappNumbers(userIds);
         const text =
-          `Novo pedido liberado para cotação: *${ticketNumber}*\n\n` +
-          `${title} — solicitante: ${requesterName}\n\n🔗 Cotar: ${base}/quoting`;
+          `Tem cotação pra você fazer: pedido *${ticketNumber}*\n\n` +
+          `${title} — solicitante: ${requesterName}, já com ciência do gestor.\n\n🔗 Cotar: ${base}/quoting`;
         await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
       } else if (stage === "APROVACAO_PENDENTE") {
         const thresholds = await getTierThresholds();
@@ -225,7 +225,9 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
       } else if (stage === "COMPRA_APROVADA") {
         const userIds = await getUserIdsByRole("comprador");
         const numbers = await getWhatsappNumbers(userIds);
-        const text = `Foi aprovado o ticket *${ticketNumber}* — pode prosseguir com a compra.\n\n${title}`;
+        const text =
+          `Tem compra aprovada pra você fazer: pedido *${ticketNumber}*\n\n` +
+          `${title} já foi aprovado pelo gestor de alçada.\n\n🔗 Comprar: ${base}/purchasing`;
         await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
       }
     } catch (err) {
