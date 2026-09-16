@@ -171,7 +171,17 @@ async function getTierThresholds() {
 // ─── Server function principal ───────────────────────────────────────────────
 
 const notifySchema = z.object({
-  stage: z.enum(["LIDER_CIENCIA", "COMPRADOR_COTAR", "APROVACAO_PENDENTE", "COMPRA_APROVADA"]),
+  stage: z.enum([
+    "LIDER_CIENCIA",
+    "COMPRADOR_COTAR",
+    "APROVACAO_PENDENTE",
+    "COMPRA_APROVADA",
+    "REQUISITANTE_CIENCIA_OK",
+    "REQUISITANTE_REPROVADO_GESTOR",
+    "REQUISITANTE_APROVADO_FINANCEIRO",
+    "REQUISITANTE_REPROVADO_FINANCEIRO",
+    "REQUISITANTE_COMPRADO",
+  ]),
   requisitionId: z.string().uuid(),
   ticketNumber: z.string(),
   title: z.string(),
@@ -180,6 +190,7 @@ const notifySchema = z.object({
   requesterId: z.string().uuid().optional(),
   requesterDepartment: z.string().optional(),
   totalValue: z.number().optional(),
+  rejectionReason: z.string().optional(),
 });
 
 export const notifyWhatsappStage = createServerFn({ method: "POST" })
@@ -194,6 +205,7 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
       requesterId,
       requesterDepartment,
       totalValue,
+      rejectionReason,
     } = data;
     const base = vpreqBaseUrl();
     const ctx = { stage, requisitionId, ticketNumber };
@@ -228,6 +240,34 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
         const text =
           `Tem compra aprovada pra você fazer: pedido *${ticketNumber}*\n\n` +
           `${title} já foi aprovado pelo gestor de alçada.\n\n🔗 Comprar: ${base}/purchasing`;
+        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+      } else if (stage === "REQUISITANTE_CIENCIA_OK") {
+        const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
+        const text =
+          `Sua requisição *${ticketNumber}* foi aprovada pelo seu gestor e já está em cotação.\n\n${title}`;
+        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+      } else if (stage === "REQUISITANTE_REPROVADO_GESTOR") {
+        const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
+        const text =
+          `Sua requisição *${ticketNumber}* foi reprovada pelo seu gestor.\n\n${title}\n\n` +
+          `Motivo: ${rejectionReason || "não informado"}\n\n` +
+          `Se for o caso de ajustar alguma pendência, você pode editar e reenviar.`;
+        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+      } else if (stage === "REQUISITANTE_APROVADO_FINANCEIRO") {
+        const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
+        const text =
+          `Sua requisição *${ticketNumber}* foi aprovada pelo financeiro e aguarda compra.\n\n${title}`;
+        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+      } else if (stage === "REQUISITANTE_REPROVADO_FINANCEIRO") {
+        const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
+        const text =
+          `Sua requisição *${ticketNumber}* foi reprovada pelo financeiro.\n\n${title}\n\n` +
+          `Motivo: ${rejectionReason || "não informado"}\n\n` +
+          `Se for o caso de ajustar alguma pendência, você pode editar e reenviar.`;
+        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+      } else if (stage === "REQUISITANTE_COMPRADO") {
+        const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
+        const text = `Sua requisição *${ticketNumber}* foi comprada! 🛒\n\n${title}`;
         await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
       }
     } catch (err) {

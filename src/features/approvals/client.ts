@@ -43,7 +43,7 @@ export async function listPendingApprovalsClient() {
   const { data: requisitions, error: requisitionsError } = await supabaseBrowser
     .from("requisitions")
     .select(
-      "id,ticket_number,module,title,justification,requester_name,status,created_at,module_data",
+      "id,ticket_number,module,title,justification,requester_name,requester_profile_id,status,created_at,module_data",
     )
     .in("id", requisitionIds)
     .eq("status", "APROVAÇÃO");
@@ -148,6 +148,7 @@ export async function listPendingApprovalsClient() {
         module: moduleLabel(requisition.module),
         moduleCode: requisition.module,
         requesterName: requisition.requester_name,
+        requesterProfileId: requisition.requester_profile_id,
         requesterNotes: requisition.justification,
         totalValue: approval.total_value || 0,
         approvalLevel: approval.approval_level as 1 | 2 | 3,

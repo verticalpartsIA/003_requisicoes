@@ -35,7 +35,7 @@ export async function listPendingPurchasesClient() {
   const requisitionIds = approvals.map((item) => item.requisition_id);
   const { data: requisitions, error: requisitionsError } = await supabaseBrowser
     .from("requisitions")
-    .select("id,ticket_number,module,title,justification,requester_name,status")
+    .select("id,ticket_number,module,title,justification,requester_name,requester_profile_id,status")
     .in("id", requisitionIds)
     .eq("status", "COMPRA");
   if (requisitionsError) throw requisitionsError;
@@ -127,6 +127,7 @@ export async function listPendingPurchasesClient() {
         moduleCode: requisition.module,
         category: getCategory(requisition.module),
         requesterName: requisition.requester_name,
+        requesterProfileId: requisition.requester_profile_id,
         requesterNotes: requisition.justification,
         totalValue: approval.total_value || 0,
         approvalLevel: approval.approval_level as 1 | 2 | 3,

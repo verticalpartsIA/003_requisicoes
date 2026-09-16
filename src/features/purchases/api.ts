@@ -21,6 +21,7 @@ interface RequisitionRow {
   title: string;
   justification: string;
   requester_name: string;
+  requester_profile_id: string | null;
   status: string;
 }
 
@@ -76,6 +77,7 @@ export interface PurchaseItem {
   moduleCode?: string;
   category: "viagem" | "servico" | "frete" | "locacao" | "produto" | "manutencao";
   requesterName: string;
+  requesterProfileId: string | null;
   requesterNotes: string;
   totalValue: number;
   approvalLevel: 1 | 2 | 3;
@@ -155,6 +157,7 @@ function mapPurchaseItem(
     moduleCode: requisition.module,
     category: getCategory(requisition.module),
     requesterName: requisition.requester_name,
+    requesterProfileId: requisition.requester_profile_id,
     requesterNotes: requisition.justification,
     totalValue: approval.total_value || 0,
     approvalLevel: approval.approval_level,
@@ -210,7 +213,7 @@ export const listPendingPurchases = createServerFn({ method: "GET" }).handler(as
 
   const requisitionIds = approvals.map((item) => item.requisition_id);
   const requisitionsResponse = await supabaseRest<RequisitionRow[]>(
-    `requisitions?select=id,ticket_number,module,title,justification,requester_name,status&id=in.(${requisitionIds.join(",")})&status=eq.COMPRA`,
+    `requisitions?select=id,ticket_number,module,title,justification,requester_name,requester_profile_id,status&id=in.(${requisitionIds.join(",")})&status=eq.COMPRA`,
   );
   const requisitions = requisitionsResponse.data;
   const quotationIds = approvals.map((item) => item.quotation_id).filter(Boolean) as string[];

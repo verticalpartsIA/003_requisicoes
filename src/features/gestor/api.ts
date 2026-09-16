@@ -10,6 +10,7 @@ interface GestorRequisition {
   justification: string;
   requester_name: string;
   requester_department: string | null;
+  requester_profile_id: string | null;
   urgency: string;
   created_at: string;
   module_data: Record<string, unknown> | null;
@@ -29,6 +30,7 @@ export interface GestorQueueItem {
   justification: string;
   requesterName: string;
   requesterDepartment: string;
+  requesterProfileId: string | null;
   urgency: string;
   createdAt: string;
   // Colunas base (produto/quantidade) do M1 multi-itens — nascimento da
@@ -91,7 +93,7 @@ export const listGestorQueue = createServerFn({ method: "POST" })
     const orFilter = encodeURIComponent(`(${filters.join(",")})`);
 
     const response = await supabaseRest<GestorRequisition[]>(
-      `requisitions?select=id,ticket_number,module,title,justification,requester_name,requester_department,urgency,created_at,module_data&status=eq.GESTOR&or=${orFilter}&order=created_at.asc`,
+      `requisitions?select=id,ticket_number,module,title,justification,requester_name,requester_department,requester_profile_id,urgency,created_at,module_data&status=eq.GESTOR&or=${orFilter}&order=created_at.asc`,
     );
     return (response.data ?? []).map((r): GestorQueueItem => {
       const rawItems =
@@ -106,6 +108,7 @@ export const listGestorQueue = createServerFn({ method: "POST" })
         justification: r.justification,
         requesterName: r.requester_name,
         requesterDepartment: r.requester_department ?? "—",
+        requesterProfileId: r.requester_profile_id,
         urgency: r.urgency,
         createdAt: new Date(r.created_at).toLocaleDateString("pt-BR"),
         items: rawItems?.map((it) => ({
@@ -127,7 +130,7 @@ export const listAllGestorPending = createServerFn({ method: "POST" })
 
     const [reqResp, deptMgrResp] = await Promise.all([
       supabaseRest<Array<GestorRequisition & { approver_id: string | null }>>(
-        `requisitions?select=id,ticket_number,module,title,justification,requester_name,requester_department,urgency,created_at,module_data,approver_id&status=eq.GESTOR&order=created_at.asc`,
+        `requisitions?select=id,ticket_number,module,title,justification,requester_name,requester_department,requester_profile_id,urgency,created_at,module_data,approver_id&status=eq.GESTOR&order=created_at.asc`,
       ),
       supabaseRest<{ department: string; manager_user_id: string }[]>(
         `department_managers?select=department,manager_user_id`,
@@ -174,6 +177,7 @@ export const listAllGestorPending = createServerFn({ method: "POST" })
         justification: r.justification,
         requesterName: r.requester_name,
         requesterDepartment: r.requester_department ?? "—",
+        requesterProfileId: r.requester_profile_id,
         urgency: r.urgency,
         createdAt: new Date(r.created_at).toLocaleDateString("pt-BR"),
         items: rawItems?.map((it) => ({
