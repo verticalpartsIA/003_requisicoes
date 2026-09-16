@@ -27,22 +27,85 @@ function vpreqBaseUrl() {
   return process.env.VPREQ_BASE_URL ?? "https://maroon-dove-178367.hostingersite.com";
 }
 
-async function sendWhatsappText(number: string, text: string): Promise<void> {
+async function logAttempt(entry: {
+  stage: string;
+  requisitionId: string;
+  ticketNumber: string;
+  recipientNumber: string;
+  status: "sent" | "error" | "skipped_no_apikey" | "skipped_no_number";
+  httpStatus?: number;
+  errorDetail?: string;
+}): Promise<void> {
+  try {
+    await supabaseRest("whatsapp_notification_log", {
+      method: "POST",
+      body: {
+        stage: entry.stage,
+        requisition_id: entry.requisitionId,
+        ticket_number: entry.ticketNumber,
+        recipient_number: entry.recipientNumber,
+        status: entry.status,
+        http_status: entry.httpStatus ?? null,
+        error_detail: entry.errorDetail ?? null,
+      },
+    });
+  } catch (err) {
+    // O log é só observabilidade — nunca pode derrubar o envio em si.
+    console.warn(
+      "[whatsapp] falha ao gravar log de tentativa",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+async function sendWhatsappText(
+  number: string,
+  text: string,
+  context: { stage: string; requisitionId: string; ticketNumber: string },
+): Promise<void> {
   const digits = number.replace(/\D/g, "");
-  if (!digits) return;
+  if (!digits) {
+    await logAttempt({ ...context, recipientNumber: number, status: "skipped_no_number" });
+    return;
+  }
   const apikey = evolutionApiKey();
   if (!apikey) {
     console.warn("[whatsapp] EVOLUTION_APIKEY não configurada — envio ignorado");
+    await logAttempt({ ...context, recipientNumber: digits, status: "skipped_no_apikey" });
     return;
   }
   try {
-    await fetch(`${evolutionApiUrl()}/message/sendText/${evolutionInstance()}`, {
+    const resp = await fetch(`${evolutionApiUrl()}/message/sendText/${evolutionInstance()}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey },
       body: JSON.stringify({ number: digits, text }),
     });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      await logAttempt({
+        ...context,
+        recipientNumber: digits,
+        status: "error",
+        httpStatus: resp.status,
+        errorDetail: body.slice(0, 500),
+      });
+      return;
+    }
+    await logAttempt({
+      ...context,
+      recipientNumber: digits,
+      status: "sent",
+      httpStatus: resp.status,
+    });
   } catch (err) {
-    console.warn("[whatsapp] falha ao enviar", err instanceof Error ? err.message : err);
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn("[whatsapp] falha ao enviar", message);
+    await logAttempt({
+      ...context,
+      recipientNumber: digits,
+      status: "error",
+      errorDetail: message.slice(0, 500),
+    });
   }
 }
 
@@ -124,6 +187,7 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const {
       stage,
+      requisitionId,
       ticketNumber,
       title,
       requesterName,
@@ -132,6 +196,7 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
       totalValue,
     } = data;
     const base = vpreqBaseUrl();
+    const ctx = { stage, requisitionId, ticketNumber };
 
     try {
       if (stage === "LIDER_CIENCIA") {
@@ -140,14 +205,14 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
         const text =
           `Você tem um pedido *${ticketNumber}* feito por *${requesterName}* aguardando sua ciência.\n\n` +
           `${title}\n\n🔗 Dar ciência: ${base}/approval`;
-        await Promise.all(numbers.map((n) => sendWhatsappText(n, text)));
+        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
       } else if (stage === "COMPRADOR_COTAR") {
         const userIds = await getUserIdsByRole("comprador");
         const numbers = await getWhatsappNumbers(userIds);
         const text =
           `Novo pedido liberado para cotação: *${ticketNumber}*\n\n` +
           `${title} — solicitante: ${requesterName}\n\n🔗 Cotar: ${base}/quoting`;
-        await Promise.all(numbers.map((n) => sendWhatsappText(n, text)));
+        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
       } else if (stage === "APROVACAO_PENDENTE") {
         const thresholds = await getTierThresholds();
         const tier = getApprovalLevelForValue(totalValue ?? 0, thresholds);
@@ -156,16 +221,25 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
         const text =
           `Aprovação pendente: ticket *${ticketNumber}* (Nível ${tier})\n\n` +
           `${title} — solicitante: ${requesterName}\n\n🔗 Aprovar: ${base}/approval`;
-        await Promise.all(numbers.map((n) => sendWhatsappText(n, text)));
+        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
       } else if (stage === "COMPRA_APROVADA") {
         const userIds = await getUserIdsByRole("comprador");
         const numbers = await getWhatsappNumbers(userIds);
         const text = `Foi aprovado o ticket *${ticketNumber}* — pode prosseguir com a compra.\n\n${title}`;
-        await Promise.all(numbers.map((n) => sendWhatsappText(n, text)));
+        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
       }
     } catch (err) {
-      // Nunca propaga — WhatsApp é efeito colateral
-      console.warn("[whatsapp]", stage, ticketNumber, err instanceof Error ? err.message : err);
+      // Nunca propaga — WhatsApp é efeito colateral. Erro aqui é antes de
+      // chegar a enviar (ex.: falha resolvendo destinatários) — não passa
+      // por sendWhatsappText, então precisa do próprio log.
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn("[whatsapp]", stage, ticketNumber, message);
+      await logAttempt({
+        ...ctx,
+        recipientNumber: "",
+        status: "error",
+        errorDetail: message.slice(0, 500),
+      });
     }
 
     return { ok: true };
