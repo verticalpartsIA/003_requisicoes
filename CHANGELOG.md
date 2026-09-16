@@ -8,6 +8,7 @@ os fixes/features mais investigativos linkam para um relatório em
 ## 2026-09-16
 
 - fix(auth): SSO do portal vpsistema.com não era respeitado — usuário já logado no portal ainda caía em `/login` ao entrar via card "Requisições", porque a sessão do Supabase ficava presa em `localStorage`, isolado por origem. Trocado para `@supabase/ssr` `createBrowserClient` com cookie escopado a `.vpsistema.com`. Requer réplica equivalente no repo do portal (`vpsistema`) para funcionar de ponta a ponta. Ver `docs/reports/2026-09-16-sso-portal-vpsistema.md`
+- feat(whatsapp): tentativas de envio de WhatsApp (LIDER_CIENCIA, COMPRADOR_COTAR, APROVACAO_PENDENTE, COMPRA_APROVADA) agora gravam um registro em `whatsapp_notification_log` (sucesso, erro HTTP, ou pulado por falta de apikey/número) — antes o único rastro era `console.warn`, inacessível fora do processo Node na Hostinger, o que impediu diagnosticar por que os disparos pararam de sair em 15/09
 
 ## 2026-09-15 (5)
 
