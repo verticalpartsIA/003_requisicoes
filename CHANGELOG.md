@@ -5,6 +5,10 @@ linha por entrega — para o contexto completo (logs, causa raiz, decisões),
 os fixes/features mais investigativos linkam para um relatório em
 `docs/reports/`.
 
+## 2026-09-16
+
+- fix(auth): SSO do portal vpsistema.com não era respeitado — usuário já logado no portal ainda caía em `/login` ao entrar via card "Requisições", porque a sessão do Supabase ficava presa em `localStorage`, isolado por origem. Trocado para `@supabase/ssr` `createBrowserClient` com cookie escopado a `.vpsistema.com`. Requer réplica equivalente no repo do portal (`vpsistema`) para funcionar de ponta a ponta. Ver `docs/reports/2026-09-16-sso-portal-vpsistema.md`
+
 ## 2026-09-15 (5)
 
 - fix(db): comprador sem permissão para finalizar cotação fracionada de um M1 reaberto após reprovação do aprovador ("Sem permissão para realizar esta ação") — a policy RLS `approvals_reopen_comprador` só cobria `decision = 'approved'`, nunca `'rejected'`, um gap deixado pela correção anterior que passou a reabrir reprovações. Ver `docs/reports/2026-09-15-edicao-pos-reprovacao-aprovador-nao-reabria.md`
