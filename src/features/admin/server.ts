@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSupabaseEnv } from "@/lib/env";
 import { supabaseRest } from "@/lib/supabase-rest";
+import { verifyAccessToken } from "@/lib/server-auth";
 
 async function assertIsAdmin(userId: string) {
   const resp = await supabaseRest<{ role: string }[]>(
@@ -31,14 +32,17 @@ async function authAdminRequest(path: string, method: "PUT" | "DELETE", body?: u
 
 /** Inativa (bloqueia login) ou reativa um usuário. */
 export const setUserActive = createServerFn({ method: "POST" })
-  .inputValidator(z.object({
-    adminId: z.string().uuid(),
-    targetUserId: z.string().uuid(),
-    active: z.boolean(),
-  }))
+  .inputValidator(
+    z.object({
+      accessToken: z.string().min(1),
+      targetUserId: z.string().uuid(),
+      active: z.boolean(),
+    }),
+  )
   .handler(async ({ data }) => {
-    await assertIsAdmin(data.adminId);
-    if (data.adminId === data.targetUserId && !data.active) {
+    const adminId = await verifyAccessToken(data.accessToken);
+    await assertIsAdmin(adminId);
+    if (adminId === data.targetUserId && !data.active) {
       throw new Error("Você não pode inativar a própria conta.");
     }
 
@@ -58,13 +62,16 @@ export const setUserActive = createServerFn({ method: "POST" })
 
 /** Exclui definitivamente a conta do usuário (auth + perfil em cascata). */
 export const deleteUserAccount = createServerFn({ method: "POST" })
-  .inputValidator(z.object({
-    adminId: z.string().uuid(),
-    targetUserId: z.string().uuid(),
-  }))
+  .inputValidator(
+    z.object({
+      accessToken: z.string().min(1),
+      targetUserId: z.string().uuid(),
+    }),
+  )
   .handler(async ({ data }) => {
-    await assertIsAdmin(data.adminId);
-    if (data.adminId === data.targetUserId) {
+    const adminId = await verifyAccessToken(data.accessToken);
+    await assertIsAdmin(adminId);
+    if (adminId === data.targetUserId) {
       throw new Error("Você não pode excluir a própria conta.");
     }
 

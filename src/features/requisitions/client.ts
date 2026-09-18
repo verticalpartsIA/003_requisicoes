@@ -2,6 +2,7 @@ import { supabaseBrowser } from "@/lib/supabase-browser";
 import { friendlySupabaseError } from "@/lib/supabase-error";
 import type { TicketRow } from "@/components/tickets-table";
 import { updateRequisition, deleteRequisition } from "@/features/requisitions/api";
+import { getAccessToken } from "@/lib/auth-token-client";
 
 export interface UpdateRequisitionInput {
   requisitionId: string;
@@ -19,8 +20,8 @@ export async function updateRequisitionClient(input: UpdateRequisitionInput) {
   return result;
 }
 
-export async function deleteRequisitionClient(requisitionId: string, actorId: string) {
-  await deleteRequisition({ data: { requisitionId, actorId } });
+export async function deleteRequisitionClient(requisitionId: string) {
+  await deleteRequisition({ data: { requisitionId, accessToken: await getAccessToken() } });
 }
 
 export interface ProductStockSnapshot {
@@ -70,14 +71,16 @@ export async function listProductRequisitionsClient() {
 
   if (error) throw error;
 
-  return ((data || []) as Array<{
-    ticket_number: string;
-    title: string;
-    requester_name: string;
-    urgency: TicketRow["urgency"];
-    status: TicketRow["status"];
-    created_at: string;
-  }>).map((item) => ({
+  return (
+    (data || []) as Array<{
+      ticket_number: string;
+      title: string;
+      requester_name: string;
+      urgency: TicketRow["urgency"];
+      status: TicketRow["status"];
+      created_at: string;
+    }>
+  ).map((item) => ({
     id: item.ticket_number,
     title: item.title,
     requester: item.requester_name,
@@ -93,42 +96,40 @@ export async function createProductRequisitionClient(input: ProductRequisitionIn
       ? input.items[0].productName
       : `${input.items.length} itens — ${input.items[0].productName} e outros`;
 
-  const { error } = await supabaseBrowser
-    .from("requisitions")
-    .insert({
-      module: "M1",
-      title,
-      description: input.items.map((i) => `${i.productName}: ${i.description}`).join(" | "),
-      justification: input.justification,
-      urgency: input.urgencyLevel,
-      desired_date: input.deliveryDeadline.slice(0, 10),
-      requester_name: input.requesterName,
-      requester_email: input.requesterEmail,
-      requester_department: input.requesterDepartment,
-      requester_profile_id: input.requesterProfileId ?? null,
-      estimated_cost: null,
-      status: "GESTOR",
-      module_data: {
-        items: input.items.map((item) => ({
-          product_code: item.productCode ?? null,
-          product_name: item.productName,
-          quantity: item.quantity,
-          description: item.description,
-          technical_specs: item.technicalSpecs,
-          brand_preference: item.brandPreference,
-          model_reference: item.modelReference,
-          reference_links: item.referenceLinks,
-          online_purchase_suggestion: item.onlinePurchaseSuggestion,
-          photo_path: item.photoPath ?? null,
-          stock_snapshot: item.stockSnapshot ?? null,
-        })),
-        delivery_location: input.deliveryLocation,
-        request_kind: input.requestKind ?? "consumo",
-        revenda: input.revenda,
-        pedido_venda_numero: input.pedidoVendaNumero ?? null,
-        pedido_venda_vendedor: input.pedidoVendaVendedor ?? null,
-      },
-    });
+  const { error } = await supabaseBrowser.from("requisitions").insert({
+    module: "M1",
+    title,
+    description: input.items.map((i) => `${i.productName}: ${i.description}`).join(" | "),
+    justification: input.justification,
+    urgency: input.urgencyLevel,
+    desired_date: input.deliveryDeadline.slice(0, 10),
+    requester_name: input.requesterName,
+    requester_email: input.requesterEmail,
+    requester_department: input.requesterDepartment,
+    requester_profile_id: input.requesterProfileId ?? null,
+    estimated_cost: null,
+    status: "GESTOR",
+    module_data: {
+      items: input.items.map((item) => ({
+        product_code: item.productCode ?? null,
+        product_name: item.productName,
+        quantity: item.quantity,
+        description: item.description,
+        technical_specs: item.technicalSpecs,
+        brand_preference: item.brandPreference,
+        model_reference: item.modelReference,
+        reference_links: item.referenceLinks,
+        online_purchase_suggestion: item.onlinePurchaseSuggestion,
+        photo_path: item.photoPath ?? null,
+        stock_snapshot: item.stockSnapshot ?? null,
+      })),
+      delivery_location: input.deliveryLocation,
+      request_kind: input.requestKind ?? "consumo",
+      revenda: input.revenda,
+      pedido_venda_numero: input.pedidoVendaNumero ?? null,
+      pedido_venda_vendedor: input.pedidoVendaVendedor ?? null,
+    },
+  });
 
   if (error) throw new Error(friendlySupabaseError(error));
 

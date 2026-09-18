@@ -115,7 +115,7 @@ function GestorSection({ gestorName }: { gestorName: string }) {
 
   useEffect(() => {
     if (!user) return;
-    void listGestorQueueClient(user.id).then((queue) => {
+    void listGestorQueueClient().then((queue) => {
       setGestorQueue(queue);
       setLoaded(true);
     });
@@ -123,7 +123,7 @@ function GestorSection({ gestorName }: { gestorName: string }) {
 
   const reload = async () => {
     if (!user) return;
-    const queue = await listGestorQueueClient(user.id);
+    const queue = await listGestorQueueClient();
     setGestorQueue(queue);
   };
 
@@ -131,7 +131,7 @@ function GestorSection({ gestorName }: { gestorName: string }) {
     if (!selected || !user) return;
     setIsSaving(true);
     try {
-      await gestorApproveClient(selected.requisitionId, user.id, gestorName, notes);
+      await gestorApproveClient(selected.requisitionId, gestorName, notes);
       toast.success("Ciência confirmada — requisição encaminhada para cotação.");
       void notifyVpClickClient({
         stage: "GESTOR_APPROVED",
@@ -176,7 +176,7 @@ function GestorSection({ gestorName }: { gestorName: string }) {
     }
     setIsSaving(true);
     try {
-      await gestorRejectClient(selected.requisitionId, user.id, gestorName, notes);
+      await gestorRejectClient(selected.requisitionId, gestorName, notes);
       toast.success("Requisição reprovada.");
       void notifyVpClickClient({
         stage: "GESTOR_REJECTED",
@@ -372,7 +372,7 @@ function AguardandoGestorSection({ gestorName }: { gestorName: string }) {
 
   useEffect(() => {
     if (!user) return;
-    void listAllGestorPendingClient(user.id).then((items) => {
+    void listAllGestorPendingClient().then((items) => {
       setPending(items);
       setLoaded(true);
     });
@@ -380,14 +380,14 @@ function AguardandoGestorSection({ gestorName }: { gestorName: string }) {
 
   const reload = async () => {
     if (!user) return;
-    setPending(await listAllGestorPendingClient(user.id));
+    setPending(await listAllGestorPendingClient());
   };
 
   const handleApprove = async () => {
     if (!selected || !user) return;
     setIsSaving(true);
     try {
-      await gestorApproveClient(selected.requisitionId, user.id, gestorName, notes);
+      await gestorApproveClient(selected.requisitionId, gestorName, notes);
       toast.success("Ciência confirmada — requisição encaminhada para cotação.");
       void notifyVpClickClient({
         stage: "GESTOR_APPROVED",
@@ -432,7 +432,7 @@ function AguardandoGestorSection({ gestorName }: { gestorName: string }) {
     }
     setIsSaving(true);
     try {
-      await gestorRejectClient(selected.requisitionId, user.id, gestorName, notes);
+      await gestorRejectClient(selected.requisitionId, gestorName, notes);
       toast.success("Requisição reprovada.");
       void notifyVpClickClient({
         stage: "GESTOR_REJECTED",
@@ -700,7 +700,7 @@ function ApprovalPage() {
 
   useEffect(() => {
     if (!user) return;
-    void getManagerScopeClient(user.id)
+    void getManagerScopeClient()
       .then((scope) => {
         setIsGestor(scope.departments.length > 0 || scope.isApproverOfSomeone);
         setDeptsLoaded(true);

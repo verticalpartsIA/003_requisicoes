@@ -914,7 +914,7 @@ function MovimentacoesPage() {
     if (!liveDetail || !user) return;
     setDeleteLoading(true);
     try {
-      await deleteRequisitionClient(liveDetail.requisition_id, user.id);
+      await deleteRequisitionClient(liveDetail.requisition_id);
       toast.success(`Requisição ${liveDetail.ticket_id} excluída.`);
       setDeleteConfirmOpen(false);
       setSelectedTicket(null);
