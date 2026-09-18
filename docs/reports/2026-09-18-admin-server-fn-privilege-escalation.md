@@ -75,11 +75,36 @@ Os wrappers client-side (`src/features/gestor/client.ts`,
 usuário como parâmetro (era usado só pra isso), buscam o access token na
 hora da chamada.
 
-## Limitação conhecida / próximo passo sugerido
+## Varredura dos módulos restantes (mesmo dia)
 
-Não auditei função a função as demais `createServerFn` do repositório
-(`purchases`, `quotations`, `approvals`, `receipts`, `omie`, `dashboard`,
-`analytics`, `logs/api.ts`) atrás do mesmo padrão — o escopo desta correção
-foi o que a tela `/admin` e o fluxo de gestor tocam diretamente. Vale uma
-varredura dedicada nelas depois, com o mesmo `verifyAccessToken` como
-ferramenta pronta.
+Auditei função a função as demais `createServerFn` do repositório —
+`purchases`, `quotations`, `approvals`, `receipts`, `omie`, `dashboard`,
+`analytics`, `logs/api.ts` — atrás do mesmo padrão (id de ator vindo do
+corpo, usado pra decisão de autorização). **Nenhuma tem esse padrão**:
+nenhum schema dessas funções recebe `userId`/`actorId`/`buyerId`/
+`approverId` como campo — só ids de recurso (`requisitionId`,
+`approvalId`, `quotationId`...) e dados de negócio. `omie/api.ts` só fala
+com a API do Omie via credenciais de app, sem identidade de usuário
+nenhuma envolvida.
+
+Duas coisas adjacentes apareceram na varredura, fora do padrão original
+mas ainda gaps reais de autorização:
+
+- **`getAnalytics` (`analytics/api.ts`) e `getLogsOverview`
+  (`logs/api.ts`) não tinham NENHUMA checagem de sessão** — rodam com
+  service-role key e, sem `verifyAccessToken`, uma chamada HTTP direta ao
+  endpoint, sem estar logado, devolvia dados financeiros/operacionais e o
+  audit trail completo da empresa. Corrigido: ambas agora exigem
+  `accessToken` válido (sessão real, sem checagem de papel específico —
+  a tela nunca restringiu por papel, só por estar logado) antes de rodar.
+  Client-side: `src/routes/analytics.tsx`, `src/routes/logs.tsx` e
+  `src/routes/movimentacoes.tsx` (usa `getLogsOverview` também) passam a
+  enviar `accessToken: await getAccessToken()`.
+- **Código morto**: os exports `createServerFn` de `purchases/api.ts`,
+  `quotations/api.ts` (parcial), `approvals/api.ts`, `receipts/api.ts` e
+  `dashboard/api.ts` não são chamados pela UI atual — cada rota usa uma
+  implementação paralela em `client.ts` que fala direto com
+  `supabaseBrowser` (RLS). Não corrigido agora: como não têm o padrão de
+  id confiável, não são o mesmo tipo de vulnerabilidade, mas valem uma
+  decisão futura (apagar ou realmente usar) já que ficam expostas como
+  endpoint sem serem exercitadas por nada.

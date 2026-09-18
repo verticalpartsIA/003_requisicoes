@@ -3,6 +3,7 @@ import { z } from "zod";
 import { supabaseRest } from "@/lib/supabase-rest";
 import { STAGE_TARGETS } from "@/features/analytics/api";
 import { actionLabel, actionStage } from "@/lib/audit-actions";
+import { verifyAccessToken } from "@/lib/server-auth";
 
 /* Estágios e rótulos únicos, compartilhados com o Analytics via STAGE_TARGETS */
 const STAGE_LABELS: Record<string, string> = {
@@ -133,10 +134,15 @@ const ROLE_LABELS: Record<string, string> = {
 export const getLogsOverview = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
+      accessToken: z.string().min(1),
       entriesLimit: z.number().int().min(1).max(2000).default(200),
     }),
   )
   .handler(async ({ data }): Promise<LogsPayload> => {
+    // Roda com service-role key (bypassa RLS) — sem isso, qualquer chamada
+    // HTTP direta ao endpoint, sem sessão nenhuma, devolvia o audit trail
+    // completo (nomes de solicitantes, gargalos, SLA) da empresa inteira.
+    await verifyAccessToken(data.accessToken);
     const now = new Date();
 
     const [reqsResp, logsResp, profilesResp, rolesResp, quotsResp] = await Promise.all([
