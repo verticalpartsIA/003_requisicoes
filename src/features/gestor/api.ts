@@ -61,7 +61,10 @@ async function assertIsAdmin(userId: string) {
 }
 
 /** Escopo de gestor: departamentos gerenciados + se é aprovador designado de algum colaborador. */
-export const getManagerScope = createServerFn({ method: "GET" })
+// POST (não GET): leva accessToken no body — em GET o TanStack Start
+// serializa os campos na query string, e um bearer token na URL vaza em
+// logs de proxy/CDN e pode ser reaproveitado até expirar.
+export const getManagerScope = createServerFn({ method: "POST" })
   .inputValidator(z.object({ accessToken: z.string().min(1) }))
   .handler(async ({ data }): Promise<GestorScope> => {
     const managerId = await verifyAccessToken(data.accessToken);
