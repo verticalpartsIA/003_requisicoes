@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getLogsOverview, type LogsPayload } from "@/features/logs/api";
+import { getAccessToken } from "@/lib/auth-token-client";
 
 /* A investigação (busca, trilha de eventos, detalhe do ticket, exportação)
  * vive na tela Movimentações (/movimentacoes). Esta tela é só o monitor:
@@ -79,7 +80,9 @@ function LogsPage() {
       try {
         // O monitor não usa a lista de eventos (fica na Movimentações);
         // limite mínimo só para reduzir o payload.
-        const payload = await getLogsOverview({ data: { entriesLimit: 1 } });
+        const payload = await getLogsOverview({
+          data: { accessToken: await getAccessToken(), entriesLimit: 1 },
+        });
         if (!cancelled) setOverview(payload);
       } catch (err) {
         console.error("[logs]", err);

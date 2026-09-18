@@ -5,6 +5,11 @@ linha por entrega — para o contexto completo (logs, causa raiz, decisões),
 os fixes/features mais investigativos linkam para um relatório em
 `docs/reports/`.
 
+## 2026-09-18
+
+- fix(analytics,logs): `getAnalytics` e `getLogsOverview` rodavam com service-role key sem nenhuma checagem de sessão — chamada HTTP direta ao endpoint, sem estar logado, devolvia dados financeiros e o audit trail completo da empresa. Varredura dos módulos restantes não achou o padrão de id confiável dos itens abaixo em nenhum outro lugar. Ver seção "Varredura dos módulos restantes" no [relatório](docs/reports/2026-09-18-admin-server-fn-privilege-escalation.md)
+- fix(admin,gestor,requisitions): server functions de inativar/excluir usuário (`/admin`), decidir/listar fila de gestor e excluir requisição confiavam num id de usuário (`adminId`/`managerId`/`actorId`) enviado direto no corpo da requisição, sem verificar contra a sessão real de quem chamava — escalonamento de privilégio, permitia agir como qualquer admin/gestor sabendo o UUID dele. Agora essas funções recebem o access token e o servidor resolve o id verificando-o junto ao Supabase Auth (`src/lib/server-auth.ts`) — [relatório](docs/reports/2026-09-18-admin-server-fn-privilege-escalation.md)
+
 ## 2026-09-16
 
 - feat(whatsapp): tentativas de envio de WhatsApp (LIDER_CIENCIA, COMPRADOR_COTAR, APROVACAO_PENDENTE, COMPRA_APROVADA) agora gravam um registro em `whatsapp_notification_log` (sucesso, erro HTTP, ou pulado por falta de apikey/número) — antes o único rastro era `console.warn`, inacessível fora do processo Node na Hostinger, o que impediu diagnosticar por que os disparos pararam de sair em 15/09

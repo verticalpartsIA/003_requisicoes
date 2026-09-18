@@ -77,6 +77,7 @@ import {
   type DeptManagerEntry,
 } from "@/features/admin/client";
 import { setUserActive, deleteUserAccount } from "@/features/admin/server";
+import { getAccessToken } from "@/lib/auth-token-client";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin")({
@@ -308,7 +309,7 @@ function UsersTab() {
     }
     try {
       await setUserActive({
-        data: { adminId: currentUser.id, targetUserId: target.id, active: activating },
+        data: { accessToken: await getAccessToken(), targetUserId: target.id, active: activating },
       });
       patchUser(target.id, { active: activating });
       toast.success(
@@ -327,7 +328,9 @@ function UsersTab() {
     if (!currentUser || !deleteTarget) return;
     setDeleting(true);
     try {
-      await deleteUserAccount({ data: { adminId: currentUser.id, targetUserId: deleteTarget.id } });
+      await deleteUserAccount({
+        data: { accessToken: await getAccessToken(), targetUserId: deleteTarget.id },
+      });
       setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id));
       setDeptManagers((prev) => prev.filter((dm) => dm.manager_user_id !== deleteTarget.id));
       toast.success("Usuário excluído.");

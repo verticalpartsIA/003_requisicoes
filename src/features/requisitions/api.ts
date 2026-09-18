@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { TicketRow } from "@/components/tickets-table";
 import type { RequisitionRecord } from "@/lib/requisitions";
 import { supabaseRest } from "@/lib/supabase-rest";
+import { verifyAccessToken } from "@/lib/server-auth";
 
 // ─── Atualizar requisição (qualquer usuário, service_role bypassa RLS) ────────
 
@@ -122,12 +123,13 @@ export const deleteRequisition = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
       requisitionId: z.string(),
-      actorId: z.string(),
+      accessToken: z.string().min(1),
     }),
   )
   .handler(async ({ data }) => {
+    const actorId = await verifyAccessToken(data.accessToken);
     const roleCheck = await supabaseRest<Array<{ role: string }>>(
-      `user_roles?select=role&user_id=eq.${data.actorId}&role=eq.admin`,
+      `user_roles?select=role&user_id=eq.${actorId}&role=eq.admin`,
     );
     if (!roleCheck.data?.length) {
       throw new Error("Acesso negado: apenas administradores podem excluir requisições.");

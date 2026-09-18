@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseRest } from "@/lib/supabase-rest";
+import { verifyAccessToken } from "@/lib/server-auth";
 
 interface GestorRequisition {
   id: string;
@@ -60,14 +61,18 @@ async function assertIsAdmin(userId: string) {
 }
 
 /** Escopo de gestor: departamentos gerenciados + se é aprovador designado de algum colaborador. */
-export const getManagerScope = createServerFn({ method: "GET" })
-  .inputValidator(z.object({ managerId: z.string().uuid() }))
+// POST (não GET): leva accessToken no body — em GET o TanStack Start
+// serializa os campos na query string, e um bearer token na URL vaza em
+// logs de proxy/CDN e pode ser reaproveitado até expirar.
+export const getManagerScope = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ accessToken: z.string().min(1) }))
   .handler(async ({ data }): Promise<GestorScope> => {
+    const managerId = await verifyAccessToken(data.accessToken);
     const [deptsResp, subordinatesResp] = await Promise.all([
       supabaseRest<{ department: string }[]>(
-        `department_managers?select=department&manager_user_id=eq.${data.managerId}`,
+        `department_managers?select=department&manager_user_id=eq.${managerId}`,
       ),
-      supabaseRest<{ id: string }[]>(`profiles?select=id&approver_id=eq.${data.managerId}&limit=1`),
+      supabaseRest<{ id: string }[]>(`profiles?select=id&approver_id=eq.${managerId}&limit=1`),
     ]);
     return {
       departments: (deptsResp.data ?? []).map((r) => r.department),
@@ -78,14 +83,15 @@ export const getManagerScope = createServerFn({ method: "GET" })
 /** Fila do gestor: requisições carimbadas com ele como aprovador designado e,
  *  como fallback (sem aprovador designado), as dos departamentos que gerencia. */
 export const listGestorQueue = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ managerId: z.string().uuid() }))
+  .inputValidator(z.object({ accessToken: z.string().min(1) }))
   .handler(async ({ data }) => {
+    const managerId = await verifyAccessToken(data.accessToken);
     const deptsResp = await supabaseRest<{ department: string }[]>(
-      `department_managers?select=department&manager_user_id=eq.${data.managerId}`,
+      `department_managers?select=department&manager_user_id=eq.${managerId}`,
     );
     const departments = (deptsResp.data ?? []).map((r) => r.department);
 
-    const filters = [`approver_id.eq.${data.managerId}`];
+    const filters = [`approver_id.eq.${managerId}`];
     if (departments.length > 0) {
       const deptList = departments.map((d) => `"${d.replace(/"/g, "")}"`).join(",");
       filters.push(`and(approver_id.is.null,requester_department.in.(${deptList}))`);
@@ -124,9 +130,10 @@ export const listGestorQueue = createServerFn({ method: "POST" })
  *  (não só as do gestor logado), com o nome de quem precisa decidir cada uma —
  *  para achar rapidamente gargalos como "o gestor X ainda não decidiu". */
 export const listAllGestorPending = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ adminId: z.string().uuid() }))
+  .inputValidator(z.object({ accessToken: z.string().min(1) }))
   .handler(async ({ data }): Promise<GestorPendingItem[]> => {
-    await assertIsAdmin(data.adminId);
+    const adminId = await verifyAccessToken(data.accessToken);
+    await assertIsAdmin(adminId);
 
     const [reqResp, deptMgrResp] = await Promise.all([
       supabaseRest<Array<GestorRequisition & { approver_id: string | null }>>(
@@ -231,13 +238,14 @@ export const gestorApprove = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
       requisitionId: z.string().uuid(),
-      managerId: z.string().uuid(),
+      accessToken: z.string().min(1),
       gestorName: z.string(),
       notes: z.string().max(500).optional().default(""),
     }),
   )
   .handler(async ({ data }) => {
-    const rec = await assertCanDecide(data.managerId, data.requisitionId);
+    const managerId = await verifyAccessToken(data.accessToken);
+    const rec = await assertCanDecide(managerId, data.requisitionId);
 
     await supabaseRest(`requisitions?id=eq.${data.requisitionId}`, {
       method: "PATCH",
@@ -268,13 +276,14 @@ export const gestorReject = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
       requisitionId: z.string().uuid(),
-      managerId: z.string().uuid(),
+      accessToken: z.string().min(1),
       gestorName: z.string(),
       reason: z.string().min(1).max(500),
     }),
   )
   .handler(async ({ data }) => {
-    const rec = await assertCanDecide(data.managerId, data.requisitionId);
+    const managerId = await verifyAccessToken(data.accessToken);
+    const rec = await assertCanDecide(managerId, data.requisitionId);
 
     await supabaseRest(`requisitions?id=eq.${data.requisitionId}`, {
       method: "PATCH",

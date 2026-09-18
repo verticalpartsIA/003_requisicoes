@@ -59,6 +59,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { generateAndSaveRequisitionPdf } from "@/features/pdf/client";
 import { deleteRequisitionClient } from "@/features/requisitions/client";
 import { getLogsOverview, type LogsPayload, type LogsEntry } from "@/features/logs/api";
+import { getAccessToken } from "@/lib/auth-token-client";
 import { useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { pendencyOf, PENDENCY_TONE_CLASS, MODULE_ROUTES, OPEN_STATUSES } from "@/lib/requisitions";
@@ -753,7 +754,9 @@ function MovimentacoesPage() {
     const fetchOverview = async (silent: boolean) => {
       if (!silent) setLogsLoading(true);
       try {
-        const payload = await getLogsOverview({ data: { entriesLimit } });
+        const payload = await getLogsOverview({
+          data: { accessToken: await getAccessToken(), entriesLimit },
+        });
         if (!cancelled) setOverview(payload);
       } catch (err) {
         console.error("[logs]", err);
@@ -914,7 +917,7 @@ function MovimentacoesPage() {
     if (!liveDetail || !user) return;
     setDeleteLoading(true);
     try {
-      await deleteRequisitionClient(liveDetail.requisition_id, user.id);
+      await deleteRequisitionClient(liveDetail.requisition_id);
       toast.success(`Requisição ${liveDetail.ticket_id} excluída.`);
       setDeleteConfirmOpen(false);
       setSelectedTicket(null);

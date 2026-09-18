@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseRest } from "@/lib/supabase-rest";
+import { verifyAccessToken } from "@/lib/server-auth";
 
 /* ────────────────────────────────────────────────
  * Metas de SLA por estágio (horas). Config de negócio,
@@ -43,10 +44,33 @@ type Approval = {
   created_at: string;
 };
 
-type Quotation = { id: string; requisition_id: string; started_at: string | null; completed_at: string | null };
-type QuotationSupplier = { quotation_id: string; supplier_name: string; price: number | null; is_winner: boolean };
-type Purchase = { requisition_id: string; supplier_name: string; supplier_price: number | null; buyer_id: string | null; created_at: string };
-type AuditLog = { requisition_id: string | null; ticket_number: string | null; action: string; actor_name: string | null; created_at: string; new_status: string | null };
+type Quotation = {
+  id: string;
+  requisition_id: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
+type QuotationSupplier = {
+  quotation_id: string;
+  supplier_name: string;
+  price: number | null;
+  is_winner: boolean;
+};
+type Purchase = {
+  requisition_id: string;
+  supplier_name: string;
+  supplier_price: number | null;
+  buyer_id: string | null;
+  created_at: string;
+};
+type AuditLog = {
+  requisition_id: string | null;
+  ticket_number: string | null;
+  action: string;
+  actor_name: string | null;
+  created_at: string;
+  new_status: string | null;
+};
 type Profile = { id: string; full_name: string | null; email: string | null };
 
 export interface AnalyticsPayload {
@@ -62,13 +86,30 @@ export interface AnalyticsPayload {
   };
   volumeTrend: Record<string, string | number>[];
   moduleDist: { key: string; name: string; value: number; fill: string }[];
-  stageDuration: { stage: string; label: string; avg: number; median: number; p95: number; target: number; count: number }[];
+  stageDuration: {
+    stage: string;
+    label: string;
+    avg: number;
+    median: number;
+    p95: number;
+    target: number;
+    count: number;
+  }[];
   slaByModule: { module: string; label: string; compliance: number | null }[];
   slaBreakdown: { onTime: number; atRisk: number; exceeded: number };
   slaTrend: { month: string; compliance_rate: number | null }[];
   approvalsByLevel: { level: number; count: number; totalValue: number }[];
-  quality: { approvalRate: number | null; rejectedCount: number; cancelledCount: number; editedCount: number };
-  efficiency: { purchasesCount: number; quotationsCompleted: number; avgQuotationHours: number | null };
+  quality: {
+    approvalRate: number | null;
+    rejectedCount: number;
+    cancelledCount: number;
+    editedCount: number;
+  };
+  efficiency: {
+    purchasesCount: number;
+    quotationsCompleted: number;
+    avgQuotationHours: number | null;
+  };
   topBuyers: { name: string; purchases: number; totalValue: number }[];
   financial: {
     approvedTotal: number;
@@ -79,19 +120,54 @@ export interface AnalyticsPayload {
     spendByModule: { module: string; label: string; value: number; pct: number; count: number }[];
     topSuppliers: { name: string; value: number; count: number }[];
   };
-  bottlenecks: { ticket: string; module: string; stage: string; hours: number; target: number; requester: string }[];
-  feed: { id: string; action: string; ticket: string | null; actor: string | null; createdAt: string }[];
-  live: { reqsToday: number; valueApprovedToday: number; activeBottlenecks: number; slaCompliance: number | null };
+  bottlenecks: {
+    ticket: string;
+    module: string;
+    stage: string;
+    hours: number;
+    target: number;
+    requester: string;
+  }[];
+  feed: {
+    id: string;
+    action: string;
+    ticket: string | null;
+    actor: string | null;
+    createdAt: string;
+  }[];
+  live: {
+    reqsToday: number;
+    valueApprovedToday: number;
+    activeBottlenecks: number;
+    slaCompliance: number | null;
+  };
   generatedAt: string;
 }
 
 /* helpers */
-const hoursBetween = (a: string, b: string) => (new Date(b).getTime() - new Date(a).getTime()) / 3_600_000;
-const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const hoursBetween = (a: string, b: string) =>
+  (new Date(b).getTime() - new Date(a).getTime()) / 3_600_000;
+const MONTHS_PT = [
+  "Jan",
+  "Fev",
+  "Mar",
+  "Abr",
+  "Mai",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Set",
+  "Out",
+  "Nov",
+  "Dez",
+];
 const monthLabel = (d: Date) => `${MONTHS_PT[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`;
-const dayLabel = (d: Date) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+const dayLabel = (d: Date) =>
+  `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
 const percentile = (sorted: number[], p: number) =>
-  sorted.length === 0 ? 0 : sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)];
+  sorted.length === 0
+    ? 0
+    : sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)];
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 function periodStart(period: string, now: Date): Date {
@@ -113,12 +189,33 @@ function stageInstances(req: Requisition, logs: AuditLog[]) {
   const receiptEnd = find("RECEIPT_REGISTERED");
 
   const out: { stage: string; hours: number; endedAt: string }[] = [];
-  if (gestorEnd) out.push({ stage: "GESTOR", hours: hoursBetween(req.created_at, gestorEnd), endedAt: gestorEnd });
-  if (gestorEnd && approvalStart) out.push({ stage: "COTAÇÃO", hours: hoursBetween(gestorEnd, approvalStart), endedAt: approvalStart });
-  if (approvalStart && approvalEnd) out.push({ stage: "APROVAÇÃO", hours: hoursBetween(approvalStart, approvalEnd), endedAt: approvalEnd });
+  if (gestorEnd)
+    out.push({
+      stage: "GESTOR",
+      hours: hoursBetween(req.created_at, gestorEnd),
+      endedAt: gestorEnd,
+    });
+  if (gestorEnd && approvalStart)
+    out.push({
+      stage: "COTAÇÃO",
+      hours: hoursBetween(gestorEnd, approvalStart),
+      endedAt: approvalStart,
+    });
+  if (approvalStart && approvalEnd)
+    out.push({
+      stage: "APROVAÇÃO",
+      hours: hoursBetween(approvalStart, approvalEnd),
+      endedAt: approvalEnd,
+    });
   const granted = find("APPROVAL_GRANTED");
-  if (granted && purchaseEnd) out.push({ stage: "COMPRA", hours: hoursBetween(granted, purchaseEnd), endedAt: purchaseEnd });
-  if (purchaseEnd && receiptEnd) out.push({ stage: "RECEBIMENTO", hours: hoursBetween(purchaseEnd, receiptEnd), endedAt: receiptEnd });
+  if (granted && purchaseEnd)
+    out.push({ stage: "COMPRA", hours: hoursBetween(granted, purchaseEnd), endedAt: purchaseEnd });
+  if (purchaseEnd && receiptEnd)
+    out.push({
+      stage: "RECEBIMENTO",
+      hours: hoursBetween(purchaseEnd, receiptEnd),
+      endedAt: receiptEnd,
+    });
   return out;
 }
 
@@ -126,25 +223,49 @@ function stageInstances(req: Requisition, logs: AuditLog[]) {
 function currentStageInfo(req: Requisition, logs: AuditLog[]) {
   const find = (action: string) => logs.find((l) => l.action === action)?.created_at ?? null;
   const status = req.status;
-  if (status === "GESTOR") return { start: req.created_at, target: STAGE_TARGETS.GESTOR, stage: "GESTOR" };
+  if (status === "GESTOR")
+    return { start: req.created_at, target: STAGE_TARGETS.GESTOR, stage: "GESTOR" };
   if (status === "ABERTO" || status === "COTAÇÃO")
-    return { start: find("GESTOR_APPROVED") ?? req.created_at, target: STAGE_TARGETS["COTAÇÃO"], stage: "COTAÇÃO" };
+    return {
+      start: find("GESTOR_APPROVED") ?? req.created_at,
+      target: STAGE_TARGETS["COTAÇÃO"],
+      stage: "COTAÇÃO",
+    };
   if (status === "APROVAÇÃO")
-    return { start: find("APPROVAL_REQUESTED") ?? req.created_at, target: STAGE_TARGETS["APROVAÇÃO"], stage: "APROVAÇÃO" };
+    return {
+      start: find("APPROVAL_REQUESTED") ?? req.created_at,
+      target: STAGE_TARGETS["APROVAÇÃO"],
+      stage: "APROVAÇÃO",
+    };
   if (status === "COMPRA")
-    return { start: find("APPROVAL_GRANTED") ?? req.created_at, target: STAGE_TARGETS.COMPRA, stage: "COMPRA" };
+    return {
+      start: find("APPROVAL_GRANTED") ?? req.created_at,
+      target: STAGE_TARGETS.COMPRA,
+      stage: "COMPRA",
+    };
   if (status === "RECEBIMENTO")
-    return { start: find("PURCHASE_CONFIRMED") ?? req.created_at, target: STAGE_TARGETS.RECEBIMENTO, stage: "RECEBIMENTO" };
+    return {
+      start: find("PURCHASE_CONFIRMED") ?? req.created_at,
+      target: STAGE_TARGETS.RECEBIMENTO,
+      stage: "RECEBIMENTO",
+    };
   return null;
 }
 
 export const getAnalytics = createServerFn({ method: "POST" })
-  .inputValidator(z.object({
-    period: z.enum(["30d", "3m", "6m", "12m"]),
-    module: z.string().default("Todos"),
-    compare: z.enum(["none", "previous_period", "same_period_last_year"]).default("none"),
-  }))
+  .inputValidator(
+    z.object({
+      accessToken: z.string().min(1),
+      period: z.enum(["30d", "3m", "6m", "12m"]),
+      module: z.string().default("Todos"),
+      compare: z.enum(["none", "previous_period", "same_period_last_year"]).default("none"),
+    }),
+  )
   .handler(async ({ data }): Promise<AnalyticsPayload> => {
+    // Roda com service-role key (bypassa RLS) — sem isso, qualquer chamada
+    // HTTP direta ao endpoint, sem sessão nenhuma, devolvia dados
+    // financeiros/operacionais da empresa inteira.
+    await verifyAccessToken(data.accessToken);
     const now = new Date();
     const start = periodStart(data.period, now);
     const windowMs = now.getTime() - start.getTime();
@@ -155,8 +276,10 @@ export const getAnalytics = createServerFn({ method: "POST" })
       cmpEnd = start;
       cmpStart = new Date(start.getTime() - windowMs);
     } else if (data.compare === "same_period_last_year") {
-      cmpStart = new Date(start); cmpStart.setFullYear(cmpStart.getFullYear() - 1);
-      cmpEnd = new Date(now); cmpEnd.setFullYear(cmpEnd.getFullYear() - 1);
+      cmpStart = new Date(start);
+      cmpStart.setFullYear(cmpStart.getFullYear() - 1);
+      cmpEnd = new Date(now);
+      cmpEnd.setFullYear(cmpEnd.getFullYear() - 1);
     }
 
     const moduleFilter = data.module !== "Todos" ? `&module=eq.${data.module}` : "";
@@ -168,15 +291,27 @@ export const getAnalytics = createServerFn({ method: "POST" })
     // a busca por created_at>=fetchFrom fazia esse histórico "sumir" (tudo
     // zerado/vazio) sempre que o ticket era mais antigo que o período — a
     // base de tickets é pequena, então buscar tudo não pesa.
-    const [reqsResp, approvalsResp, quotationsResp, suppliersResp, purchasesResp, logsResp, profilesResp] = await Promise.all([
+    const [
+      reqsResp,
+      approvalsResp,
+      quotationsResp,
+      suppliersResp,
+      purchasesResp,
+      logsResp,
+      profilesResp,
+    ] = await Promise.all([
       supabaseRest<Requisition[]>(
         `requisitions?select=id,ticket_number,module,status,urgency,requester_name,created_at,completed_at${moduleFilter}&order=created_at.asc&limit=10000`,
       ),
       supabaseRest<Approval[]>(
         `approvals?select=requisition_id,approval_level,total_value,decision,decided_at,created_at&limit=10000`,
       ),
-      supabaseRest<Quotation[]>(`quotations?select=id,requisition_id,started_at,completed_at&limit=10000`),
-      supabaseRest<QuotationSupplier[]>(`quotation_suppliers?select=quotation_id,supplier_name,price,is_winner&limit=10000`),
+      supabaseRest<Quotation[]>(
+        `quotations?select=id,requisition_id,started_at,completed_at&limit=10000`,
+      ),
+      supabaseRest<QuotationSupplier[]>(
+        `quotation_suppliers?select=quotation_id,supplier_name,price,is_winner&limit=10000`,
+      ),
       supabaseRest<Purchase[]>(
         `purchases?select=requisition_id,supplier_name,supplier_price,buyer_id,created_at&limit=10000`,
       ),
@@ -200,7 +335,8 @@ export const getAnalytics = createServerFn({ method: "POST" })
     };
 
     const reqs = allReqs.filter((r) => inWindow(r.created_at, start, now));
-    const cmpReqs = cmpStart && cmpEnd ? allReqs.filter((r) => inWindow(r.created_at, cmpStart, cmpEnd)) : null;
+    const cmpReqs =
+      cmpStart && cmpEnd ? allReqs.filter((r) => inWindow(r.created_at, cmpStart, cmpEnd)) : null;
 
     const reqById = new Map(allReqs.map((r) => [r.id, r]));
     const logsByReq = new Map<string, AuditLog[]>();
@@ -222,10 +358,15 @@ export const getAnalytics = createServerFn({ method: "POST" })
       const rl = logsByReq.get(r.id) ?? [];
       for (const inst of stageInstances(r, rl)) instancesAll.push({ ...inst, module: r.module });
     }
-    const instWindow = instancesAll.filter((i) => inWindow(i.endedAt, start, now) && moduleAllowed(i.module));
-    const instCmp = cmpStart && cmpEnd
-      ? instancesAll.filter((i) => inWindow(i.endedAt, cmpStart, cmpEnd) && moduleAllowed(i.module))
-      : null;
+    const instWindow = instancesAll.filter(
+      (i) => inWindow(i.endedAt, start, now) && moduleAllowed(i.module),
+    );
+    const instCmp =
+      cmpStart && cmpEnd
+        ? instancesAll.filter(
+            (i) => inWindow(i.endedAt, cmpStart, cmpEnd) && moduleAllowed(i.module),
+          )
+        : null;
 
     const complianceOf = (list: Inst[]): number | null => {
       if (list.length === 0) return null;
@@ -243,12 +384,18 @@ export const getAnalytics = createServerFn({ method: "POST" })
     const cmpCycleList = cmpReqs
       ?.filter((r) => r.completed_at)
       .map((r) => hoursBetween(r.created_at, r.completed_at!));
-    const cmpAvgCycle = cmpCycleList && cmpCycleList.length
-      ? Math.round(cmpCycleList.reduce((a, b) => a + b, 0) / cmpCycleList.length)
-      : null;
+    const cmpAvgCycle =
+      cmpCycleList && cmpCycleList.length
+        ? Math.round(cmpCycleList.reduce((a, b) => a + b, 0) / cmpCycleList.length)
+        : null;
 
     const decidedIn = (list: Approval[], s: Date, e: Date) =>
-      list.filter((a) => a.decided_at && inWindow(a.decided_at, s, e) && moduleAllowed(reqById.get(a.requisition_id)?.module ?? ""));
+      list.filter(
+        (a) =>
+          a.decided_at &&
+          inWindow(a.decided_at, s, e) &&
+          moduleAllowed(reqById.get(a.requisition_id)?.module ?? ""),
+      );
     const approvalRateOf = (list: Approval[]): number | null => {
       const approved = list.filter((a) => a.decision === "approved").length;
       const rejected = list.filter((a) => a.decision === "rejected").length;
@@ -270,8 +417,11 @@ export const getAnalytics = createServerFn({ method: "POST" })
     const buckets: { key: string; label: string; from: Date; to: Date }[] = [];
     if (data.period === "30d") {
       for (let i = 29; i >= 0; i--) {
-        const d = new Date(now); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
-        const next = new Date(d); next.setDate(next.getDate() + 1);
+        const d = new Date(now);
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() - i);
+        const next = new Date(d);
+        next.setDate(next.getDate() + 1);
         buckets.push({ key: d.toISOString(), label: dayLabel(d), from: d, to: next });
       }
     } else {
@@ -304,10 +454,17 @@ export const getAnalytics = createServerFn({ method: "POST" })
 
     /* ── Duração por estágio ── */
     const STAGE_LABELS: Record<string, string> = {
-      GESTOR: "Gestor", COTAÇÃO: "Cotação", APROVAÇÃO: "Aprovação", COMPRA: "Compra", RECEBIMENTO: "Recebimento",
+      GESTOR: "Gestor",
+      COTAÇÃO: "Cotação",
+      APROVAÇÃO: "Aprovação",
+      COMPRA: "Compra",
+      RECEBIMENTO: "Recebimento",
     };
     const stageDuration = Object.keys(STAGE_TARGETS).map((stage) => {
-      const hours = instWindow.filter((i) => i.stage === stage).map((i) => i.hours).sort((a, b) => a - b);
+      const hours = instWindow
+        .filter((i) => i.stage === stage)
+        .map((i) => i.hours)
+        .sort((a, b) => a - b);
       const avg = hours.length ? hours.reduce((a, b) => a + b, 0) / hours.length : 0;
       return {
         stage,
@@ -329,7 +486,9 @@ export const getAnalytics = createServerFn({ method: "POST" })
 
     /* ── Requisições abertas: no prazo / risco / excedido + gargalos ── */
     const OPEN = new Set(["GESTOR", "ABERTO", "COTAÇÃO", "APROVAÇÃO", "COMPRA", "RECEBIMENTO"]);
-    let onTime = 0, atRisk = 0, exceeded = 0;
+    let onTime = 0,
+      atRisk = 0,
+      exceeded = 0;
     const bottlenecks: AnalyticsPayload["bottlenecks"] = [];
     for (const r of allReqs.filter((x) => OPEN.has(x.status) && moduleAllowed(x.module))) {
       const info = currentStageInfo(r, logsByReq.get(r.id) ?? []);
@@ -338,8 +497,12 @@ export const getAnalytics = createServerFn({ method: "POST" })
       if (h > info.target) {
         exceeded++;
         bottlenecks.push({
-          ticket: r.ticket_number, module: r.module, stage: info.stage,
-          hours: Math.round(h), target: info.target, requester: r.requester_name,
+          ticket: r.ticket_number,
+          module: r.module,
+          stage: info.stage,
+          hours: Math.round(h),
+          target: info.target,
+          requester: r.requester_name,
         });
       } else if (h > info.target * 0.75) atRisk++;
       else onTime++;
@@ -351,7 +514,9 @@ export const getAnalytics = createServerFn({ method: "POST" })
     for (let i = 5; i >= 0; i--) {
       const from = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const to = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
-      const monthInst = instancesAll.filter((x) => inWindow(x.endedAt, from, to) && moduleAllowed(x.module));
+      const monthInst = instancesAll.filter(
+        (x) => inWindow(x.endedAt, from, to) && moduleAllowed(x.module),
+      );
       slaTrend.push({ month: monthLabel(from), compliance_rate: complianceOf(monthInst) });
     }
 
@@ -367,8 +532,10 @@ export const getAnalytics = createServerFn({ method: "POST" })
 
     /* ── Qualidade ── */
     const editedCount = logs.filter(
-      (l) => l.action === "REQUISITION_EDITED" && inWindow(l.created_at, start, now)
-        && moduleAllowed(reqById.get(l.requisition_id ?? "")?.module ?? ""),
+      (l) =>
+        l.action === "REQUISITION_EDITED" &&
+        inWindow(l.created_at, start, now) &&
+        moduleAllowed(reqById.get(l.requisition_id ?? "")?.module ?? ""),
     ).length;
     const quality = {
       approvalRate: approvalRateNow,
@@ -379,11 +546,16 @@ export const getAnalytics = createServerFn({ method: "POST" })
 
     /* ── Eficiência / cotações ── */
     const reqIdsInWindow = new Set(reqs.map((r) => r.id));
-    const purchases = allPurchases.filter((p) =>
-      inWindow(p.created_at, start, now) && moduleAllowed(reqById.get(p.requisition_id)?.module ?? ""),
+    const purchases = allPurchases.filter(
+      (p) =>
+        inWindow(p.created_at, start, now) &&
+        moduleAllowed(reqById.get(p.requisition_id)?.module ?? ""),
     );
-    const quotsCompleted = quotations.filter((q) =>
-      q.completed_at && inWindow(q.completed_at, start, now) && moduleAllowed(reqById.get(q.requisition_id)?.module ?? ""),
+    const quotsCompleted = quotations.filter(
+      (q) =>
+        q.completed_at &&
+        inWindow(q.completed_at, start, now) &&
+        moduleAllowed(reqById.get(q.requisition_id)?.module ?? ""),
     );
     const quotHours = quotsCompleted
       .filter((q) => q.started_at)
@@ -391,7 +563,9 @@ export const getAnalytics = createServerFn({ method: "POST" })
     const efficiency = {
       purchasesCount: purchases.length,
       quotationsCompleted: quotsCompleted.length,
-      avgQuotationHours: quotHours.length ? round1(quotHours.reduce((a, b) => a + b, 0) / quotHours.length) : null,
+      avgQuotationHours: quotHours.length
+        ? round1(quotHours.reduce((a, b) => a + b, 0) / quotHours.length)
+        : null,
     };
 
     /* ── Top compradores (reais, via purchases.buyer_id) ── */
@@ -446,12 +620,22 @@ export const getAnalytics = createServerFn({ method: "POST" })
       .filter((b) => data.period !== "30d")
       .map((b) => {
         const v = savingsByMonth.get(b.label) ?? { original: 0, final: 0 };
-        return { month: b.label, original: Math.round(v.original), final: Math.round(v.final), savings: Math.round(v.original - v.final) };
+        return {
+          month: b.label,
+          original: Math.round(v.original),
+          final: Math.round(v.final),
+          savings: Math.round(v.original - v.final),
+        };
       });
 
     const spendByModuleRaw = MODULE_META.map((m) => {
       const list = purchases.filter((p) => reqById.get(p.requisition_id)?.module === m.key);
-      return { module: m.key, label: m.name, value: Math.round(list.reduce((s, p) => s + (p.supplier_price ?? 0), 0)), count: list.length };
+      return {
+        module: m.key,
+        label: m.name,
+        value: Math.round(list.reduce((s, p) => s + (p.supplier_price ?? 0), 0)),
+        count: list.length,
+      };
     }).filter((x) => x.count > 0);
     const spendTotal = spendByModuleRaw.reduce((s, x) => s + x.value, 0);
     const spendByModule = spendByModuleRaw
@@ -488,12 +672,18 @@ export const getAnalytics = createServerFn({ method: "POST" })
       }));
 
     /* ── Métricas de hoje ── */
-    const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
     const live = {
-      reqsToday: allReqs.filter((r) => inWindow(r.created_at, todayStart, now) && moduleAllowed(r.module)).length,
+      reqsToday: allReqs.filter(
+        (r) => inWindow(r.created_at, todayStart, now) && moduleAllowed(r.module),
+      ).length,
       valueApprovedToday: Math.round(
         allApprovals
-          .filter((a) => a.decision === "approved" && a.decided_at && inWindow(a.decided_at, todayStart, now))
+          .filter(
+            (a) =>
+              a.decision === "approved" && a.decided_at && inWindow(a.decided_at, todayStart, now),
+          )
           .reduce((s, a) => s + (a.total_value ?? 0), 0),
       ),
       activeBottlenecks: exceeded,
@@ -511,7 +701,10 @@ export const getAnalytics = createServerFn({ method: "POST" })
         slaCompliance: slaNow,
         slaComplianceDelta: slaNow != null && slaCmp != null ? round1(slaNow - slaCmp) : null,
         approvalRate: approvalRateNow,
-        approvalRateDelta: approvalRateNow != null && approvalRateCmp != null ? round1(approvalRateNow - approvalRateCmp) : null,
+        approvalRateDelta:
+          approvalRateNow != null && approvalRateCmp != null
+            ? round1(approvalRateNow - approvalRateCmp)
+            : null,
       },
       volumeTrend,
       moduleDist,
@@ -527,7 +720,8 @@ export const getAnalytics = createServerFn({ method: "POST" })
         approvedTotal,
         purchasedTotal,
         savings: Math.round(savings),
-        savingsPct: winnersTotal + savings > 0 ? round1((savings / (winnersTotal + savings)) * 100) : null,
+        savingsPct:
+          winnersTotal + savings > 0 ? round1((savings / (winnersTotal + savings)) * 100) : null,
         monthlySavings,
         spendByModule,
         topSuppliers,
