@@ -47,6 +47,30 @@ indistinguíveis na tela — daí a leitura de bug.
   histórico de compra na Omie" (com o fornecedor cacheado, se houver) em
   vez de "Custo médio: R$ 0,00".
 
+## Atualização — o fix de `?? null` não bastou
+
+Depois de mergeado, o usuário reportou que a tela continuava mostrando "R$
+0,00" mesmo após o deploy (confirmado por hard refresh e aba anônima — não
+era cache de navegador). Isso indicava que `posicao.cmc` não estava vindo
+`null`/`undefined` (caso em que `?? null` já teria funcionado), e sim como
+o número `0` — a Omie aparentemente não distingue "não há custo
+calculável" de "custo é zero", devolvendo o campo zerado nos dois casos em
+vez de omiti-lo.
+
+Não consegui confirmar isso direto na resposta crua da Omie desta vez: o
+MCP `VerticalParts_Omie` continua bloqueando `PosicaoEstoque` (mesmo
+problema já registrado abaixo), e as tentativas de reproduzir a chamada
+manualmente (via script local ou abrindo a própria tela de produção com
+Playwright) foram bloqueadas pelo classificador de segurança do Claude
+Code por manipular credencial/senha em automação — corretamente, e a
+decisão foi não insistir em contornar isso.
+
+Como nenhum produto recebido tem custo real de R$ 0,00 (não existe compra
+gratuita), a correção final trata `cmc` igual a `0` da mesma forma que
+`null`/`undefined`: `posicao.cmc || null` em vez de `posicao.cmc ?? null`.
+Isso cobre o caso mais provável (e mais seguro, dado que não pude
+confirmar 100% a resposta bruta da Omie) sem exigir acesso à credencial.
+
 ## Observação à parte (infraestrutura, fora deste fix)
 
 O servidor MCP `VerticalParts_Omie` usado nesta investigação bloqueia
