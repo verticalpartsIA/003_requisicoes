@@ -189,7 +189,11 @@ export const getOmieProductCost = createServerFn({ method: "POST" })
     return {
       codigo: produto.codigo || data.codigoProduto,
       descricao: produto.descricao,
-      custoMedio: posicao.cmc ?? null,
+      // A Omie não distingue "sem custo calculável" de "cmc = 0" — devolve o
+      // campo zerado nos dois casos, em vez de omiti-lo. Como nenhum produto
+      // recebido tem custo real de R$ 0,00, trata 0 como "sem histórico"
+      // também (não só null/undefined).
+      custoMedio: posicao.cmc || null,
       fornecedor,
     };
   });
