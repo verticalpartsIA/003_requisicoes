@@ -77,3 +77,85 @@ describe("buildHtml — M2 (Viagem)", () => {
     expect(html).toContain("Viagem — Dados da Viagem");
   });
 });
+
+function m5Input(moduleData: Record<string, unknown>) {
+  return {
+    req: {
+      module: "M5",
+      ticket_number: "M5-000185",
+      status: "ABERTO",
+      title: "Frete Porto de Santos → Bertioga",
+      module_data: moduleData,
+    },
+    suppliers: [],
+    winCriteria: null,
+    approval: null,
+    purchase: null,
+    receipt: null,
+    auditLogs: [],
+    imageUrls: {},
+  };
+}
+
+describe("buildHtml — M5 (Frete)", () => {
+  it("imprime os dados estruturados de frete/Munck que o bloco antigo omitia", () => {
+    // Regressão: o bloco M5 antigo só imprimia local de descarga e foto —
+    // origem, destino, veículo, cliente e nº do projeto nunca apareciam no PDF.
+    const html = buildHtml(
+      m5Input({
+        client_name: "VIP Gails",
+        site_supervisor: "Arilene Avila",
+        origin_address: "Porto de Santos",
+        destination_address: "Rua Passeio dos Coqueiros, 600 - Bertioga",
+        project_number: "28778/776 - SF",
+        vehicle_type: "TRUCK",
+        cargo_type: "ELEVADOR",
+        receiver_name: "Silvio",
+        receiver_phone: "11 91844-7390",
+        weight_kg: 4342,
+        needs_transport: true,
+        vehicle_capacity_ton: 8,
+        needs_munck: true,
+        munck_quantity: 1,
+        munck_size: "20_25",
+        munck_boom_length_m: 20,
+        munck_usage_hours: 4,
+        elevator_items: [
+          {
+            model: "SMR",
+            capacity_kg: 630,
+            passengers: 8,
+            stops: 3,
+            boxes_qty: 19,
+            total_weight_kg: 4342,
+            volume_m3: 11.917,
+            has_machine_room: false,
+          },
+        ],
+        additional_equipment: [
+          { type: "paleteira", label: "Paleteira", quantity: 2, spec: null },
+          { type: "ajudante", label: "Ajudante", quantity: 2, spec: null },
+        ],
+      }),
+    );
+
+    expect(html).toContain("VIP Gails");
+    expect(html).toContain("Porto de Santos");
+    expect(html).toContain("Bertioga");
+    expect(html).toContain("28778/776 - SF");
+    expect(html).toContain("Caminhão Truck");
+    expect(html).toContain("Elevador");
+    expect(html).toContain("Silvio");
+    expect(html).toContain("SMR");
+    expect(html).toContain("630 kg");
+    expect(html).toContain("20 a 25 toneladas");
+    expect(html).toContain("Paleteira × 2");
+    expect(html).toContain("Ajudante × 2");
+    expect(html).toContain("Frete — Dados do Formulário");
+  });
+
+  it("nao quebra quando os campos de frete estao ausentes", () => {
+    const html = buildHtml(m5Input({}));
+    expect(html).toContain("Frete — Dados do Formulário");
+  });
+});
