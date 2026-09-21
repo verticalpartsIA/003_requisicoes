@@ -147,8 +147,11 @@ export const getOmieStockPosition = createServerFn({ method: "POST" })
 export interface OmieProductCost {
   codigo: string;
   descricao: string;
-  /** Custo médio contábil (cmc) do Omie — média ponderada do estoque atual. */
-  custoMedio: number;
+  /** Custo médio contábil (cmc) do Omie — média ponderada do estoque atual.
+   *  null quando a Omie não tem nenhum histórico de compra/entrada para o
+   *  produto (comum em SKU recém-cadastrado, nunca comprado antes) — nesse
+   *  caso não existe "custo" pra buscar, é diferente de custo zero. */
+  custoMedio: number | null;
   /** Fornecedor do pedido de compra pendente mais recente para este produto,
    *  quando disponível no cache de sugestão de compra (Omie não expõe
    *  fornecedor da última compra num único endpoint consultável ao vivo por
@@ -186,7 +189,7 @@ export const getOmieProductCost = createServerFn({ method: "POST" })
     return {
       codigo: produto.codigo || data.codigoProduto,
       descricao: produto.descricao,
-      custoMedio: posicao.cmc ?? 0,
+      custoMedio: posicao.cmc ?? null,
       fornecedor,
     };
   });
