@@ -334,6 +334,40 @@ function StoragePhoto({
   );
 }
 
+const M5_VEHICLE_LABELS: Record<string, string> = {
+  TRUCK: "Caminhão Truck",
+  VAN: "Van/Furgão",
+  FLATBED: "Prancha",
+  CONTAINER: "Container",
+  BAU: "Caminhão Baú",
+  CARRETA: "Caminhão Carreta",
+  OTHER: "Outro",
+};
+
+const M5_CARGO_TYPE_LABELS: Record<string, string> = {
+  ELEVADOR: "Elevador",
+  EQUIPAMENTO: "Equipamento",
+  MATERIAL_CONSTRUCAO: "Material de Construção",
+  OUTRO: "Outro",
+};
+
+const M5_MUNCK_SIZE_LABELS: Record<string, string> = {
+  "10_15": "10 a 15 toneladas",
+  "20_25": "20 a 25 toneladas",
+  "30_35": "30 a 35 toneladas",
+  "40_45": "40 a 45 toneladas",
+  "50": "50 toneladas",
+};
+
+const M5_EQUIPMENT_LABELS: Record<string, string> = {
+  paleteira: "Paleteira",
+  paleteira_eletrica: "Paleteira elétrica",
+  cinta_elevacao: "Cinta de elevação",
+  ganchos: "Ganchos",
+  ajudante: "Ajudante",
+  outro: "Outros",
+};
+
 function ModuleDataSection({ module, data }: { module: string; data: Record<string, unknown> }) {
   const f = (v: unknown) => (v != null && v !== "" ? String(v) : "—");
   const fDate = (v: unknown) => {
@@ -603,9 +637,98 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
     if (tripDetails) return tripDetails;
     if (data.traveler_name) rows.push({ label: "Viajante", value: f(data.traveler_name) });
   } else if (module === "M5") {
-    if (data.project_number) rows.push({ label: "Número da Obra", value: f(data.project_number) });
+    if (data.client_name || data.project_number)
+      rows.push({
+        label: "Cliente/Projeto",
+        value:
+          [f(data.client_name), f(data.project_number)].filter((v) => v !== "—").join(" — ") || "—",
+        full: true,
+      });
+    if (data.site_supervisor)
+      rows.push({ label: "Encarregado do Serviço", value: f(data.site_supervisor) });
+    if (data.origin_address || data.destination_address)
+      rows.push({
+        label: "Rota",
+        value: `${f(data.origin_address)} → ${f(data.destination_address)}`,
+        full: true,
+      });
+    if (data.vehicle_type)
+      rows.push({
+        label: "Tipo de Veículo",
+        value: M5_VEHICLE_LABELS[String(data.vehicle_type)] ?? f(data.vehicle_type),
+      });
+    if (data.cargo_type)
+      rows.push({
+        label: "Tipo de Carga",
+        value: M5_CARGO_TYPE_LABELS[String(data.cargo_type)] ?? f(data.cargo_type),
+      });
     if (data.cargo_description)
       rows.push({ label: "Descrição da Carga", value: f(data.cargo_description), full: true });
+    const elevatorItems = (data.elevator_items ?? []) as Array<Record<string, unknown>>;
+    if (elevatorItems.length > 0)
+      rows.push({
+        label: `Elevador${elevatorItems.length > 1 ? `es (${elevatorItems.length})` : ""}`,
+        value: elevatorItems
+          .map((it) =>
+            [
+              it.model ? String(it.model) : null,
+              it.capacity_kg != null ? `${it.capacity_kg} kg` : null,
+              it.stops != null ? `${it.stops} paradas` : null,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          )
+          .join("; "),
+        full: true,
+      });
+    if (data.weight_kg != null) rows.push({ label: "Peso", value: `${f(data.weight_kg)} kg` });
+    if (data.cargo_height_m != null || data.cargo_length_m != null)
+      rows.push({
+        label: "Altura × Comprimento",
+        value: `${f(data.cargo_height_m)} m × ${f(data.cargo_length_m)} m`,
+      });
+    if (data.needs_transport) {
+      const cap = data.vehicle_capacity_ton;
+      const len = data.vehicle_length_m;
+      const extra = [cap != null ? `${cap} ton` : null, len != null ? `${len} m` : null]
+        .filter(Boolean)
+        .join(" · ");
+      rows.push({ label: "Serviço de Transporte", value: extra ? `Sim (${extra})` : "Sim" });
+    }
+    if (data.needs_munck) {
+      const size = data.munck_size ? String(data.munck_size) : null;
+      const sizeLabel = size
+        ? (M5_MUNCK_SIZE_LABELS[size] ?? f(data.munck_size_other) ?? size)
+        : null;
+      const parts = [
+        data.munck_quantity != null ? `${data.munck_quantity}x` : null,
+        sizeLabel,
+        data.munck_usage_hours != null ? `~${data.munck_usage_hours}h de uso` : null,
+        data.munck_boom_length_m != null ? `lança ${data.munck_boom_length_m}m` : null,
+      ].filter(Boolean);
+      rows.push({
+        label: "Locação de Munck",
+        value: parts.length ? parts.join(" · ") : "Sim",
+        full: true,
+      });
+      if (data.service_location_address)
+        rows.push({ label: "Local do Serviço (Munck)", value: f(data.service_location_address) });
+    }
+    const additionalEquipment = (data.additional_equipment ?? []) as Array<Record<string, unknown>>;
+    if (additionalEquipment.length > 0)
+      rows.push({
+        label: "Equipamento Adicional",
+        value: additionalEquipment
+          .map((eq) => {
+            const label = M5_EQUIPMENT_LABELS[String(eq.type)] ?? String(eq.type);
+            const qty = eq.quantity != null ? ` x${eq.quantity}` : "";
+            const spec = eq.spec ? ` (${eq.spec})` : "";
+            return `${label}${qty}${spec}`;
+          })
+          .join(", "),
+        full: true,
+      });
+    if (data.service_time) rows.push({ label: "Horário do Serviço", value: f(data.service_time) });
     if (data.receiver_name || data.receiver_phone) {
       rows.push({
         label: "Recebedor da Carga",
