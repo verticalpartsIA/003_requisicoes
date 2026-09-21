@@ -654,7 +654,7 @@ function ApprovalPage() {
   // aprovador abre uma requisição M1, não em lote na listagem.
   type OmieCostState =
     | { status: "loading" }
-    | { status: "ok"; custoMedio: number; fornecedor: string | null }
+    | { status: "ok"; custoMedio: number | null; fornecedor: string | null }
     | { status: "error"; message: string };
   const [omieCosts, setOmieCosts] = useState<Record<string, OmieCostState>>({});
 
@@ -1180,6 +1180,14 @@ function ApprovalPage() {
                               ) : cost.status === "error" ? (
                                 <span className="text-red-600 font-medium shrink-0">
                                   Produto não encontrado no Omie
+                                </span>
+                              ) : cost.custoMedio == null ? (
+                                <span
+                                  className="text-muted-foreground shrink-0"
+                                  title="Produto sem nenhuma compra/entrada registrada na Omie ainda"
+                                >
+                                  Sem histórico de compra na Omie
+                                  {cost.fornecedor ? ` — ${cost.fornecedor}` : ""}
                                 </span>
                               ) : (
                                 <span className="font-mono font-semibold text-foreground shrink-0">
