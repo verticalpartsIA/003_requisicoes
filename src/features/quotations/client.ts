@@ -849,21 +849,21 @@ async function saveItemQuotes(
   if (existingRowsError) throw new Error(friendlySupabaseError(existingRowsError));
   const existingIdByItem = new Map((existingRows || []).map((row) => [row.item_id, row.id]));
 
-  const supplierPayload = itemQuotes.map((item) => {
-    const row: Record<string, unknown> = {
-      quotation_id: quotationId,
-      item_id: item.itemId,
-      supplier_name: item.supplierName,
-      price: item.price,
-      deadline: item.deadline || null,
-      notes: item.notes || null,
-      proposal_received: true,
-      is_winner: true,
-    };
-    const existingId = existingIdByItem.get(item.itemId);
-    if (existingId) row.id = existingId;
-    return row;
-  });
+  // `id` é sempre incluído (existente ou gerado aqui) em toda linha do
+  // batch — se algumas linhas tivessem `id` e outras não, o upsert em lote
+  // do PostgREST preencheria o `id` ausente com null em vez de aplicar o
+  // DEFAULT da coluna, e o insert falharia por violar a chave primária.
+  const supplierPayload = itemQuotes.map((item) => ({
+    id: existingIdByItem.get(item.itemId) || crypto.randomUUID(),
+    quotation_id: quotationId,
+    item_id: item.itemId,
+    supplier_name: item.supplierName,
+    price: item.price,
+    deadline: item.deadline || null,
+    notes: item.notes || null,
+    proposal_received: true,
+    is_winner: true,
+  }));
 
   const { error: suppliersError } = await supabaseBrowser
     .from("quotation_suppliers")
@@ -1003,20 +1003,20 @@ export async function saveM1ItemBidsClient(requisitionId: string, bids: ItemBidP
 
   // 3. Upsert de todas as propostas (vencedoras e não vencedoras) — mantém o
   // histórico de quem cotou o quê, com is_winner marcando a escolhida.
-  const payload = bids.map((bid) => {
-    const row: Record<string, unknown> = {
-      quotation_id: quotationId,
-      item_id: bid.itemId,
-      supplier_name: bid.supplierName,
-      price: bid.price,
-      deadline: bid.deadline || null,
-      notes: bid.notes || null,
-      proposal_received: true,
-      is_winner: bid.isWinner,
-    };
-    if (bid.id) row.id = bid.id;
-    return row;
-  });
+  // `id` vai sempre presente (existente ou gerado aqui): misturar, no mesmo
+  // batch, linhas com `id` e linhas sem faria o PostgREST preencher o `id`
+  // ausente com null em vez de aplicar o DEFAULT da coluna, quebrando o insert.
+  const payload = bids.map((bid) => ({
+    id: bid.id || crypto.randomUUID(),
+    quotation_id: quotationId,
+    item_id: bid.itemId,
+    supplier_name: bid.supplierName,
+    price: bid.price,
+    deadline: bid.deadline || null,
+    notes: bid.notes || null,
+    proposal_received: true,
+    is_winner: bid.isWinner,
+  }));
   const { error: upsertError } = await supabaseBrowser.from("quotation_suppliers").upsert(payload);
   if (upsertError) throw new Error(friendlySupabaseError(upsertError));
 

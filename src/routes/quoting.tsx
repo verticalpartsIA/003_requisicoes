@@ -600,7 +600,15 @@ function QuotingPage() {
     setM1Suppliers((prev) => prev.map((n, i) => (i === index ? name : n)));
   };
 
-  const canAdvanceM1ToBids = m1Suppliers.some((n) => n.trim() !== "");
+  // Nomes duplicados (mesmo só diferindo por espaços) quebram a reconstrução
+  // ao reabrir a cotação — ela casa proposta com slot pelo nome do
+  // fornecedor (ver openQuotation), então dois nomes iguais colidiriam no
+  // mesmo índice e uma proposta sobrescreveria a outra silenciosamente.
+  const m1SupplierNamesTrimmed = m1Suppliers.map((n) => n.trim()).filter(Boolean);
+  const hasDuplicateM1SupplierNames =
+    new Set(m1SupplierNamesTrimmed.map((n) => n.toLowerCase())).size !==
+    m1SupplierNamesTrimmed.length;
+  const canAdvanceM1ToBids = m1SupplierNamesTrimmed.length > 0 && !hasDuplicateM1SupplierNames;
 
   const updateM1Bid = (
     itemId: string,
@@ -661,7 +669,18 @@ function QuotingPage() {
     });
   };
 
-  const canFinalizeM1 = m1Items.length > 0 && m1Items.every((ti) => m1Winners[ti.id] != null);
+  // Não confia no índice guardado em m1Winners sozinho: se o comprador voltar
+  // à fase de propostas e apagar o preço/fornecedor do slot que estava
+  // selecionado como vencedor, o índice continua não-nulo mas aponta pra uma
+  // proposta inválida — precisa revalidar contra o estado atual dos bids.
+  const isValidM1Winner = (itemId: string) => {
+    const idx = m1Winners[itemId];
+    if (idx == null) return false;
+    const slot = m1Bids[itemId]?.[idx];
+    return !!m1Suppliers[idx]?.trim() && parseFloat(slot?.price || "") > 0;
+  };
+
+  const canFinalizeM1 = m1Items.length > 0 && m1Items.every((ti) => isValidM1Winner(ti.id));
 
   const handleM1BidsSubmit = async () => {
     if (!m2Item) return;
@@ -670,7 +689,7 @@ function QuotingPage() {
       return;
     }
     for (const ti of m1Items) {
-      if (m1Winners[ti.id] == null) {
+      if (!isValidM1Winner(ti.id)) {
         toast.error(`Selecione o fornecedor vencedor para: ${itemLabel(ti)}`);
         return;
       }
@@ -1284,6 +1303,11 @@ function QuotingPage() {
                         />
                       </div>
                     ))}
+                    {hasDuplicateM1SupplierNames && (
+                      <p className="text-xs text-destructive">
+                        Não repita o nome de um fornecedor — use nomes diferentes para cada um.
+                      </p>
+                    )}
                     <DialogFooter>
                       <Button variant="ghost" onClick={closeM2Dialog}>
                         Cancelar
