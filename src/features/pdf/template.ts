@@ -267,13 +267,149 @@ export function buildHtml(d: BuildInput): string {
       mdContent += fld("Viajante", f(moduleData.traveler_name));
     }
   } else if (module === "M5") {
-    if (moduleData.cargo_description)
-      mdContent += fld("Descrição da Carga", f(moduleData.cargo_description));
+    const M5_VEHICLE_LABELS: Record<string, string> = {
+      TRUCK: "Caminhão Truck",
+      VAN: "Van/Furgão",
+      FLATBED: "Prancha",
+      CONTAINER: "Container",
+      BAU: "Caminhão Baú",
+      CARRETA: "Caminhão Carreta",
+      OTHER: "Outro",
+    };
+    const M5_CARGO_TYPE_LABELS: Record<string, string> = {
+      ELEVADOR: "Elevador",
+      EQUIPAMENTO: "Equipamento",
+      MATERIAL_CONSTRUCAO: "Material de Construção",
+      OUTRO: "Outro",
+    };
+    const M5_MUNCK_SIZE_LABELS: Record<string, string> = {
+      "10_15": "10 a 15 toneladas",
+      "20_25": "20 a 25 toneladas",
+      "30_35": "30 a 35 toneladas",
+      "40_45": "40 a 45 toneladas",
+      "50": "50 toneladas",
+      OUTRO: String(moduleData.munck_size_other ?? "Outro"),
+    };
+    const M5_EQUIPMENT_LABELS: Record<string, string> = {
+      paleteira: "Paleteira",
+      paleteira_eletrica: "Paleteira elétrica",
+      cinta_elevacao: "Cinta de elevação",
+      ganchos: "Ganchos",
+      ajudante: "Ajudante",
+      outro: "Outros",
+    };
+
+    mdContent += grid2(
+      fld("Cliente/Projeto", f(moduleData.client_name)),
+      fld("Encarregado do Serviço", f(moduleData.site_supervisor)),
+    );
+    mdContent += grid2(
+      fld("Origem", f(moduleData.origin_address)),
+      fld("Destino (entrega)", f(moduleData.destination_address)),
+    );
+    if (moduleData.project_number)
+      mdContent += fld("Número da Obra/Projeto", f(moduleData.project_number));
+    mdContent += grid2(
+      fld(
+        "Tipo de Veículo",
+        M5_VEHICLE_LABELS[String(moduleData.vehicle_type)] ?? f(moduleData.vehicle_type),
+      ),
+      fld(
+        "Tipo de Carga",
+        M5_CARGO_TYPE_LABELS[String(moduleData.cargo_type)] ?? f(moduleData.cargo_type),
+      ),
+    );
+    mdContent += grid2(
+      fld("Quem Recebe", f(moduleData.receiver_name)),
+      fld("Telefone", f(moduleData.receiver_phone)),
+    );
     if (moduleData.unloading_location)
       mdContent += fld("Local de Descarregamento", f(moduleData.unloading_location));
+    mdContent += grid2(
+      fld("Peso", moduleData.weight_kg != null ? `${f(moduleData.weight_kg)} kg` : "—"),
+      fld(
+        "Altura × Comprimento",
+        moduleData.cargo_height_m != null || moduleData.cargo_length_m != null
+          ? `${f(moduleData.cargo_height_m)} m × ${f(moduleData.cargo_length_m)} m`
+          : "—",
+      ),
+    );
+    if (moduleData.dimensions) mdContent += fld("Dimensões (CxLxA)", f(moduleData.dimensions));
+    mdContent += grid2(
+      fld("Data do Serviço/Descarga", f(moduleData.unloading_date)),
+      fld("Horário do Serviço", f(moduleData.service_time)),
+    );
+    if (moduleData.allowed_schedule)
+      mdContent += fld("Horário Permitido", f(moduleData.allowed_schedule));
+    if (moduleData.access_restriction)
+      mdContent += fld("Restrição de Acesso", f(moduleData.access_restriction));
+    mdContent += fld(
+      "Precisa Autorização da Prefeitura?",
+      moduleData.needs_city_hall_authorization ? "Sim" : "Não",
+    );
     if (moduleData.cargo_photo_description)
       mdContent += fld("Obs. da Foto", f(moduleData.cargo_photo_description));
     if (d.imageUrls.cargo) mdContent += imgBox(d.imageUrls.cargo, "Foto da Carga");
+
+    const elevatorItems = (moduleData.elevator_items ?? []) as Array<Record<string, unknown>>;
+    if (elevatorItems.length) {
+      mdContent += `<div style="font-size:10px;font-weight:600;color:#374151;margin:10px 0 6px;">Elevadores (${elevatorItems.length})</div>`;
+      elevatorItems.forEach((it, i) => {
+        mdContent += card(`
+          <div style="font-size:12px;font-weight:600;">${i + 1}. ${f(it.model)}${it.has_machine_room ? " — com casa de máquinas" : " — sem casa de máquinas"}</div>
+          ${grid2(fld("Capacidade", it.capacity_kg != null ? `${f(it.capacity_kg)} kg` : "—"), fld("Passageiros", f(it.passengers)))}
+          ${grid2(fld("Paradas", f(it.stops)), fld("Caixas/Volumes", f(it.boxes_qty)))}
+          ${grid2(fld("Peso Total", it.total_weight_kg != null ? `${f(it.total_weight_kg)} kg` : "—"), fld("Volume", it.volume_m3 != null ? `${f(it.volume_m3)} m³` : "—"))}
+        `);
+      });
+    }
+
+    if (moduleData.needs_transport) {
+      mdContent += `<div style="font-size:10px;font-weight:600;color:#374151;margin:10px 0 6px;">Serviço de Transporte</div>`;
+      mdContent += card(
+        grid2(
+          fld(
+            "Capacidade",
+            moduleData.vehicle_capacity_ton != null
+              ? `${f(moduleData.vehicle_capacity_ton)} ton`
+              : "—",
+          ),
+          fld(
+            "Comprimento",
+            moduleData.vehicle_length_m != null ? `${f(moduleData.vehicle_length_m)} m` : "—",
+          ),
+        ) +
+          (moduleData.vehicle_other_spec
+            ? fld("Especificação", f(moduleData.vehicle_other_spec))
+            : ""),
+      );
+    }
+
+    if (moduleData.needs_munck) {
+      mdContent += `<div style="font-size:10px;font-weight:600;color:#374151;margin:10px 0 6px;">Locação de Munck</div>`;
+      mdContent += card(`
+        ${moduleData.service_location_address ? fld("Local do Serviço", f(moduleData.service_location_address)) : ""}
+        ${grid2(fld("Quantidade", f(moduleData.munck_quantity)), fld("Tamanho", M5_MUNCK_SIZE_LABELS[String(moduleData.munck_size)] ?? f(moduleData.munck_size)))}
+        ${grid2(fld("Tamanho da Lança", moduleData.munck_boom_length_m != null ? `${f(moduleData.munck_boom_length_m)} m` : "—"), fld("Tempo Estimado de Uso", moduleData.munck_usage_hours != null ? `${f(moduleData.munck_usage_hours)} h` : "—"))}
+      `);
+    }
+
+    const additionalEquipment = (moduleData.additional_equipment ?? []) as Array<
+      Record<string, unknown>
+    >;
+    if (additionalEquipment.length) {
+      mdContent += `<div style="font-size:10px;font-weight:600;color:#374151;margin:10px 0 6px;">Equipamento Adicional</div>`;
+      mdContent += card(
+        additionalEquipment
+          .map((eq) => {
+            const label = M5_EQUIPMENT_LABELS[String(eq.type)] ?? String(eq.type);
+            const qty = eq.quantity != null ? ` × ${f(eq.quantity)}` : "";
+            const spec = eq.spec ? ` — ${f(eq.spec)}` : "";
+            return `<div style="font-size:11.5px;margin-bottom:3px;">• ${label}${qty}${spec}</div>`;
+          })
+          .join(""),
+      );
+    }
   } else if (module === "M6") {
     const cats = (moduleData.categories ?? []) as string[];
     if (cats.length) mdContent += fld("Categorias", cats.join(" + "));

@@ -12,8 +12,11 @@ import {
   ShieldCheck,
   ImageIcon,
   Upload,
+  Wrench,
+  Trash2,
+  Users,
 } from "lucide-react";
-import { format, startOfDay } from "date-fns";
+import { format, startOfDay, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn, parseLocalDate } from "@/lib/utils";
 import { Stepper } from "@/components/ui/stepper";
@@ -23,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -51,12 +55,82 @@ import { updateRequisitionClient } from "@/features/requisitions/client";
 import { useRouter } from "@tanstack/react-router";
 
 const VEHICLE_TYPES = [
-  { value: "TRUCK", label: "Caminhão" },
+  { value: "TRUCK", label: "Caminhão Truck" },
   { value: "VAN", label: "Van/Furgão" },
   { value: "FLATBED", label: "Prancha" },
   { value: "CONTAINER", label: "Container" },
+  { value: "BAU", label: "Caminhão Baú" },
+  { value: "CARRETA", label: "Caminhão Carreta" },
   { value: "OTHER", label: "Outro" },
 ];
+
+const CARGO_TYPES = [
+  { value: "ELEVADOR", label: "Elevador" },
+  { value: "EQUIPAMENTO", label: "Equipamento" },
+  { value: "MATERIAL_CONSTRUCAO", label: "Material de Construção" },
+  { value: "OUTRO", label: "Outro" },
+];
+
+const MUNCK_SIZES = [
+  { value: "10_15", label: "10 a 15 toneladas" },
+  { value: "20_25", label: "20 a 25 toneladas" },
+  { value: "30_35", label: "30 a 35 toneladas" },
+  { value: "40_45", label: "40 a 45 toneladas" },
+  { value: "50", label: "50 toneladas" },
+  { value: "OUTRO", label: "Outro" },
+];
+
+type EquipmentType =
+  | "paleteira"
+  | "paleteira_eletrica"
+  | "cinta_elevacao"
+  | "ganchos"
+  | "ajudante"
+  | "outro";
+
+const EQUIPMENT_TYPES: { value: EquipmentType; label: string }[] = [
+  { value: "paleteira", label: "Paleteira" },
+  { value: "paleteira_eletrica", label: "Paleteira elétrica" },
+  { value: "cinta_elevacao", label: "Cinta de elevação" },
+  { value: "ganchos", label: "Ganchos" },
+  { value: "ajudante", label: "Ajudante" },
+  { value: "outro", label: "Outros" },
+];
+
+type EquipmentRow = { enabled: boolean; quantity: string; spec: string };
+
+const emptyEquipmentRows = (): Record<EquipmentType, EquipmentRow> => ({
+  paleteira: { enabled: false, quantity: "", spec: "" },
+  paleteira_eletrica: { enabled: false, quantity: "", spec: "" },
+  cinta_elevacao: { enabled: false, quantity: "", spec: "" },
+  ganchos: { enabled: false, quantity: "", spec: "" },
+  ajudante: { enabled: false, quantity: "", spec: "" },
+  outro: { enabled: false, quantity: "", spec: "" },
+});
+
+type ElevatorItem = {
+  id: string;
+  model: string;
+  capacityKg: string;
+  passengers: string;
+  stops: string;
+  boxesQty: string;
+  totalWeightKg: string;
+  volumeM3: string;
+  hasMachineRoom: boolean;
+};
+
+const emptyElevatorItem = (): ElevatorItem => ({
+  id: crypto.randomUUID(),
+  model: "",
+  capacityKg: "",
+  passengers: "",
+  stops: "",
+  boxesQty: "",
+  totalWeightKg: "",
+  volumeM3: "",
+  hasMachineRoom: false,
+});
 
 const URGENCY = [
   { value: "LOW", label: "Baixa" },
@@ -68,10 +142,12 @@ const URGENCY = [
 const STEPS = [
   { label: "Rota", icon: MapPin },
   { label: "Carga", icon: Package },
+  { label: "Serviços", icon: Wrench },
   { label: "Prazo", icon: ClipboardList },
 ];
 
 const INSURANCE_RATE = 0.005; // 0,5%
+const MIN_LEAD_DAYS = 7;
 
 function formatBRL(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -117,8 +193,12 @@ function FreightPage() {
   const [vehicleType, setVehicleType] = useState("");
   const [isForConstruction, setIsForConstruction] = useState<"" | "sim" | "nao">("");
   const [projectNumber, setProjectNumber] = useState("");
+  const [clientName, setClientName] = useState("");
+  const [siteSupervisor, setSiteSupervisor] = useState("");
 
   const [cargoDescription, setCargoDescription] = useState("");
+  const [cargoType, setCargoType] = useState("");
+  const [elevatorItems, setElevatorItems] = useState<ElevatorItem[]>([]);
   const [receiverName, setReceiverName] = useState("");
   const [receiverPhone, setReceiverPhone] = useState("");
   const [unloadingLocation, setUnloadingLocation] = useState("");
@@ -129,13 +209,30 @@ function FreightPage() {
   const [cargoPicPreviews, setCargoPicPreviews] = useState<string[]>([]);
   const [weight, setWeight] = useState("");
   const [dimensions, setDimensions] = useState("");
+  const [cargoHeight, setCargoHeight] = useState("");
+  const [cargoLength, setCargoLength] = useState("");
   const [fragile, setFragile] = useState(false);
   const [declaredValue, setDeclaredValue] = useState("");
+
+  const [needsTransport, setNeedsTransport] = useState(true);
+  const [vehicleCapacityTon, setVehicleCapacityTon] = useState("");
+  const [vehicleLengthM, setVehicleLengthM] = useState("");
+  const [vehicleOtherSpec, setVehicleOtherSpec] = useState("");
+  const [needsMunck, setNeedsMunck] = useState(false);
+  const [serviceLocationAddress, setServiceLocationAddress] = useState("");
+  const [munckQuantity, setMunckQuantity] = useState("");
+  const [munckSize, setMunckSize] = useState("");
+  const [munckSizeOther, setMunckSizeOther] = useState("");
+  const [munckBoomLengthM, setMunckBoomLengthM] = useState("");
+  const [munckUsageHours, setMunckUsageHours] = useState("");
+  const [equipmentRows, setEquipmentRows] =
+    useState<Record<EquipmentType, EquipmentRow>>(emptyEquipmentRows());
 
   const [pickupDate, setPickupDate] = useState<Date | undefined>();
   const [pickupDateOpen, setPickupDateOpen] = useState(false);
   const [unloadingDate, setUnloadingDate] = useState<Date | undefined>();
   const [unloadingDateOpen, setUnloadingDateOpen] = useState(false);
+  const [serviceTime, setServiceTime] = useState("");
   const [allowedSchedule, setAllowedSchedule] = useState("");
   const [accessRestriction, setAccessRestriction] = useState("");
   const [needsCityHallAuthorization, setNeedsCityHallAuthorization] = useState(false);
@@ -156,6 +253,15 @@ function FreightPage() {
     });
     setCargoPicFiles((prev) => prev.filter((_, i) => i !== idx));
   };
+
+  const addElevatorItem = () => setElevatorItems((prev) => [...prev, emptyElevatorItem()]);
+  const removeElevatorItem = (id: string) =>
+    setElevatorItems((prev) => prev.filter((it) => it.id !== id));
+  const updateElevatorItem = (id: string, patch: Partial<ElevatorItem>) =>
+    setElevatorItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+
+  const updateEquipmentRow = (type: EquipmentType, patch: Partial<EquipmentRow>) =>
+    setEquipmentRows((prev) => ({ ...prev, [type]: { ...prev[type], ...patch } }));
 
   const insuranceCost = useMemo(() => {
     const val = parseBRLNumber(declaredValue) ?? 0;
@@ -196,7 +302,11 @@ function FreightPage() {
       if (typeof s.isForConstruction === "string")
         setIsForConstruction(s.isForConstruction as "" | "sim" | "nao");
       if (typeof s.projectNumber === "string") setProjectNumber(s.projectNumber);
+      if (typeof s.clientName === "string") setClientName(s.clientName);
+      if (typeof s.siteSupervisor === "string") setSiteSupervisor(s.siteSupervisor);
       if (typeof s.cargoDescription === "string") setCargoDescription(s.cargoDescription);
+      if (typeof s.cargoType === "string") setCargoType(s.cargoType);
+      if (Array.isArray(s.elevatorItems)) setElevatorItems(s.elevatorItems as ElevatorItem[]);
       if (typeof s.receiverName === "string") setReceiverName(s.receiverName);
       if (typeof s.receiverPhone === "string") setReceiverPhone(s.receiverPhone);
       if (typeof s.unloadingLocation === "string") setUnloadingLocation(s.unloadingLocation);
@@ -204,10 +314,27 @@ function FreightPage() {
         setCargoPhotoDescription(s.cargoPhotoDescription);
       if (typeof s.weight === "string") setWeight(s.weight);
       if (typeof s.dimensions === "string") setDimensions(s.dimensions);
+      if (typeof s.cargoHeight === "string") setCargoHeight(s.cargoHeight);
+      if (typeof s.cargoLength === "string") setCargoLength(s.cargoLength);
       if (typeof s.fragile === "boolean") setFragile(s.fragile);
       if (typeof s.declaredValue === "string") setDeclaredValue(s.declaredValue);
+      if (typeof s.needsTransport === "boolean") setNeedsTransport(s.needsTransport);
+      if (typeof s.vehicleCapacityTon === "string") setVehicleCapacityTon(s.vehicleCapacityTon);
+      if (typeof s.vehicleLengthM === "string") setVehicleLengthM(s.vehicleLengthM);
+      if (typeof s.vehicleOtherSpec === "string") setVehicleOtherSpec(s.vehicleOtherSpec);
+      if (typeof s.needsMunck === "boolean") setNeedsMunck(s.needsMunck);
+      if (typeof s.serviceLocationAddress === "string")
+        setServiceLocationAddress(s.serviceLocationAddress);
+      if (typeof s.munckQuantity === "string") setMunckQuantity(s.munckQuantity);
+      if (typeof s.munckSize === "string") setMunckSize(s.munckSize);
+      if (typeof s.munckSizeOther === "string") setMunckSizeOther(s.munckSizeOther);
+      if (typeof s.munckBoomLengthM === "string") setMunckBoomLengthM(s.munckBoomLengthM);
+      if (typeof s.munckUsageHours === "string") setMunckUsageHours(s.munckUsageHours);
+      if (s.equipmentRows && typeof s.equipmentRows === "object")
+        setEquipmentRows(s.equipmentRows as Record<EquipmentType, EquipmentRow>);
       if (typeof s.pickupDate === "string") setPickupDate(new Date(s.pickupDate));
       if (typeof s.unloadingDate === "string") setUnloadingDate(new Date(s.unloadingDate));
+      if (typeof s.serviceTime === "string") setServiceTime(s.serviceTime);
       if (typeof s.allowedSchedule === "string") setAllowedSchedule(s.allowedSchedule);
       if (typeof s.accessRestriction === "string") setAccessRestriction(s.accessRestriction);
       if (typeof s.needsCityHallAuthorization === "boolean")
@@ -264,16 +391,61 @@ function FreightPage() {
         !!(md.project_number as string | undefined);
       setIsForConstruction(wasConstruction ? "sim" : "nao");
       setProjectNumber((md.project_number as string | undefined) ?? "");
+      setClientName((md.client_name as string | undefined) ?? "");
+      setSiteSupervisor((md.site_supervisor as string | undefined) ?? "");
       setCargoDescription((data.description as string) ?? "");
+      setCargoType((md.cargo_type as string | undefined) ?? "");
+      const rawElevators = (md.elevator_items as Array<Record<string, unknown>> | undefined) ?? [];
+      setElevatorItems(
+        rawElevators.map((it) => ({
+          id: crypto.randomUUID(),
+          model: (it.model as string) ?? "",
+          capacityKg: it.capacity_kg != null ? String(it.capacity_kg) : "",
+          passengers: it.passengers != null ? String(it.passengers) : "",
+          stops: it.stops != null ? String(it.stops) : "",
+          boxesQty: it.boxes_qty != null ? String(it.boxes_qty) : "",
+          totalWeightKg: it.total_weight_kg != null ? String(it.total_weight_kg) : "",
+          volumeM3: it.volume_m3 != null ? String(it.volume_m3) : "",
+          hasMachineRoom: (it.has_machine_room as boolean | undefined) ?? false,
+        })),
+      );
       setReceiverName((md.receiver_name as string | undefined) ?? "");
       setReceiverPhone((md.receiver_phone as string | undefined) ?? "");
       setUnloadingLocation((md.unloading_location as string | undefined) ?? "");
       setCargoPhotoDescription((md.cargo_photo_description as string | undefined) ?? "");
       setWeight(String((md.weight_kg as number | undefined) ?? ""));
       setDimensions((md.dimensions as string | undefined) ?? "");
+      setCargoHeight(String((md.cargo_height_m as number | undefined) ?? ""));
+      setCargoLength(String((md.cargo_length_m as number | undefined) ?? ""));
       setFragile((md.fragile as boolean | undefined) ?? false);
       setDeclaredValue(String((md.declared_value as number | undefined) ?? ""));
+      setNeedsTransport((md.needs_transport as boolean | undefined) ?? true);
+      setVehicleCapacityTon(String((md.vehicle_capacity_ton as number | undefined) ?? ""));
+      setVehicleLengthM(String((md.vehicle_length_m as number | undefined) ?? ""));
+      setVehicleOtherSpec((md.vehicle_other_spec as string | undefined) ?? "");
+      setNeedsMunck((md.needs_munck as boolean | undefined) ?? false);
+      setServiceLocationAddress((md.service_location_address as string | undefined) ?? "");
+      setMunckQuantity(String((md.munck_quantity as number | undefined) ?? ""));
+      setMunckSize((md.munck_size as string | undefined) ?? "");
+      setMunckSizeOther((md.munck_size_other as string | undefined) ?? "");
+      setMunckBoomLengthM(String((md.munck_boom_length_m as number | undefined) ?? ""));
+      setMunckUsageHours(String((md.munck_usage_hours as number | undefined) ?? ""));
+      const rawEquipment =
+        (md.additional_equipment as Array<Record<string, unknown>> | undefined) ?? [];
+      const nextEquipmentRows = emptyEquipmentRows();
+      rawEquipment.forEach((eq) => {
+        const type = eq.type as EquipmentType;
+        if (type && type in nextEquipmentRows) {
+          nextEquipmentRows[type] = {
+            enabled: true,
+            quantity: eq.quantity != null ? String(eq.quantity) : "",
+            spec: (eq.spec as string) ?? "",
+          };
+        }
+      });
+      setEquipmentRows(nextEquipmentRows);
       setAllowedSchedule((md.allowed_schedule as string | undefined) ?? "");
+      setServiceTime((md.service_time as string | undefined) ?? "");
       setAccessRestriction((md.access_restriction as string | undefined) ?? "");
       setNeedsCityHallAuthorization(
         (md.needs_city_hall_authorization as boolean | undefined) ?? false,
@@ -304,17 +476,36 @@ function FreightPage() {
           vehicleType,
           isForConstruction,
           projectNumber,
+          clientName,
+          siteSupervisor,
           cargoDescription,
+          cargoType,
+          elevatorItems,
           receiverName,
           receiverPhone,
           unloadingLocation,
           cargoPhotoDescription,
           weight,
           dimensions,
+          cargoHeight,
+          cargoLength,
           fragile,
           declaredValue,
+          needsTransport,
+          vehicleCapacityTon,
+          vehicleLengthM,
+          vehicleOtherSpec,
+          needsMunck,
+          serviceLocationAddress,
+          munckQuantity,
+          munckSize,
+          munckSizeOther,
+          munckBoomLengthM,
+          munckUsageHours,
+          equipmentRows,
           pickupDate: pickupDate?.toISOString(),
           unloadingDate: unloadingDate?.toISOString(),
+          serviceTime,
           allowedSchedule,
           accessRestriction,
           needsCityHallAuthorization,
@@ -333,17 +524,36 @@ function FreightPage() {
     vehicleType,
     isForConstruction,
     projectNumber,
+    clientName,
+    siteSupervisor,
     cargoDescription,
+    cargoType,
+    elevatorItems,
     receiverName,
     receiverPhone,
     unloadingLocation,
     cargoPhotoDescription,
     weight,
     dimensions,
+    cargoHeight,
+    cargoLength,
     fragile,
     declaredValue,
+    needsTransport,
+    vehicleCapacityTon,
+    vehicleLengthM,
+    vehicleOtherSpec,
+    needsMunck,
+    serviceLocationAddress,
+    munckQuantity,
+    munckSize,
+    munckSizeOther,
+    munckBoomLengthM,
+    munckUsageHours,
+    equipmentRows,
     pickupDate,
     unloadingDate,
+    serviceTime,
     allowedSchedule,
     accessRestriction,
     needsCityHallAuthorization,
@@ -359,7 +569,11 @@ function FreightPage() {
     setVehicleType("");
     setIsForConstruction("");
     setProjectNumber("");
+    setClientName("");
+    setSiteSupervisor("");
     setCargoDescription("");
+    setCargoType("");
+    setElevatorItems([]);
     setReceiverName("");
     setReceiverPhone("");
     setUnloadingLocation("");
@@ -374,10 +588,25 @@ function FreightPage() {
     setEditCargoPicPaths([]);
     setWeight("");
     setDimensions("");
+    setCargoHeight("");
+    setCargoLength("");
     setFragile(false);
     setDeclaredValue("");
+    setNeedsTransport(true);
+    setVehicleCapacityTon("");
+    setVehicleLengthM("");
+    setVehicleOtherSpec("");
+    setNeedsMunck(false);
+    setServiceLocationAddress("");
+    setMunckQuantity("");
+    setMunckSize("");
+    setMunckSizeOther("");
+    setMunckBoomLengthM("");
+    setMunckUsageHours("");
+    setEquipmentRows(emptyEquipmentRows());
     setPickupDate(undefined);
     setUnloadingDate(undefined);
+    setServiceTime("");
     setAllowedSchedule("");
     setAccessRestriction("");
     setNeedsCityHallAuthorization(false);
@@ -394,6 +623,10 @@ function FreightPage() {
       }
       if (!destinationAddress.trim()) {
         toast.error("Informe o endereço de destino.");
+        return false;
+      }
+      if (!clientName.trim()) {
+        toast.error("Informe o cliente/projeto.");
         return false;
       }
       if (!vehicleType) {
@@ -414,6 +647,20 @@ function FreightPage() {
         toast.error("Descrição da carga deve ter pelo menos 10 caracteres.");
         return false;
       }
+      if (!cargoType) {
+        toast.error("Selecione o tipo de carga.");
+        return false;
+      }
+      if (cargoType === "ELEVADOR" && elevatorItems.length === 0) {
+        toast.error("Adicione ao menos um elevador com suas características.");
+        return false;
+      }
+      for (const it of elevatorItems) {
+        if (!it.capacityKg.trim() || !it.stops.trim()) {
+          toast.error("Informe capacidade e número de paradas de cada elevador.");
+          return false;
+        }
+      }
       if (!receiverName.trim()) {
         toast.error("Informe o nome de quem vai receber a carga.");
         return false;
@@ -424,6 +671,20 @@ function FreightPage() {
       }
     }
     if (step === 2) {
+      if (!needsTransport && !needsMunck) {
+        toast.error("Selecione ao menos um serviço: Transporte e/ou Locação de Munck.");
+        return false;
+      }
+      if (needsMunck && !munckQuantity.trim()) {
+        toast.error("Informe a quantidade de Munck necessária.");
+        return false;
+      }
+      if (needsMunck && !munckSize) {
+        toast.error("Selecione o tamanho do Munck.");
+        return false;
+      }
+    }
+    if (step === 3) {
       if (!pickupDate) {
         toast.error("Informe a data de coleta.");
         return false;
@@ -455,6 +716,11 @@ function FreightPage() {
     if (!validateStep()) {
       setStepAttempted(true);
       return;
+    }
+    if (unloadingDate && differenceInCalendarDays(unloadingDate, new Date()) < MIN_LEAD_DAYS) {
+      toast.warning(
+        `Atenção: o prazo recomendado para cotação e contratação de transporte/Munck é de ${MIN_LEAD_DAYS} dias de antecedência.`,
+      );
     }
     setIsSubmitting(true);
     try {
@@ -488,16 +754,43 @@ function FreightPage() {
         ...newCargoPicPaths.filter((p): p is string => !!p),
       ];
 
+      const additionalEquipment = EQUIPMENT_TYPES.filter((t) => equipmentRows[t.value].enabled).map(
+        (t) => ({
+          type: t.value,
+          label: t.label,
+          quantity: equipmentRows[t.value].quantity
+            ? parseInt(equipmentRows[t.value].quantity, 10)
+            : null,
+          spec: equipmentRows[t.value].spec || null,
+        }),
+      );
+
+      const elevatorItemsPayload = elevatorItems.map((it) => ({
+        model: it.model || null,
+        capacity_kg: it.capacityKg ? parseFloat(it.capacityKg) : null,
+        passengers: it.passengers ? parseInt(it.passengers, 10) : null,
+        stops: it.stops ? parseInt(it.stops, 10) : null,
+        boxes_qty: it.boxesQty ? parseInt(it.boxesQty, 10) : null,
+        total_weight_kg: it.totalWeightKg ? parseFloat(it.totalWeightKg) : null,
+        volume_m3: it.volumeM3 ? parseFloat(it.volumeM3) : null,
+        has_machine_room: it.hasMachineRoom,
+      }));
+
       const moduleData = {
         origin_address: originAddress,
         destination_address: destinationAddress,
         vehicle_type: vehicleType,
         is_construction_site: isForConstruction === "sim",
         project_number: isForConstruction === "sim" ? projectNumber || null : null,
+        client_name: clientName || null,
+        site_supervisor: siteSupervisor || null,
+        cargo_type: cargoType || null,
+        elevator_items: elevatorItemsPayload.length > 0 ? elevatorItemsPayload : null,
         receiver_name: receiverName,
         receiver_phone: receiverPhone,
         unloading_location: unloadingLocation || null,
         unloading_date: unloadingDate?.toISOString().slice(0, 10) ?? null,
+        service_time: serviceTime || null,
         allowed_schedule: allowedSchedule || null,
         access_restriction: accessRestriction || null,
         needs_city_hall_authorization: needsCityHallAuthorization,
@@ -506,9 +799,23 @@ function FreightPage() {
         cargo_photos_paths: cargoPicsPaths.length > 0 ? cargoPicsPaths : null,
         weight_kg: weight ? parseFloat(weight) : null,
         dimensions,
+        cargo_height_m: cargoHeight ? parseFloat(cargoHeight) : null,
+        cargo_length_m: cargoLength ? parseFloat(cargoLength) : null,
         fragile,
         declared_value: parseBRLNumber(declaredValue),
         insurance_cost: insuranceCost || null,
+        needs_transport: needsTransport,
+        vehicle_capacity_ton: vehicleCapacityTon ? parseFloat(vehicleCapacityTon) : null,
+        vehicle_length_m: vehicleLengthM ? parseFloat(vehicleLengthM) : null,
+        vehicle_other_spec: vehicleType === "OTHER" ? vehicleOtherSpec || null : null,
+        needs_munck: needsMunck,
+        service_location_address: serviceLocationAddress || null,
+        munck_quantity: needsMunck && munckQuantity ? parseInt(munckQuantity, 10) : null,
+        munck_size: needsMunck ? munckSize || null : null,
+        munck_size_other: needsMunck && munckSize === "OUTRO" ? munckSizeOther || null : null,
+        munck_boom_length_m: munckBoomLengthM ? parseFloat(munckBoomLengthM) : null,
+        munck_usage_hours: munckUsageHours ? parseFloat(munckUsageHours) : null,
+        additional_equipment: additionalEquipment.length > 0 ? additionalEquipment : null,
       };
 
       if (editMode && editReqId) {
@@ -658,6 +965,26 @@ function FreightPage() {
           {step === 0 && (
             <div className="space-y-4">
               <div className="space-y-1.5">
+                <label className="text-sm font-medium">Cliente / Projeto *</label>
+                <Input
+                  placeholder="Ex.: VIP Gails, Urban Campo Limpo..."
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  className={cn(stepAttempted && !clientName.trim() && FIELD_ERROR_CLASS)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">
+                  Encarregado do Serviço
+                  <span className="text-muted-foreground font-normal text-[11px]"> (opcional)</span>
+                </label>
+                <Input
+                  placeholder="Responsável VerticalParts pelo acompanhamento"
+                  value={siteSupervisor}
+                  onChange={(e) => setSiteSupervisor(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
                 <label className="text-sm font-medium">Endereço de Origem *</label>
                 <Input
                   placeholder="Ex.: São Paulo, SP — Rua das Indústrias, 100"
@@ -667,7 +994,7 @@ function FreightPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Endereço de Destino *</label>
+                <label className="text-sm font-medium">Endereço de Destino (entrega) *</label>
                 <Input
                   placeholder="Ex.: Curitiba, PR — Av. Cândido de Abreu, 200"
                   value={destinationAddress}
@@ -717,9 +1044,9 @@ function FreightPage() {
               </div>
               {isForConstruction === "sim" && (
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Número da Obra *</label>
+                  <label className="text-sm font-medium">Número da Obra/Projeto *</label>
                   <Input
-                    placeholder="Ex.: 28978"
+                    placeholder="Ex.: 28978/776"
                     value={projectNumber}
                     onChange={(e) => setProjectNumber(e.target.value)}
                     className={cn(stepAttempted && !projectNumber.trim() && FIELD_ERROR_CLASS)}
@@ -743,6 +1070,112 @@ function FreightPage() {
                 />
                 <p className="text-[11px] text-muted-foreground">{cargoDescription.length}/500</p>
               </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Tipo de Carga *</label>
+                <Select value={cargoType} onValueChange={setCargoType}>
+                  <SelectTrigger className={cn(stepAttempted && !cargoType && FIELD_ERROR_CLASS)}>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CARGO_TYPES.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {cargoType === "ELEVADOR" && (
+                <div className="space-y-3 rounded-lg border p-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium">
+                      Elevadores ({elevatorItems.length})
+                    </label>
+                    <Button type="button" variant="outline" size="sm" onClick={addElevatorItem}>
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar elevador
+                    </Button>
+                  </div>
+                  {elevatorItems.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Nenhum elevador adicionado ainda.
+                    </p>
+                  )}
+                  {elevatorItems.map((it, idx) => (
+                    <div key={it.id} className="space-y-2 rounded-md border bg-muted/30 p-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold">Elevador {idx + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeElevatorItem(it.id)}
+                          className="text-destructive hover:opacity-70"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <Input
+                        placeholder="Modelo (ex.: SMR, GEP-MRL)"
+                        value={it.model}
+                        onChange={(e) => updateElevatorItem(it.id, { model: e.target.value })}
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input
+                          type="number"
+                          placeholder="Capacidade (kg) *"
+                          value={it.capacityKg}
+                          onChange={(e) =>
+                            updateElevatorItem(it.id, { capacityKg: e.target.value })
+                          }
+                        />
+                        <Input
+                          type="number"
+                          placeholder="Passageiros"
+                          value={it.passengers}
+                          onChange={(e) =>
+                            updateElevatorItem(it.id, { passengers: e.target.value })
+                          }
+                        />
+                        <Input
+                          type="number"
+                          placeholder="Nº de paradas *"
+                          value={it.stops}
+                          onChange={(e) => updateElevatorItem(it.id, { stops: e.target.value })}
+                        />
+                        <Input
+                          type="number"
+                          placeholder="Nº de caixas/volumes"
+                          value={it.boxesQty}
+                          onChange={(e) => updateElevatorItem(it.id, { boxesQty: e.target.value })}
+                        />
+                        <Input
+                          type="number"
+                          placeholder="Peso total (kg)"
+                          value={it.totalWeightKg}
+                          onChange={(e) =>
+                            updateElevatorItem(it.id, { totalWeightKg: e.target.value })
+                          }
+                        />
+                        <Input
+                          type="number"
+                          placeholder="Volume (m³)"
+                          value={it.volumeM3}
+                          onChange={(e) => updateElevatorItem(it.id, { volumeM3: e.target.value })}
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 text-xs">
+                        <Checkbox
+                          checked={it.hasMachineRoom}
+                          onCheckedChange={(v) =>
+                            updateElevatorItem(it.id, { hasMachineRoom: v === true })
+                          }
+                        />
+                        Com casa de máquinas
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="space-y-2 rounded-lg border p-3">
                 <label className="text-sm font-medium">Quem vai receber a carga? *</label>
                 <div className="grid grid-cols-2 gap-3">
@@ -766,9 +1199,9 @@ function FreightPage() {
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Peso Estimado (kg)</label>
+                  <label className="text-sm font-medium">Peso (kg)</label>
                   <Input
                     type="number"
                     min="0"
@@ -778,13 +1211,35 @@ function FreightPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Dimensões (CxLxA)</label>
+                  <label className="text-sm font-medium">Altura (m)</label>
                   <Input
-                    placeholder="Ex.: 2m x 1m x 0.5m"
-                    value={dimensions}
-                    onChange={(e) => setDimensions(e.target.value)}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Ex.: 1.5"
+                    value={cargoHeight}
+                    onChange={(e) => setCargoHeight(e.target.value)}
                   />
                 </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Comprimento (m)</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Ex.: 2"
+                    value={cargoLength}
+                    onChange={(e) => setCargoLength(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Dimensões (CxLxA)</label>
+                <Input
+                  placeholder="Ex.: 2m x 1m x 0.5m"
+                  value={dimensions}
+                  onChange={(e) => setDimensions(e.target.value)}
+                />
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium flex items-center gap-1.5">
@@ -950,6 +1405,186 @@ function FreightPage() {
 
           {step === 2 && (
             <div className="space-y-4">
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div>
+                  <label className="text-sm font-medium">Serviço de Transporte</label>
+                  <p className="text-xs text-muted-foreground">
+                    Frete do caminhão selecionado na Rota
+                  </p>
+                </div>
+                <Switch checked={needsTransport} onCheckedChange={setNeedsTransport} />
+              </div>
+              {needsTransport && (
+                <div className="grid grid-cols-2 gap-3 rounded-lg border p-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground">
+                      Capacidade do veículo (ton)
+                    </label>
+                    <Input
+                      type="number"
+                      placeholder="Ex.: 8"
+                      value={vehicleCapacityTon}
+                      onChange={(e) => setVehicleCapacityTon(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground">
+                      Comprimento do veículo (m)
+                    </label>
+                    <Input
+                      type="number"
+                      placeholder="Ex.: 9"
+                      value={vehicleLengthM}
+                      onChange={(e) => setVehicleLengthM(e.target.value)}
+                    />
+                  </div>
+                  {vehicleType === "OTHER" && (
+                    <div className="col-span-2 space-y-1.5">
+                      <label className="text-xs text-muted-foreground">
+                        Especifique o tipo de veículo
+                      </label>
+                      <Input
+                        placeholder="Ex.: Munck 3/4"
+                        value={vehicleOtherSpec}
+                        onChange={(e) => setVehicleOtherSpec(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div>
+                  <label className="text-sm font-medium">Locação de Munck</label>
+                  <p className="text-xs text-muted-foreground">Guindaste para desova/descarga</p>
+                </div>
+                <Switch checked={needsMunck} onCheckedChange={setNeedsMunck} />
+              </div>
+              {needsMunck && (
+                <div className="space-y-3 rounded-lg border p-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground">
+                      Local do serviço (onde o Munck vai atuar, se diferente do destino)
+                    </label>
+                    <Input
+                      placeholder="Deixe em branco se for o mesmo endereço de destino"
+                      value={serviceLocationAddress}
+                      onChange={(e) => setServiceLocationAddress(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">Quantidade de Munck *</label>
+                      <Input
+                        type="number"
+                        min="1"
+                        placeholder="Ex.: 1"
+                        value={munckQuantity}
+                        onChange={(e) => setMunckQuantity(e.target.value)}
+                        className={cn(stepAttempted && !munckQuantity.trim() && FIELD_ERROR_CLASS)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">
+                        Tempo estimado de uso (horas)
+                      </label>
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="Ex.: 4"
+                        value={munckUsageHours}
+                        onChange={(e) => setMunckUsageHours(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground">Tamanho do Munck *</label>
+                    <Select value={munckSize} onValueChange={setMunckSize}>
+                      <SelectTrigger
+                        className={cn(stepAttempted && !munckSize && FIELD_ERROR_CLASS)}
+                      >
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MUNCK_SIZES.map((m) => (
+                          <SelectItem key={m.value} value={m.value}>
+                            {m.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {munckSize === "OUTRO" && (
+                    <Input
+                      placeholder="Especifique o tamanho do Munck"
+                      value={munckSizeOther}
+                      onChange={(e) => setMunckSizeOther(e.target.value)}
+                    />
+                  )}
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground">Tamanho da lança (m)</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder="Ex.: 20"
+                      value={munckBoomLengthM}
+                      onChange={(e) => setMunckBoomLengthM(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2 rounded-lg border p-3">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5" /> Equipamento adicional
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Marque o que for necessário para a descarga/desova.
+                </p>
+                {EQUIPMENT_TYPES.map((t) => {
+                  const row = equipmentRows[t.value];
+                  return (
+                    <div
+                      key={t.value}
+                      className="space-y-1.5 border-t pt-2 first:border-t-0 first:pt-0"
+                    >
+                      <label className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={row.enabled}
+                          onCheckedChange={(v) =>
+                            updateEquipmentRow(t.value, { enabled: v === true })
+                          }
+                        />
+                        {t.label}
+                      </label>
+                      {row.enabled && (
+                        <div className="grid grid-cols-3 gap-2 pl-6">
+                          <Input
+                            type="number"
+                            min="0"
+                            placeholder="Quantidade"
+                            value={row.quantity}
+                            onChange={(e) =>
+                              updateEquipmentRow(t.value, { quantity: e.target.value })
+                            }
+                          />
+                          <Input
+                            className="col-span-2"
+                            placeholder="Especificações (opcional)"
+                            value={row.spec}
+                            onChange={(e) => updateEquipmentRow(t.value, { spec: e.target.value })}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Data de Coleta *</label>
                 <Popover open={pickupDateOpen} onOpenChange={setPickupDateOpen}>
@@ -988,7 +1623,7 @@ function FreightPage() {
               <div className="space-y-3 rounded-lg border p-3">
                 <label className="text-sm font-medium">Quando precisa? *</label>
                 <div className="space-y-1.5">
-                  <label className="text-xs text-muted-foreground">Data da descarga</label>
+                  <label className="text-xs text-muted-foreground">Data do serviço/descarga</label>
                   <Popover open={unloadingDateOpen} onOpenChange={setUnloadingDateOpen}>
                     <PopoverTrigger asChild>
                       <Button
@@ -1020,6 +1655,21 @@ function FreightPage() {
                       />
                     </PopoverContent>
                   </Popover>
+                  {unloadingDate &&
+                    differenceInCalendarDays(unloadingDate, new Date()) < MIN_LEAD_DAYS && (
+                      <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                        Atenção: prazo recomendado é de {MIN_LEAD_DAYS} dias de antecedência para
+                        cotação e contratação de transporte/Munck.
+                      </p>
+                    )}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">Horário do serviço</label>
+                  <Input
+                    placeholder="Ex.: 09:00"
+                    value={serviceTime}
+                    onChange={(e) => setServiceTime(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs text-muted-foreground">Horário permitido</label>
