@@ -1,11 +1,20 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseRest } from "@/lib/supabase-rest";
-import { DEFAULT_TIER_THRESHOLDS, getApprovalLevelForValue, type TierThresholds } from "@/lib/approval";
+import {
+  DEFAULT_TIER_THRESHOLDS,
+  getApprovalLevelForValue,
+  type TierThresholds,
+} from "@/lib/approval";
 import { parseBRLNumber } from "@/lib/number";
 
 type WinCriteria = "price" | "deadline" | "price_deadline";
-type QuotationStatus = "pending" | "quoting" | "awaiting_proposals" | "selecting_winner" | "completed";
+type QuotationStatus =
+  | "pending"
+  | "quoting"
+  | "awaiting_proposals"
+  | "selecting_winner"
+  | "completed";
 
 interface RequisitionRow {
   id: string;
@@ -41,7 +50,7 @@ interface SupplierRow {
  *  próprio fornecedor/preço, permitindo fracionar a cotação. */
 export interface TravelItem {
   id: string;
-  itemType: 'voo' | 'hotel' | 'carro' | 'produto';
+  itemType: "voo" | "hotel" | "carro" | "produto";
   description: string | null;
   status: string;
   sortOrder: number;
@@ -52,6 +61,17 @@ export interface TravelItem {
   supplierPrice?: string;
   supplierDeadline?: string;
   supplierNotes?: string;
+  /** Todas as propostas recebidas para este item (não só a vencedora) —
+   *  usado na cotação fracionada do M1, onde até 3 fornecedores podem
+   *  cotar o mesmo item e o comprador escolhe o vencedor por item. */
+  bids?: {
+    id: string;
+    supplierName: string;
+    price: string;
+    deadline: string;
+    notes: string;
+    isWinner: boolean;
+  }[];
 }
 
 export interface SupplierEntry {
@@ -121,15 +141,22 @@ async function fetchTierThresholds(): Promise<TierThresholds> {
     );
     const map = Object.fromEntries(response.data.map((row) => [row.key, Number(row.value)]));
     return {
-      tier1_max: Number.isFinite(map["tier1_max"]) ? map["tier1_max"] : DEFAULT_TIER_THRESHOLDS.tier1_max,
-      tier2_max: Number.isFinite(map["tier2_max"]) ? map["tier2_max"] : DEFAULT_TIER_THRESHOLDS.tier2_max,
+      tier1_max: Number.isFinite(map["tier1_max"])
+        ? map["tier1_max"]
+        : DEFAULT_TIER_THRESHOLDS.tier1_max,
+      tier2_max: Number.isFinite(map["tier2_max"])
+        ? map["tier2_max"]
+        : DEFAULT_TIER_THRESHOLDS.tier2_max,
     };
   } catch {
     return DEFAULT_TIER_THRESHOLDS;
   }
 }
 
-function mapQuotationStatus(requisitionStatus: string, quotationStatus?: QuotationStatus | null): QuotationStatus {
+function mapQuotationStatus(
+  requisitionStatus: string,
+  quotationStatus?: QuotationStatus | null,
+): QuotationStatus {
   if (quotationStatus) return quotationStatus;
   if (requisitionStatus === "ABERTO") return "pending";
   if (requisitionStatus === "COTAÇÃO") return "quoting";
@@ -219,12 +246,9 @@ async function syncSuppliers(quotationId: string, suppliers: SupplierEntry[]) {
   const idsToDelete = [...existingIds].filter((id) => !incomingIds.has(id));
 
   if (idsToDelete.length > 0) {
-    await supabaseRest(
-      `quotation_suppliers?id=in.(${idsToDelete.join(",")})`,
-      {
-        method: "DELETE",
-      },
-    );
+    await supabaseRest(`quotation_suppliers?id=in.(${idsToDelete.join(",")})`, {
+      method: "DELETE",
+    });
   }
 
   const upsertPayload = suppliers.map((supplier) => ({
@@ -238,21 +262,23 @@ async function syncSuppliers(quotationId: string, suppliers: SupplierEntry[]) {
     is_winner: false,
   }));
 
-  const upsertResponse = await supabaseRest<SupplierRow[]>(
-    "quotation_suppliers?on_conflict=id",
-    {
-      method: "POST",
-      headers: {
-        Prefer: "resolution=merge-duplicates,return=representation",
-      },
-      body: upsertPayload,
+  const upsertResponse = await supabaseRest<SupplierRow[]>("quotation_suppliers?on_conflict=id", {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation",
     },
-  );
+    body: upsertPayload,
+  });
 
   return upsertResponse.data;
 }
 
-async function logQuotationEvent(requisitionId: string, ticketNumber: string, action: string, details: Record<string, unknown>) {
+async function logQuotationEvent(
+  requisitionId: string,
+  ticketNumber: string,
+  action: string,
+  details: Record<string, unknown>,
+) {
   await supabaseRest("audit_logs", {
     method: "POST",
     body: [
@@ -282,12 +308,13 @@ export const listQuotationQueue = createServerFn({ method: "GET" }).handler(asyn
     `quotations?select=id,requisition_id,win_criteria,status,winner_supplier_id&requisition_id=in.(${requisitionIds.join(",")})`,
   );
   const quotationIds = quotationsResponse.data.map((quotation) => quotation.id);
-  const suppliersResponse = quotationIds.length === 0
-    ? { data: [] as SupplierRow[] }
-    : await supabaseRest<SupplierRow[]>(
-        `quotation_suppliers?select=id,quotation_id,supplier_name,price,deadline,notes,proposal_received,is_winner&` +
-          `quotation_id=in.(${quotationIds.join(",")})`,
-      );
+  const suppliersResponse =
+    quotationIds.length === 0
+      ? { data: [] as SupplierRow[] }
+      : await supabaseRest<SupplierRow[]>(
+          `quotation_suppliers?select=id,quotation_id,supplier_name,price,deadline,notes,proposal_received,is_winner&` +
+            `quotation_id=in.(${quotationIds.join(",")})`,
+        );
 
   const quotationByRequisition = new Map(
     quotationsResponse.data.map((quotation) => [quotation.requisition_id, quotation]),
@@ -300,7 +327,9 @@ export const listQuotationQueue = createServerFn({ method: "GET" }).handler(asyn
     suppliersByQuotation.set(supplier.quotation_id, current);
   });
 
-  return requisitions.map((item) => mapQueueItem(item, quotationByRequisition, suppliersByQuotation));
+  return requisitions.map((item) =>
+    mapQueueItem(item, quotationByRequisition, suppliersByQuotation),
+  );
 });
 
 export const saveQuotationSuppliers = createServerFn({ method: "POST" })
@@ -391,9 +420,14 @@ export const returnQuotationForInfo = createServerFn({ method: "POST" })
     // pra saber restaurar a requisição pra ABERTO no reenvio — se a ordem
     // fosse invertida e o log falhasse depois do status já ter mudado, o
     // ticket ficaria preso em REJEITADO sem chance de reenvio.
-    await logQuotationEvent(data.requisitionId, requisition.ticket_number, "QUOTATION_RETURNED_FOR_INFO", {
-      reason: data.reason,
-    });
+    await logQuotationEvent(
+      data.requisitionId,
+      requisition.ticket_number,
+      "QUOTATION_RETURNED_FOR_INFO",
+      {
+        reason: data.reason,
+      },
+    );
 
     await supabaseRest(`requisitions?id=eq.${data.requisitionId}`, {
       method: "PATCH",
@@ -461,24 +495,21 @@ export const finalizeQuotation = createServerFn({ method: "POST" })
 
     const approvalLevel = getApprovalLevelForValue(winner.price, await fetchTierThresholds());
 
-    await supabaseRest(
-      "approvals?on_conflict=requisition_id",
-      {
-        method: "POST",
-        headers: {
-          Prefer: "resolution=merge-duplicates",
-        },
-        body: [
-          {
-            requisition_id: data.requisitionId,
-            quotation_id: data.quotationId,
-            approval_level: approvalLevel,
-            total_value: winner.price,
-            decision: "pending",
-          },
-        ],
+    await supabaseRest("approvals?on_conflict=requisition_id", {
+      method: "POST",
+      headers: {
+        Prefer: "resolution=merge-duplicates",
       },
-    );
+      body: [
+        {
+          requisition_id: data.requisitionId,
+          quotation_id: data.quotationId,
+          approval_level: approvalLevel,
+          total_value: winner.price,
+          decision: "pending",
+        },
+      ],
+    });
 
     await logQuotationEvent(data.requisitionId, requisition.ticket_number, "WINNER_SELECTED", {
       quotation_id: data.quotationId,

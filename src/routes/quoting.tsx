@@ -13,7 +13,6 @@ import {
   Hotel,
   Car,
   Package,
-  CopyPlus,
   Search,
   ScrollText,
   Filter,
@@ -62,11 +61,12 @@ import {
   saveQuotationProposalsClient,
   saveQuotationSuppliersClient,
   saveM2QuoteClient,
-  saveM1ItemQuotesClient,
+  saveM1ItemBidsClient,
   returnQuotationForInfoClient,
   listCorrectableQuotationsClient,
   correctQuotationPriceClient,
   type M2ItemQuote,
+  type ItemBidPayload,
   type CorrectableQuotationItem,
 } from "@/features/quotations/client";
 import { useAuth } from "@/features/auth/auth-context";
@@ -80,6 +80,17 @@ type QuotationStatus =
   | "completed";
 type WinCriteria = "price" | "deadline" | "price_deadline";
 type Phase = "suppliers" | "proposals" | "winner";
+/** Uma proposta de fornecedor para um item específico, na cotação fracionada
+ *  do M1 (fase "propostas por item"). O preço aqui é sempre o UNITÁRIO
+ *  digitado pelo comprador — a multiplicação pela quantidade só acontece na
+ *  hora de gravar (ver handleM1BidsSubmit). */
+interface ItemBidSlot {
+  id?: string;
+  price: string;
+  deadline: string;
+  notes: string;
+}
+type M1Phase = "suppliers" | "bids" | "winners";
 
 export const Route = createFileRoute("/quoting")({
   head: () => ({
@@ -165,6 +176,14 @@ function QuotingPage() {
   >({});
   const [isM2Saving, setIsM2Saving] = useState(false);
 
+  // M1 fracionado — comparação de até 3 fornecedores por item (compartilha
+  // o diálogo/m2Item com o M2, mas com fases e dados próprios)
+  const [m1Phase, setM1Phase] = useState<M1Phase>("suppliers");
+  const [m1Suppliers, setM1Suppliers] = useState<string[]>(["", "", ""]);
+  const [m1Bids, setM1Bids] = useState<Record<string, ItemBidSlot[]>>({});
+  const [m1Winners, setM1Winners] = useState<Record<string, number | null>>({});
+  const [m1WinCriteria, setM1WinCriteria] = useState<WinCriteria>("price");
+
   // Devolver ao solicitante por falta de informação
   const [returnItem, setReturnItem] = useState<QuotationQueueItem | null>(null);
   const [returnReason, setReturnReason] = useState("");
@@ -236,15 +255,18 @@ function QuotingPage() {
     : 0;
 
   const openQuotation = (item: QuotationQueueItem) => {
-    // M2 (voo/hotel/carro) e M1 multi-itens (2+ produtos) cotam por item —
-    // cada um com seu próprio fornecedor, permitindo fracionar entre vários.
-    if (item.module === "M2" || (item.travelItems && item.travelItems.length > 0)) {
-      // Inicializa campos com dados já salvos, se houver
+    if (item.module === "M2") {
+      // Viagem: 1 fornecedor por item (voo/hotel/carro), sem comparação —
+      // não faz sentido cotar 2 fornecedores para a mesma passagem. O preço
+      // é sempre guardado/editado aqui como valor UNITÁRIO — o que fica
+      // salvo no banco (ti.supplierPrice) é o total da linha, então ao
+      // reabrir para edição é preciso desfazer essa multiplicação.
       const initial: Record<string, Omit<M2ItemQuote, "itemId" | "itemType">> = {};
       (item.travelItems || []).forEach((ti) => {
+        const savedTotal = ti.supplierPrice ? Number(ti.supplierPrice) : 0;
         initial[ti.id] = {
           supplierName: ti.supplierName || "",
-          price: ti.supplierPrice ? Number(ti.supplierPrice) : 0,
+          price: savedTotal,
           deadline: ti.supplierDeadline || "",
           notes: ti.supplierNotes || "",
         };
@@ -253,6 +275,59 @@ function QuotingPage() {
       setM2Item(item);
       return;
     }
+
+    if (item.travelItems && item.travelItems.length > 0) {
+      // M1 multi-itens: até 3 fornecedores cotam os mesmos produtos, e cada
+      // item pode ter um vencedor diferente (um vence em preço, outro em
+      // prazo) — fraciona a compra entre eles. Reconstrói até 3 nomes de
+      // fornecedor a partir de TODAS as propostas já salvas (não só a
+      // vencedora), para permitir reabrir e comparar de novo.
+      const items = item.travelItems;
+      const namesInOrder: string[] = [];
+      items.forEach((ti) => {
+        (ti.bids || []).forEach((b) => {
+          if (b.supplierName && !namesInOrder.includes(b.supplierName) && namesInOrder.length < 3) {
+            namesInOrder.push(b.supplierName);
+          }
+        });
+      });
+      while (namesInOrder.length < 3) namesInOrder.push("");
+
+      const bids: Record<string, ItemBidSlot[]> = {};
+      const winners: Record<string, number | null> = {};
+      items.forEach((ti) => {
+        const qty = ti.quantity || 1;
+        const slots: ItemBidSlot[] = namesInOrder.map(() => ({
+          price: "",
+          deadline: "",
+          notes: "",
+        }));
+        let winnerIdx: number | null = null;
+        (ti.bids || []).forEach((b) => {
+          const idx = namesInOrder.indexOf(b.supplierName);
+          if (idx < 0) return;
+          const unitPrice = b.price ? Number(b.price) / qty : 0;
+          slots[idx] = {
+            id: b.id,
+            price: unitPrice ? unitPrice.toString() : "",
+            deadline: b.deadline || "",
+            notes: b.notes || "",
+          };
+          if (b.isWinner) winnerIdx = idx;
+        });
+        bids[ti.id] = slots;
+        winners[ti.id] = winnerIdx;
+      });
+
+      setM1Suppliers(namesInOrder);
+      setM1Bids(bids);
+      setM1Winners(winners);
+      setM1Phase(namesInOrder.some(Boolean) ? "bids" : "suppliers");
+      setM1WinCriteria("price");
+      setM2Item(item);
+      return;
+    }
+
     setSelectedItem(item);
     setSuppliers(item.suppliers.length > 0 ? item.suppliers : [createEmptySupplier()]);
     setPhase(getInitialPhase(item));
@@ -296,6 +371,11 @@ function QuotingPage() {
   const closeM2Dialog = () => {
     setM2Item(null);
     setM2Quotes({});
+    setM1Phase("suppliers");
+    setM1Suppliers(["", "", ""]);
+    setM1Bids({});
+    setM1Winners({});
+    setM1WinCriteria("price");
   };
 
   const openReturnDialog = (item: QuotationQueueItem) => {
@@ -445,29 +525,12 @@ function QuotingPage() {
   };
 
   const isM1Fractioned = m2Item?.module !== "M2";
+  const m1Items = isM1Fractioned ? m2Item?.travelItems || [] : [];
 
   const itemLabel = (ti: TravelItem) =>
     ti.itemType === "produto"
       ? ti.description || ti.productCode || "Item"
       : (travelItemLabels[ti.itemType]?.label ?? ti.itemType);
-
-  // Copia o fornecedor/valor de um item para todos os demais ainda sem
-  // fornecedor definido — atalho para quando o mesmo fornecedor cobre
-  // vários produtos, sem impedir que os demais sejam fracionados depois.
-  const applySupplierToAll = (sourceId: string) => {
-    const source = m2Quotes[sourceId];
-    if (!source?.supplierName?.trim()) return;
-    const travelItems = m2Item?.travelItems || [];
-    setM2Quotes((prev) => {
-      const next = { ...prev };
-      travelItems.forEach((ti) => {
-        if (ti.id === sourceId) return;
-        if (next[ti.id]?.supplierName?.trim()) return;
-        next[ti.id] = { ...source };
-      });
-      return next;
-    });
-  };
 
   const handleM2Submit = async () => {
     if (!m2Item) return;
@@ -502,16 +565,8 @@ function QuotingPage() {
         notes: m2Quotes[ti.id]?.notes || "",
       }));
 
-      if (isM1Fractioned) {
-        await saveM1ItemQuotesClient(m2Item.requisitionId, itemQuotes);
-      } else {
-        await saveM2QuoteClient(m2Item.requisitionId, itemQuotes);
-      }
-      toast.success(
-        isM1Fractioned
-          ? "Cotação fracionada finalizada e enviada para aprovação."
-          : "Cotação de viagem finalizada e enviada para aprovação.",
-      );
+      await saveM2QuoteClient(m2Item.requisitionId, itemQuotes);
+      toast.success("Cotação de viagem finalizada e enviada para aprovação.");
       void notifyVpClickClient({
         stage: "V2",
         requisitionId: m2Item.requisitionId,
@@ -528,6 +583,159 @@ function QuotingPage() {
         module: m2Item.module,
         requesterName: "",
         totalValue: itemQuotes.reduce((sum, q) => sum + q.price, 0),
+      }).catch(console.warn);
+      closeM2Dialog();
+      setQueue(await listQuotationQueueClient());
+      await router.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível finalizar a cotação.");
+    } finally {
+      setIsM2Saving(false);
+    }
+  };
+
+  // ─── M1 fracionado: comparação de até 3 fornecedores por item ───────────
+
+  const updateM1SupplierName = (index: number, name: string) => {
+    setM1Suppliers((prev) => prev.map((n, i) => (i === index ? name : n)));
+  };
+
+  // Nomes duplicados (mesmo só diferindo por espaços) quebram a reconstrução
+  // ao reabrir a cotação — ela casa proposta com slot pelo nome do
+  // fornecedor (ver openQuotation), então dois nomes iguais colidiriam no
+  // mesmo índice e uma proposta sobrescreveria a outra silenciosamente.
+  const m1SupplierNamesTrimmed = m1Suppliers.map((n) => n.trim()).filter(Boolean);
+  const hasDuplicateM1SupplierNames =
+    new Set(m1SupplierNamesTrimmed.map((n) => n.toLowerCase())).size !==
+    m1SupplierNamesTrimmed.length;
+  const canAdvanceM1ToBids = m1SupplierNamesTrimmed.length > 0 && !hasDuplicateM1SupplierNames;
+
+  const updateM1Bid = (
+    itemId: string,
+    slotIndex: number,
+    field: "price" | "deadline" | "notes",
+    value: string,
+  ) => {
+    setM1Bids((prev) => {
+      const slots = prev[itemId]
+        ? [...prev[itemId]]
+        : m1Suppliers.map(() => ({ price: "", deadline: "", notes: "" }));
+      slots[slotIndex] = { ...slots[slotIndex], [field]: value };
+      return { ...prev, [itemId]: slots };
+    });
+  };
+
+  const canAdvanceM1ToWinners =
+    m1Items.length > 0 &&
+    m1Items.every((ti) =>
+      (m1Bids[ti.id] || []).some(
+        (slot, idx) => m1Suppliers[idx]?.trim() && parseFloat(slot.price) > 0,
+      ),
+    );
+
+  const selectM1Winner = (itemId: string, slotIndex: number) => {
+    setM1Winners((prev) => ({ ...prev, [itemId]: slotIndex }));
+  };
+
+  // Pré-seleciona o vencedor de cada item pelo critério escolhido (menor
+  // preço / menor prazo / preço+prazo) — o comprador ainda pode sobrescrever
+  // clicando em outra proposta antes de finalizar.
+  const autoSelectM1Winners = () => {
+    setM1Winners((prev) => {
+      const next = { ...prev };
+      m1Items.forEach((ti) => {
+        const slots = m1Bids[ti.id] || [];
+        let bestIdx: number | null = null;
+        let bestScore = Infinity;
+        slots.forEach((slot, idx) => {
+          if (!m1Suppliers[idx]?.trim()) return;
+          const price = parseFloat(slot.price) || 0;
+          if (price <= 0) return;
+          const deadlineTime = slot.deadline ? new Date(slot.deadline).getTime() : Infinity;
+          const score =
+            m1WinCriteria === "deadline"
+              ? deadlineTime
+              : m1WinCriteria === "price_deadline"
+                ? price + deadlineTime / 1e13
+                : price;
+          if (score < bestScore) {
+            bestScore = score;
+            bestIdx = idx;
+          }
+        });
+        next[ti.id] = bestIdx;
+      });
+      return next;
+    });
+  };
+
+  // Não confia no índice guardado em m1Winners sozinho: se o comprador voltar
+  // à fase de propostas e apagar o preço/fornecedor do slot que estava
+  // selecionado como vencedor, o índice continua não-nulo mas aponta pra uma
+  // proposta inválida — precisa revalidar contra o estado atual dos bids.
+  const isValidM1Winner = (itemId: string) => {
+    const idx = m1Winners[itemId];
+    if (idx == null) return false;
+    const slot = m1Bids[itemId]?.[idx];
+    return !!m1Suppliers[idx]?.trim() && parseFloat(slot?.price || "") > 0;
+  };
+
+  const canFinalizeM1 = m1Items.length > 0 && m1Items.every((ti) => isValidM1Winner(ti.id));
+
+  const handleM1BidsSubmit = async () => {
+    if (!m2Item) return;
+    if (m1Items.length === 0) {
+      toast.error("Nenhum item encontrado para esta requisição.");
+      return;
+    }
+    for (const ti of m1Items) {
+      if (!isValidM1Winner(ti.id)) {
+        toast.error(`Selecione o fornecedor vencedor para: ${itemLabel(ti)}`);
+        return;
+      }
+    }
+
+    setIsM2Saving(true);
+    try {
+      const bidsPayload: ItemBidPayload[] = [];
+      m1Items.forEach((ti) => {
+        const qty = ti.quantity || 1;
+        (m1Bids[ti.id] || []).forEach((slot, idx) => {
+          const name = m1Suppliers[idx]?.trim();
+          const unitPrice = parseFloat(slot.price) || 0;
+          if (!name || unitPrice <= 0) return;
+          bidsPayload.push({
+            id: slot.id,
+            itemId: ti.id,
+            itemType: "produto",
+            supplierName: name,
+            price: unitPrice * qty,
+            deadline: slot.deadline || "",
+            notes: slot.notes || "",
+            isWinner: m1Winners[ti.id] === idx,
+          });
+        });
+      });
+
+      await saveM1ItemBidsClient(m2Item.requisitionId, bidsPayload);
+      toast.success("Cotação fracionada finalizada e enviada para aprovação.");
+      const totalValue = bidsPayload.filter((b) => b.isWinner).reduce((sum, b) => sum + b.price, 0);
+      void notifyVpClickClient({
+        stage: "V2",
+        requisitionId: m2Item.requisitionId,
+        ticketNumber: m2Item.ticketNumber,
+        title: m2Item.title,
+        module: m2Item.module,
+        requesterName: "",
+      }).catch(console.warn);
+      void notifyWhatsappClient({
+        stage: "APROVACAO_PENDENTE",
+        requisitionId: m2Item.requisitionId,
+        ticketNumber: m2Item.ticketNumber,
+        title: m2Item.title,
+        module: m2Item.module,
+        requesterName: "",
+        totalValue,
       }).catch(console.warn);
       closeM2Dialog();
       setQueue(await listQuotationQueueClient());
@@ -1053,189 +1261,357 @@ function QuotingPage() {
               </div>
             )}
 
-            <p className="text-sm text-muted-foreground">
-              {isM1Fractioned
-                ? "Atribua um fornecedor e valor para cada produto. Você pode usar fornecedores diferentes por item para fracionar a compra."
-                : "Atribua um fornecedor para cada item de viagem abaixo."}
-            </p>
+            {isM1Fractioned ? (
+              <>
+                <div className="flex items-center gap-2 text-xs">
+                  <span
+                    className={`rounded-full px-3 py-1 font-medium ${m1Phase === "suppliers" ? "bg-vp-yellow text-vp-dark" : "bg-muted text-muted-foreground"}`}
+                  >
+                    1. Fornecedores
+                  </span>
+                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                  <span
+                    className={`rounded-full px-3 py-1 font-medium ${m1Phase === "bids" ? "bg-vp-yellow text-vp-dark" : "bg-muted text-muted-foreground"}`}
+                  >
+                    2. Propostas por Item
+                  </span>
+                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                  <span
+                    className={`rounded-full px-3 py-1 font-medium ${m1Phase === "winners" ? "bg-vp-yellow text-vp-dark" : "bg-muted text-muted-foreground"}`}
+                  >
+                    3. Vencedor por Item
+                  </span>
+                </div>
 
-            <div className={isM1Fractioned ? "space-y-2" : "space-y-4"}>
-              {(m2Item?.travelItems || []).map((ti) => {
-                const cfg = travelItemLabels[ti.itemType] ?? { label: ti.itemType, icon: null };
-                const q = m2Quotes[ti.id] ?? {
-                  supplierName: "",
-                  price: 0,
-                  deadline: "",
-                  notes: "",
-                };
-                const update = (field: string, value: string | number) =>
-                  setM2Quotes((prev) => ({ ...prev, [ti.id]: { ...prev[ti.id], [field]: value } }));
+                {m1Phase === "suppliers" && (
+                  <div className="space-y-4 mt-2">
+                    <p className="text-sm text-muted-foreground">
+                      Cadastre até <strong>3 fornecedores</strong> para cotar os {m1Items.length}{" "}
+                      item(ns) deste pedido. Na próxima etapa você registra o preço de cada um por
+                      item — fornecedores diferentes podem vencer itens diferentes.
+                    </p>
+                    {m1Suppliers.map((name, idx) => (
+                      <div key={idx} className="space-y-1">
+                        <Label className="text-xs">
+                          Fornecedor {idx + 1}
+                          {idx > 0 ? " (opcional)" : ""}
+                        </Label>
+                        <Input
+                          placeholder="Ex: ABC Ltda"
+                          value={name}
+                          onChange={(e) => updateM1SupplierName(idx, e.target.value)}
+                        />
+                      </div>
+                    ))}
+                    {hasDuplicateM1SupplierNames && (
+                      <p className="text-xs text-destructive">
+                        Não repita o nome de um fornecedor — use nomes diferentes para cada um.
+                      </p>
+                    )}
+                    <DialogFooter>
+                      <Button variant="ghost" onClick={closeM2Dialog}>
+                        Cancelar
+                      </Button>
+                      <Button
+                        variant="vp"
+                        disabled={!canAdvanceM1ToBids}
+                        onClick={() => setM1Phase("bids")}
+                      >
+                        Avançar <ArrowRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </DialogFooter>
+                  </div>
+                )}
 
-                if (isM1Fractioned) {
-                  return (
-                    <div key={ti.id} className="rounded-lg border border-border p-3 space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="text-xs">
-                          {ti.productCode && (
-                            <span className="font-mono text-muted-foreground mr-1">
-                              [{ti.productCode}]
+                {m1Phase === "bids" && (
+                  <div className="space-y-3 mt-2">
+                    <p className="text-sm text-muted-foreground">
+                      Informe o valor unitário e o prazo de cada fornecedor para cada item. Deixe em
+                      branco quem não cotou aquele item.
+                    </p>
+                    {m1Items.map((ti) => (
+                      <Card key={ti.id} className="border border-border">
+                        <CardContent className="p-3 space-y-2">
+                          <div className="text-xs">
+                            {ti.productCode && (
+                              <span className="font-mono text-muted-foreground mr-1">
+                                [{ti.productCode}]
+                              </span>
+                            )}
+                            <span className="font-semibold text-foreground">
+                              {ti.description || "Item"}
                             </span>
-                          )}
-                          <span className="font-semibold text-foreground">
-                            {ti.description || "Item"}
-                          </span>
-                          {ti.quantity != null && (
-                            <span className="text-muted-foreground"> — qtd. {ti.quantity}</span>
-                          )}
-                        </div>
-                        {q.supplierName?.trim() && (
+                            {ti.quantity != null && (
+                              <span className="text-muted-foreground"> — qtd. {ti.quantity}</span>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            {m1Suppliers.map((name, idx) =>
+                              name.trim() ? (
+                                <div
+                                  key={idx}
+                                  className="rounded-md border border-border p-2 space-y-1"
+                                >
+                                  <p className="text-[11px] font-semibold text-foreground truncate">
+                                    {name}
+                                  </p>
+                                  <Input
+                                    className="h-7 text-xs"
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="Valor unit. (R$)"
+                                    value={m1Bids[ti.id]?.[idx]?.price || ""}
+                                    onChange={(e) =>
+                                      updateM1Bid(ti.id, idx, "price", e.target.value)
+                                    }
+                                  />
+                                  <Input
+                                    className="h-7 text-xs"
+                                    type="date"
+                                    value={m1Bids[ti.id]?.[idx]?.deadline || ""}
+                                    onChange={(e) =>
+                                      updateM1Bid(ti.id, idx, "deadline", e.target.value)
+                                    }
+                                  />
+                                </div>
+                              ) : null,
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                    <DialogFooter>
+                      <Button variant="ghost" onClick={() => setM1Phase("suppliers")}>
+                        Voltar
+                      </Button>
+                      <Button
+                        variant="vp"
+                        disabled={!canAdvanceM1ToWinners}
+                        onClick={() => setM1Phase("winners")}
+                      >
+                        Selecionar Vencedores <ArrowRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </DialogFooter>
+                  </div>
+                )}
+
+                {m1Phase === "winners" && (
+                  <div className="space-y-3 mt-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex gap-2">
+                        {(Object.keys(criteriaLabels) as WinCriteria[]).map((c) => (
                           <Button
+                            key={c}
                             type="button"
-                            variant="ghost"
+                            variant={m1WinCriteria === c ? "vp" : "outline"}
                             size="sm"
-                            className="h-6 px-2 text-[10px] text-muted-foreground shrink-0"
-                            title="Aplicar este fornecedor aos itens ainda sem fornecedor"
-                            onClick={() => applySupplierToAll(ti.id)}
+                            className="text-xs"
+                            onClick={() => setM1WinCriteria(c)}
                           >
-                            <CopyPlus className="h-3 w-3 mr-1" />
-                            Aplicar a todos
+                            {criteriaLabels[c].icon}
+                            <span className="ml-1">{criteriaLabels[c].label}</span>
                           </Button>
-                        )}
+                        ))}
                       </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Fornecedor *</Label>
-                          <Input
-                            className="h-8 text-sm"
-                            placeholder="Fornecedor"
-                            value={q.supplierName}
-                            onChange={(e) => update("supplierName", e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Valor (R$) *</Label>
-                          <Input
-                            className="h-8 text-sm"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder="0,00"
-                            value={q.price || ""}
-                            onChange={(e) => update("price", parseFloat(e.target.value) || 0)}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Prazo</Label>
-                          <Input
-                            className="h-8 text-sm"
-                            type="date"
-                            value={q.deadline}
-                            onChange={(e) => update("deadline", e.target.value)}
-                          />
-                        </div>
-                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        onClick={autoSelectM1Winners}
+                      >
+                        Selecionar automaticamente
+                      </Button>
                     </div>
-                  );
-                }
-
-                return (
-                  <Card key={ti.id} className="border border-border">
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                        {cfg.icon}
-                        {cfg.label}
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="col-span-2 space-y-1">
-                          <Label className="text-xs">Fornecedor / Empresa *</Label>
-                          <Input
-                            placeholder="Ex.: LATAM Airlines, Hoteis.com, Localiza..."
-                            value={q.supplierName}
-                            onChange={(e) => update("supplierName", e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Valor (R$) *</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder="0,00"
-                            value={q.price || ""}
-                            onChange={(e) => update("price", parseFloat(e.target.value) || 0)}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Data / Prazo</Label>
-                          <Input
-                            type="date"
-                            value={q.deadline}
-                            onChange={(e) => update("deadline", e.target.value)}
-                          />
-                        </div>
-                        <div className="col-span-2 space-y-1">
-                          <Label className="text-xs">Observações</Label>
-                          <Textarea
-                            placeholder="Número do voo, condições, categoria do hotel..."
-                            value={q.notes}
-                            onChange={(e) => update("notes", e.target.value)}
-                            className="min-h-[56px]"
-                          />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-
-              {(m2Item?.travelItems || []).length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Nenhum item encontrado. A requisição pode ter sido criada antes desta
-                  funcionalidade.
+                    {m1Items.map((ti) => {
+                      const slots = m1Bids[ti.id] || [];
+                      return (
+                        <Card key={ti.id} className="border border-border">
+                          <CardContent className="p-3 space-y-2">
+                            <p className="text-xs font-semibold text-foreground">
+                              {ti.productCode && (
+                                <span className="font-mono text-muted-foreground mr-1">
+                                  [{ti.productCode}]
+                                </span>
+                              )}
+                              {ti.description || "Item"}
+                              {ti.quantity != null && (
+                                <span className="text-muted-foreground font-normal">
+                                  {" "}
+                                  — qtd. {ti.quantity}
+                                </span>
+                              )}
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              {m1Suppliers.map((name, idx) => {
+                                if (!name.trim()) return null;
+                                const slot = slots[idx];
+                                const price = parseFloat(slot?.price || "") || 0;
+                                if (price <= 0) return null;
+                                const isWinner = m1Winners[ti.id] === idx;
+                                return (
+                                  <button
+                                    type="button"
+                                    key={idx}
+                                    onClick={() => selectM1Winner(ti.id, idx)}
+                                    className={`text-left rounded-md border-2 p-2 transition-all ${isWinner ? "border-vp-yellow bg-amber-50/50" : "border-border hover:border-vp-yellow/50"}`}
+                                  >
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="text-xs font-semibold text-foreground truncate">
+                                        {name}
+                                      </span>
+                                      {isWinner && (
+                                        <Trophy className="h-3.5 w-3.5 text-vp-yellow-dark shrink-0" />
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground mt-1">
+                                      R${" "}
+                                      {price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                      /un. · {slot?.deadline || "sem prazo"}
+                                    </p>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                    <div className="rounded-lg bg-accent/50 p-3 text-xs text-muted-foreground">
+                      Valor total estimado (só os vencedores):{" "}
+                      <strong className="text-foreground">
+                        R${" "}
+                        {m1Items
+                          .reduce((sum, ti) => {
+                            const idx = m1Winners[ti.id];
+                            if (idx == null) return sum;
+                            const unit = parseFloat(m1Bids[ti.id]?.[idx]?.price || "") || 0;
+                            return sum + unit * (ti.quantity || 1);
+                          }, 0)
+                          .toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </strong>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="ghost" onClick={() => setM1Phase("bids")}>
+                        Voltar
+                      </Button>
+                      <Button
+                        variant="vp"
+                        disabled={isM2Saving || !canFinalizeM1}
+                        onClick={handleM1BidsSubmit}
+                      >
+                        <CheckCircle2 className="h-4 w-4 mr-1" />
+                        {isM2Saving ? "Salvando..." : "Finalizar Cotação Fracionada"}
+                      </Button>
+                    </DialogFooter>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Atribua um fornecedor para cada item de viagem abaixo.
                 </p>
-              )}
-            </div>
 
-            {isM1Fractioned && (m2Item?.travelItems?.length ?? 0) > 0 && (
-              <div className="rounded-lg bg-accent/50 p-3 text-xs text-muted-foreground">
-                Fornecedores distintos nesta cotação:{" "}
-                <strong className="text-foreground">
-                  {new Set(
-                    Object.values(m2Quotes)
-                      .map((q) => q.supplierName?.trim())
-                      .filter(Boolean),
-                  ).size || 0}
-                </strong>
-              </div>
+                <div className="space-y-4">
+                  {(m2Item?.travelItems || []).map((ti) => {
+                    const cfg = travelItemLabels[ti.itemType] ?? { label: ti.itemType, icon: null };
+                    const q = m2Quotes[ti.id] ?? {
+                      supplierName: "",
+                      price: 0,
+                      deadline: "",
+                      notes: "",
+                    };
+                    const update = (field: string, value: string | number) =>
+                      setM2Quotes((prev) => ({
+                        ...prev,
+                        [ti.id]: { ...prev[ti.id], [field]: value },
+                      }));
+
+                    return (
+                      <Card key={ti.id} className="border border-border">
+                        <CardContent className="p-4 space-y-3">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                            {cfg.icon}
+                            {cfg.label}
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="col-span-2 space-y-1">
+                              <Label className="text-xs">Fornecedor / Empresa *</Label>
+                              <Input
+                                placeholder="Ex.: LATAM Airlines, Hoteis.com, Localiza..."
+                                value={q.supplierName}
+                                onChange={(e) => update("supplierName", e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Valor (R$) *</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="0,00"
+                                value={q.price || ""}
+                                onChange={(e) => update("price", parseFloat(e.target.value) || 0)}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Data / Prazo</Label>
+                              <Input
+                                type="date"
+                                value={q.deadline}
+                                onChange={(e) => update("deadline", e.target.value)}
+                              />
+                            </div>
+                            <div className="col-span-2 space-y-1">
+                              <Label className="text-xs">Observações</Label>
+                              <Textarea
+                                placeholder="Número do voo, condições, categoria do hotel..."
+                                value={q.notes}
+                                onChange={(e) => update("notes", e.target.value)}
+                                className="min-h-[56px]"
+                              />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+
+                  {(m2Item?.travelItems || []).length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Nenhum item encontrado. A requisição pode ter sido criada antes desta
+                      funcionalidade.
+                    </p>
+                  )}
+                </div>
+
+                <div className="rounded-lg bg-accent/50 p-3 text-xs text-muted-foreground">
+                  Valor total estimado:{" "}
+                  <strong className="text-foreground">
+                    R${" "}
+                    {(m2Item?.travelItems || [])
+                      .reduce((sum, ti) => sum + (m2Quotes[ti.id]?.price || 0), 0)
+                      .toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  </strong>
+                </div>
+
+                <DialogFooter>
+                  <Button variant="ghost" onClick={closeM2Dialog}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    variant="vp"
+                    disabled={isM2Saving || (m2Item?.travelItems || []).length === 0}
+                    onClick={handleM2Submit}
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                    {isM2Saving ? "Salvando..." : "Finalizar Cotação de Viagem"}
+                  </Button>
+                </DialogFooter>
+              </>
             )}
-
-            <div className="rounded-lg bg-accent/50 p-3 text-xs text-muted-foreground">
-              Valor total estimado:{" "}
-              <strong className="text-foreground">
-                R${" "}
-                {Object.values(m2Quotes)
-                  .reduce((sum, q) => sum + (q.price || 0), 0)
-                  .toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-              </strong>
-            </div>
-
-            <DialogFooter>
-              <Button variant="ghost" onClick={closeM2Dialog}>
-                Cancelar
-              </Button>
-              <Button
-                variant="vp"
-                disabled={isM2Saving || (m2Item?.travelItems || []).length === 0}
-                onClick={handleM2Submit}
-              >
-                <CheckCircle2 className="h-4 w-4 mr-1" />
-                {isM2Saving
-                  ? "Salvando..."
-                  : isM1Fractioned
-                    ? "Finalizar Cotação Fracionada"
-                    : "Finalizar Cotação de Viagem"}
-              </Button>
-            </DialogFooter>
           </DialogContent>
         </Dialog>
 

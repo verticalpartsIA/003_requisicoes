@@ -5,6 +5,11 @@ linha por entrega — para o contexto completo (logs, causa raiz, decisões),
 os fixes/features mais investigativos linkam para um relatório em
 `docs/reports/`.
 
+## 2026-09-21
+
+- feat(quoting,M1): cotação fracionada do M1 (2+ produtos) ganhou comparação de até 3 fornecedores POR ITEM — antes era atribuição direta (1 fornecedor/item, sem comparar propostas). Agora tem 3 fases (Fornecedores → Propostas por Item → Vencedor por Item), com vencedores diferentes por item na mesma cotação (ex.: 2 vencem em prazo, 1 vence em preço). Exige aplicar a migração `database/029_quotation_suppliers_multi_bid_per_item.sql` antes do deploy — [relatório](docs/reports/2026-09-21-m1-multi-vencedor-por-item.md)
+- fix(quoting,M1): cotação fracionada (M1 com 2+ produtos) gravava o "Valor (R$)" digitado por item como se já fosse o total da linha, sem multiplicar pela quantidade — subestimava o total visto em Aprovação (V3) e o nível de alçada calculado sempre que o comprador digitava o preço unitário. Campo renomeado para "Valor unitário", com subtotal exibido, e a multiplicação por quantidade agora acontece antes de persistir — [relatório](docs/reports/2026-09-21-m1-fractioned-quote-quantity-bug.md)
+
 ## 2026-09-18
 
 - fix(analytics,logs): `getAnalytics` e `getLogsOverview` rodavam com service-role key sem nenhuma checagem de sessão — chamada HTTP direta ao endpoint, sem estar logado, devolvia dados financeiros e o audit trail completo da empresa. Varredura dos módulos restantes não achou o padrão de id confiável dos itens abaixo em nenhum outro lugar. Ver seção "Varredura dos módulos restantes" no [relatório](docs/reports/2026-09-18-admin-server-fn-privilege-escalation.md)

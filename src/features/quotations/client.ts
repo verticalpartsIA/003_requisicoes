@@ -168,15 +168,14 @@ export async function listQuotationQueueClient() {
       }
     }
 
-    // Also fetch quotation_suppliers with item_id
+    // Also fetch quotation_suppliers with item_id — TODAS as linhas, não só
+    // o vencedor: um item pode ter mais de uma proposta (até 3 fornecedores
+    // comparados na cotação fracionada do M1).
     const itemQuotationIds = (quotations || [])
       .filter((q) => itemRequisitionIds.includes(q.requisition_id))
       .map((q) => q.id);
 
-    const itemSuppliersByItem = new Map<
-      string,
-      (typeof suppliers extends Array<infer T> ? T : never) & { item_id: string | null }
-    >();
+    const itemBidsByItem = new Map<string, NonNullable<TravelItem["bids"]>>();
     if (itemQuotationIds.length > 0) {
       const { data: itemSuppliers } = await supabaseBrowser
         .from("quotation_suppliers")
@@ -186,12 +185,25 @@ export async function listQuotationQueueClient() {
         .in("quotation_id", itemQuotationIds);
 
       (itemSuppliers || []).forEach((s) => {
-        if (s.item_id) itemSuppliersByItem.set(s.item_id, s as typeof s & { item_id: string });
+        if (!s.item_id) return;
+        const current = itemBidsByItem.get(s.item_id) || [];
+        current.push({
+          id: s.id,
+          supplierName: s.supplier_name,
+          price: s.price?.toString() || "",
+          deadline: s.deadline || "",
+          notes: s.notes || "",
+          isWinner: s.is_winner,
+        });
+        itemBidsByItem.set(s.item_id, current);
       });
     }
 
     (travelItemRows || []).forEach((row) => {
-      const sup = itemSuppliersByItem.get(row.id);
+      const bids = itemBidsByItem.get(row.id) || [];
+      // Campos supplier* refletem só o VENCEDOR (compatibilidade com M2, que
+      // sempre tem 1 proposta só, e com o resumo do item na fila/PDF).
+      const winner = bids.find((b) => b.isWinner) || bids[0];
       const item: TravelItem = {
         id: row.id,
         itemType: row.item_type as TravelItem["itemType"],
@@ -200,11 +212,12 @@ export async function listQuotationQueueClient() {
         sortOrder: row.sort_order,
         productCode: row.product_code ?? null,
         quantity: row.quantity ?? null,
-        supplierId: sup?.id,
-        supplierName: sup?.supplier_name,
-        supplierPrice: sup?.price?.toString(),
-        supplierDeadline: sup?.deadline ?? undefined,
-        supplierNotes: sup?.notes ?? undefined,
+        supplierId: winner?.id,
+        supplierName: winner?.supplierName,
+        supplierPrice: winner?.price,
+        supplierDeadline: winner?.deadline || undefined,
+        supplierNotes: winner?.notes || undefined,
+        bids,
       };
       const current = travelItemsByRequisition.get(row.requisition_id) || [];
       current.push(item);
@@ -560,16 +573,10 @@ export interface M2ItemQuote {
   notes: string;
 }
 
-/** Cotação por item do M2 (voo/hotel/carro). */
+/** Cotação por item do M2 (voo/hotel/carro) — 1 fornecedor por item, sem
+ *  comparação (não faz sentido cotar 2 fornecedores pro mesmo voo). */
 export async function saveM2QuoteClient(requisitionId: string, itemQuotes: M2ItemQuote[]) {
   return saveItemQuotes(requisitionId, itemQuotes, "M2_QUOTE_COMPLETED");
-}
-
-/** Cotação fracionada do M1 multi-itens: cada produto com seu fornecedor
- *  (ex.: 20 itens divididos entre 4 fornecedores). A aprovação é uma só —
- *  alçada pelo valor TOTAL — e o aprovador pode cortar itens individualmente. */
-export async function saveM1ItemQuotesClient(requisitionId: string, itemQuotes: M2ItemQuote[]) {
-  return saveItemQuotes(requisitionId, itemQuotes, "M1_ITEMS_QUOTE_COMPLETED");
 }
 
 export interface CorrectableQuotationWinner {
@@ -826,8 +833,28 @@ async function saveItemQuotes(
   // 1. Cria ou busca cotação
   const quotationId = await ensureQuotation(requisitionId, "completed");
 
-  // 2. Upsert quotation_suppliers — um por item, já como vencedor
+  // 2. Upsert quotation_suppliers — um por item, já como vencedor. Busca o id
+  // existente por item antes (em vez de onConflict "quotation_id,item_id"):
+  // essa dupla deixou de ser única no banco para permitir múltiplas propostas
+  // por item na cotação fracionada do M1 — aqui (M2) continua 1 por item,
+  // só que garantido pela própria consulta abaixo, não mais pela constraint.
+  const { data: existingRows, error: existingRowsError } = await supabaseBrowser
+    .from("quotation_suppliers")
+    .select("id,item_id")
+    .eq("quotation_id", quotationId)
+    .in(
+      "item_id",
+      itemQuotes.map((item) => item.itemId),
+    );
+  if (existingRowsError) throw new Error(friendlySupabaseError(existingRowsError));
+  const existingIdByItem = new Map((existingRows || []).map((row) => [row.item_id, row.id]));
+
+  // `id` é sempre incluído (existente ou gerado aqui) em toda linha do
+  // batch — se algumas linhas tivessem `id` e outras não, o upsert em lote
+  // do PostgREST preencheria o `id` ausente com null em vez de aplicar o
+  // DEFAULT da coluna, e o insert falharia por violar a chave primária.
   const supplierPayload = itemQuotes.map((item) => ({
+    id: existingIdByItem.get(item.itemId) || crypto.randomUUID(),
     quotation_id: quotationId,
     item_id: item.itemId,
     supplier_name: item.supplierName,
@@ -840,7 +867,7 @@ async function saveItemQuotes(
 
   const { error: suppliersError } = await supabaseBrowser
     .from("quotation_suppliers")
-    .upsert(supplierPayload, { onConflict: "quotation_id,item_id" });
+    .upsert(supplierPayload);
   if (suppliersError) throw new Error(friendlySupabaseError(suppliersError));
 
   // 3. Total e nível de aprovação (respeita os limites configurados no Admin)
@@ -927,4 +954,157 @@ async function saveItemQuotes(
     },
   });
   if (logError) console.warn(`[audit_logs] ${auditAction} failed:`, logError.message);
+}
+
+export interface ItemBidPayload {
+  /** Presente quando esta proposta já existia (edição de cotação salva antes). */
+  id?: string;
+  itemId: string;
+  itemType: "produto";
+  supplierName: string;
+  /** Valor da linha já calculado (unitário × quantidade) — não o unitário. */
+  price: number;
+  deadline: string;
+  notes: string;
+  isWinner: boolean;
+}
+
+/** Cotação fracionada do M1 multi-itens com comparação de até 3 fornecedores
+ *  POR ITEM: cada item pode ter uma proposta diferente de cada fornecedor, e
+ *  o comprador escolhe o vencedor item a item (um pode vencer em preço,
+ *  outro em prazo) — fracionando a compra entre eles. Substitui o antigo
+ *  modelo de atribuição direta (1 fornecedor por item, sem comparação).
+ *  A aprovação é uma só — alçada pelo valor TOTAL dos itens vencedores — e o
+ *  aprovador pode cortar itens individualmente. */
+export async function saveM1ItemBidsClient(requisitionId: string, bids: ItemBidPayload[]) {
+  if (bids.length === 0) throw new Error("Informe ao menos uma proposta.");
+
+  // 1. Cria ou busca cotação
+  const quotationId = await ensureQuotation(requisitionId, "completed");
+
+  // 2. Remove propostas que existiam antes e não vieram mais nesta gravação
+  // (ex.: comprador apagou o preço de um fornecedor para um item).
+  const { data: existingRows, error: existingRowsError } = await supabaseBrowser
+    .from("quotation_suppliers")
+    .select("id")
+    .eq("quotation_id", quotationId);
+  if (existingRowsError) throw new Error(friendlySupabaseError(existingRowsError));
+  const incomingIds = new Set(bids.map((bid) => bid.id).filter(Boolean) as string[]);
+  const idsToDelete = (existingRows || [])
+    .map((row) => row.id)
+    .filter((id) => !incomingIds.has(id));
+  if (idsToDelete.length > 0) {
+    const { error } = await supabaseBrowser
+      .from("quotation_suppliers")
+      .delete()
+      .in("id", idsToDelete);
+    if (error) throw new Error(friendlySupabaseError(error));
+  }
+
+  // 3. Upsert de todas as propostas (vencedoras e não vencedoras) — mantém o
+  // histórico de quem cotou o quê, com is_winner marcando a escolhida.
+  // `id` vai sempre presente (existente ou gerado aqui): misturar, no mesmo
+  // batch, linhas com `id` e linhas sem faria o PostgREST preencher o `id`
+  // ausente com null em vez de aplicar o DEFAULT da coluna, quebrando o insert.
+  const payload = bids.map((bid) => ({
+    id: bid.id || crypto.randomUUID(),
+    quotation_id: quotationId,
+    item_id: bid.itemId,
+    supplier_name: bid.supplierName,
+    price: bid.price,
+    deadline: bid.deadline || null,
+    notes: bid.notes || null,
+    proposal_received: true,
+    is_winner: bid.isWinner,
+  }));
+  const { error: upsertError } = await supabaseBrowser.from("quotation_suppliers").upsert(payload);
+  if (upsertError) throw new Error(friendlySupabaseError(upsertError));
+
+  // 4. Total e nível de aprovação — só os vencedores contam
+  const winners = bids.filter((bid) => bid.isWinner);
+  if (winners.length === 0)
+    throw new Error("Selecione o vencedor de cada item antes de finalizar.");
+  const totalValue = winners.reduce((sum, bid) => sum + bid.price, 0);
+  const approvalLevel = getApprovalLevelForValue(totalValue, await getTierThresholds());
+
+  // 5. Upsert approval
+  const { error: approvalUpsertError } = await supabaseBrowser.from("approvals").upsert(
+    {
+      requisition_id: requisitionId,
+      quotation_id: quotationId,
+      approval_level: approvalLevel,
+      total_value: totalValue,
+      decision: "pending",
+    },
+    { onConflict: "requisition_id" },
+  );
+  if (approvalUpsertError) throw new Error(friendlySupabaseError(approvalUpsertError));
+
+  // 6. Busca o approval_id
+  const { data: approvalRow, error: approvalFetchError } = await supabaseBrowser
+    .from("approvals")
+    .select("id")
+    .eq("requisition_id", requisitionId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (approvalFetchError) throw new Error(friendlySupabaseError(approvalFetchError));
+  if (!approvalRow?.id) throw new Error("Não foi possível recuperar o ID de aprovação.");
+
+  // 7. Upsert approval_items — só os vencedores (é o que Aprovação/Compra leem)
+  const approvalItemsPayload = winners.map((bid) => ({
+    approval_id: approvalRow.id,
+    item_id: bid.itemId,
+    item_type: bid.itemType,
+    supplier_name: bid.supplierName,
+    price: bid.price,
+    decision: "pending",
+  }));
+  const { error: approvalItemsError } = await supabaseBrowser
+    .from("approval_items")
+    .upsert(approvalItemsPayload, { onConflict: "approval_id,item_id" });
+  if (approvalItemsError) throw new Error(friendlySupabaseError(approvalItemsError));
+
+  // 8. Atualiza status dos itens vencedores para 'quoted'
+  const itemIds = winners.map((bid) => bid.itemId);
+  const { error: itemStatusError } = await supabaseBrowser
+    .from("requisition_items")
+    .update({ status: "quoted" })
+    .in("id", itemIds);
+  if (itemStatusError)
+    console.warn("[requisition_items] status update failed:", itemStatusError.message);
+
+  // 9. Atualiza requisição para APROVAÇÃO
+  const { data: requisition, error: requisitionError } = await supabaseBrowser
+    .from("requisitions")
+    .select("ticket_number,status")
+    .eq("id", requisitionId)
+    .single();
+  if (requisitionError) throw new Error(friendlySupabaseError(requisitionError));
+
+  const { error: requisitionUpdateError } = await supabaseBrowser
+    .from("requisitions")
+    .update({ status: "APROVAÇÃO" })
+    .eq("id", requisitionId);
+  if (requisitionUpdateError) throw new Error(friendlySupabaseError(requisitionUpdateError));
+
+  // 10. Audit log
+  const { error: logError } = await supabaseBrowser.from("audit_logs").insert({
+    requisition_id: requisitionId,
+    ticket_number: requisition.ticket_number,
+    action: "M1_ITEMS_QUOTE_COMPLETED",
+    old_status: requisition.status,
+    new_status: "APROVAÇÃO",
+    details: {
+      total_value: totalValue,
+      approval_level: approvalLevel,
+      bids: bids.map((bid) => ({
+        item_id: bid.itemId,
+        supplier: bid.supplierName,
+        price: bid.price,
+        is_winner: bid.isWinner,
+      })),
+    },
+  });
+  if (logError) console.warn("[audit_logs] M1_ITEMS_QUOTE_COMPLETED failed:", logError.message);
 }
