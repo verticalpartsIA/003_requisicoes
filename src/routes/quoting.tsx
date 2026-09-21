@@ -239,12 +239,17 @@ function QuotingPage() {
     // M2 (voo/hotel/carro) e M1 multi-itens (2+ produtos) cotam por item —
     // cada um com seu próprio fornecedor, permitindo fracionar entre vários.
     if (item.module === "M2" || (item.travelItems && item.travelItems.length > 0)) {
-      // Inicializa campos com dados já salvos, se houver
+      // Inicializa campos com dados já salvos, se houver. O preço é sempre
+      // guardado/editado aqui como valor UNITÁRIO — o que fica salvo no banco
+      // (ti.supplierPrice) é o total da linha (unitário × quantidade), então
+      // ao reabrir para edição é preciso desfazer essa multiplicação.
       const initial: Record<string, Omit<M2ItemQuote, "itemId" | "itemType">> = {};
       (item.travelItems || []).forEach((ti) => {
+        const qty = ti.itemType === "produto" ? ti.quantity || 1 : 1;
+        const savedTotal = ti.supplierPrice ? Number(ti.supplierPrice) : 0;
         initial[ti.id] = {
           supplierName: ti.supplierName || "",
-          price: ti.supplierPrice ? Number(ti.supplierPrice) : 0,
+          price: savedTotal ? savedTotal / qty : 0,
           deadline: ti.supplierDeadline || "",
           notes: ti.supplierNotes || "",
         };
@@ -493,14 +498,21 @@ function QuotingPage() {
 
     setIsM2Saving(true);
     try {
-      const itemQuotes: M2ItemQuote[] = travelItems.map((ti) => ({
-        itemId: ti.id,
-        itemType: ti.itemType,
-        supplierName: m2Quotes[ti.id]?.supplierName?.trim() || "",
-        price: m2Quotes[ti.id]?.price || 0,
-        deadline: m2Quotes[ti.id]?.deadline || "",
-        notes: m2Quotes[ti.id]?.notes || "",
-      }));
+      // m2Quotes guarda o preço UNITÁRIO digitado pelo comprador; o que é
+      // persistido (e usado no total da aprovação/compra) é o valor da linha
+      // — unitário × quantidade. Voo/hotel/carro não têm quantidade (sempre 1).
+      const itemQuotes: M2ItemQuote[] = travelItems.map((ti) => {
+        const qty = ti.itemType === "produto" ? ti.quantity || 1 : 1;
+        const unitPrice = m2Quotes[ti.id]?.price || 0;
+        return {
+          itemId: ti.id,
+          itemType: ti.itemType,
+          supplierName: m2Quotes[ti.id]?.supplierName?.trim() || "",
+          price: unitPrice * qty,
+          deadline: m2Quotes[ti.id]?.deadline || "",
+          notes: m2Quotes[ti.id]?.notes || "",
+        };
+      });
 
       if (isM1Fractioned) {
         await saveM1ItemQuotesClient(m2Item.requisitionId, itemQuotes);
@@ -1113,7 +1125,7 @@ function QuotingPage() {
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label className="text-xs">Valor (R$) *</Label>
+                          <Label className="text-xs">Valor unitário (R$) *</Label>
                           <Input
                             className="h-8 text-sm"
                             type="number"
@@ -1134,6 +1146,18 @@ function QuotingPage() {
                           />
                         </div>
                       </div>
+                      {(ti.quantity ?? 1) > 1 && q.price > 0 && (
+                        <p className="text-[11px] text-muted-foreground">
+                          Subtotal: {ti.quantity} × R${" "}
+                          {q.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} ={" "}
+                          <strong className="text-foreground">
+                            R${" "}
+                            {(q.price * (ti.quantity ?? 1)).toLocaleString("pt-BR", {
+                              minimumFractionDigits: 2,
+                            })}
+                          </strong>
+                        </p>
+                      )}
                     </div>
                   );
                 }
@@ -1213,8 +1237,11 @@ function QuotingPage() {
               Valor total estimado:{" "}
               <strong className="text-foreground">
                 R${" "}
-                {Object.values(m2Quotes)
-                  .reduce((sum, q) => sum + (q.price || 0), 0)
+                {(m2Item?.travelItems || [])
+                  .reduce((sum, ti) => {
+                    const qty = ti.itemType === "produto" ? ti.quantity || 1 : 1;
+                    return sum + (m2Quotes[ti.id]?.price || 0) * qty;
+                  }, 0)
                   .toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
               </strong>
             </div>
