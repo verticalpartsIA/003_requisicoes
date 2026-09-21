@@ -4,6 +4,7 @@ import { getApprovalLevelForValue } from "@/lib/approval";
 import { parseBRLNumber } from "@/lib/number";
 import { getTierThresholds } from "@/features/admin/api";
 import { friendlySupabaseError } from "@/lib/supabase-error";
+import type { JsonValue } from "@/features/comando/types";
 
 type WinCriteria = "price" | "deadline" | "price_deadline";
 type QuotationStatus =
@@ -241,6 +242,7 @@ export async function listQuotationQueueClient() {
       module: requisition.module,
       requesterNotes: requisition.justification,
       status: mapQuotationStatus(requisition.status, quotation?.status as QuotationStatus | null),
+      moduleData: (requisition.module_data as Record<string, JsonValue> | null) ?? {},
       suppliers: quotationSuppliers.map((supplier) => ({
         id: supplier.id,
         name: supplier.supplier_name,

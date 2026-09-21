@@ -54,6 +54,7 @@ import {
 import { useAuth } from "@/features/auth/auth-context";
 import { notifyVpClickClient } from "@/features/vpclick/client";
 import { approvalLevelLabels, DEFAULT_TIER_THRESHOLDS, type TierThresholds } from "@/lib/approval";
+import { getM5SummaryItems } from "@/lib/m5-freight-summary";
 import { notifyWhatsappClient } from "@/features/whatsapp/client";
 import { getOmieProductCostClient } from "@/features/omie/client";
 import { getTierThresholds } from "@/features/admin/api";
@@ -1154,6 +1155,25 @@ function ApprovalPage() {
                       <p className="text-sm text-foreground">{selected.requesterNotes}</p>
                     </CardContent>
                   </Card>
+
+                  {/* Serviços/equipamentos do M5 (Frete) — module_data nunca aparecia aqui,
+                      só na descrição livre; sem isso o aprovador não vê Munck/paleteira/ajudantes. */}
+                  {selected.moduleCode === "M5" &&
+                    getM5SummaryItems(selected.moduleData).length > 0 && (
+                      <Card className="border-dashed border-blue-300/60 bg-blue-50/30">
+                        <CardContent className="p-4 space-y-1.5">
+                          <p className="text-xs font-semibold text-muted-foreground mb-1">
+                            Serviços e Equipamentos Solicitados
+                          </p>
+                          {getM5SummaryItems(selected.moduleData).map((it) => (
+                            <div key={it.label} className="text-sm">
+                              <span className="font-medium text-foreground">{it.label}:</span>{" "}
+                              <span className="text-muted-foreground">{it.value}</span>
+                            </div>
+                          ))}
+                        </CardContent>
+                      </Card>
+                    )}
 
                   {/* Custo Omie — comparação ao vivo, só para M1 (produtos) */}
                   {selected.moduleCode === "M1" && (selected.m1Products?.length ?? 0) > 0 && (

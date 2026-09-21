@@ -71,6 +71,7 @@ import {
 } from "@/features/quotations/client";
 import { useAuth } from "@/features/auth/auth-context";
 import { parseBRLNumber } from "@/lib/number";
+import { getM5SummaryItems } from "@/lib/m5-freight-summary";
 
 type QuotationStatus =
   | "pending"
@@ -953,6 +954,21 @@ function QuotingPage() {
                 <p className="text-sm text-amber-900">{selectedItem.requesterNotes}</p>
               </div>
             )}
+
+            {selectedItem?.module === "M5" &&
+              getM5SummaryItems(selectedItem.moduleData).length > 0 && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-1.5">
+                  <p className="text-xs font-semibold text-blue-800 mb-1">
+                    Serviços e Equipamentos Solicitados
+                  </p>
+                  {getM5SummaryItems(selectedItem.moduleData).map((it) => (
+                    <div key={it.label} className="text-sm">
+                      <span className="font-medium text-blue-900">{it.label}:</span>{" "}
+                      <span className="text-blue-800">{it.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
             <div className="flex items-center gap-2 text-xs">
               <span

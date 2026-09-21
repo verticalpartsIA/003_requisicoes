@@ -1,25 +1,38 @@
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import type { PurchaseItem, PurchaseTravelItem } from "@/features/purchases/api";
+import type { JsonValue } from "@/features/comando/types";
 
 function getCategory(module: string): PurchaseItem["category"] {
   switch (module) {
-    case "M1": return "produto";
-    case "M2": return "viagem";
-    case "M3": return "servico";
-    case "M4": return "manutencao";
-    case "M5": return "frete";
-    default: return "locacao";
+    case "M1":
+      return "produto";
+    case "M2":
+      return "viagem";
+    case "M3":
+      return "servico";
+    case "M4":
+      return "manutencao";
+    case "M5":
+      return "frete";
+    default:
+      return "locacao";
   }
 }
 
 function getModuleLabel(module: string) {
   switch (module) {
-    case "M1": return "M1 — Produtos";
-    case "M2": return "M2 — Viagens";
-    case "M3": return "M3 — Serviços";
-    case "M4": return "M4 — Manutenção";
-    case "M5": return "M5 — Frete";
-    default: return "M6 — Locação";
+    case "M1":
+      return "M1 — Produtos";
+    case "M2":
+      return "M2 — Viagens";
+    case "M3":
+      return "M3 — Serviços";
+    case "M4":
+      return "M4 — Manutenção";
+    case "M5":
+      return "M5 — Frete";
+    default:
+      return "M6 — Locação";
   }
 }
 
@@ -35,27 +48,36 @@ export async function listPendingPurchasesClient() {
   const requisitionIds = approvals.map((item) => item.requisition_id);
   const { data: requisitions, error: requisitionsError } = await supabaseBrowser
     .from("requisitions")
-    .select("id,ticket_number,module,title,justification,requester_name,requester_profile_id,status")
+    .select(
+      "id,ticket_number,module,title,justification,requester_name,requester_profile_id,status,module_data",
+    )
     .in("id", requisitionIds)
     .eq("status", "COMPRA");
   if (requisitionsError) throw requisitionsError;
 
   const quotationIds = approvals.map((item) => item.quotation_id).filter(Boolean) as string[];
-  const { data: quotations, error: quotationsError } = quotationIds.length === 0
-    ? { data: [], error: null }
-    : await supabaseBrowser.from("quotations").select("id,requisition_id,win_criteria").in("id", quotationIds);
+  const { data: quotations, error: quotationsError } =
+    quotationIds.length === 0
+      ? { data: [], error: null }
+      : await supabaseBrowser
+          .from("quotations")
+          .select("id,requisition_id,win_criteria")
+          .in("id", quotationIds);
   if (quotationsError) throw quotationsError;
 
-  const { data: suppliers, error: suppliersError } = quotationIds.length === 0
-    ? { data: [], error: null }
-    : await supabaseBrowser
-        .from("quotation_suppliers")
-        .select("quotation_id,supplier_name,price,deadline,notes,is_winner")
-        .in("quotation_id", quotationIds);
+  const { data: suppliers, error: suppliersError } =
+    quotationIds.length === 0
+      ? { data: [], error: null }
+      : await supabaseBrowser
+          .from("quotation_suppliers")
+          .select("quotation_id,supplier_name,price,deadline,notes,is_winner")
+          .in("quotation_id", quotationIds);
   if (suppliersError) throw suppliersError;
 
   const requisitionById = new Map((requisitions || []).map((item) => [item.id, item]));
-  const quotationByRequisition = new Map((quotations || []).map((item) => [item.requisition_id, item]));
+  const quotationByRequisition = new Map(
+    (quotations || []).map((item) => [item.requisition_id, item]),
+  );
   const suppliersByQuotation = new Map<string, typeof suppliers>();
 
   (suppliers || []).forEach((supplier) => {
@@ -81,7 +103,10 @@ export async function listPendingPurchasesClient() {
       .eq("decision", "approved");
 
     const requisitionItemIds = (approvalItemRows || []).map((row) => row.item_id);
-    const requisitionItemById = new Map<string, { product_code: string | null; description: string | null; quantity: number | null }>();
+    const requisitionItemById = new Map<
+      string,
+      { product_code: string | null; description: string | null; quantity: number | null }
+    >();
     if (requisitionItemIds.length > 0) {
       const { data: requisitionItemRows } = await supabaseBrowser
         .from("requisition_items")
@@ -129,11 +154,14 @@ export async function listPendingPurchasesClient() {
         requesterName: requisition.requester_name,
         requesterProfileId: requisition.requester_profile_id,
         requesterNotes: requisition.justification,
+        moduleData: (requisition.module_data as Record<string, JsonValue> | null) ?? {},
         totalValue: approval.total_value || 0,
         approvalLevel: approval.approval_level as 1 | 2 | 3,
         winCriteria: (quotation?.win_criteria as PurchaseItem["winCriteria"] | null) || "price",
         approvedBy: "Aprovador",
-        approvedAt: approval.decided_at ? new Date(approval.decided_at).toLocaleString("pt-BR") : "Aprovado recentemente",
+        approvedAt: approval.decided_at
+          ? new Date(approval.decided_at).toLocaleString("pt-BR")
+          : "Aprovado recentemente",
         suppliers: quotationSuppliers.map((supplier) => ({
           name: supplier.supplier_name,
           price: supplier.price || 0,
@@ -142,9 +170,10 @@ export async function listPendingPurchasesClient() {
           isWinner: supplier.is_winner,
         })),
         status: "pendente" as const,
-        approvedTravelItems: hasItemApprovals && (approvedTravelItemsByApproval.get(approval.id) || []).length > 0
-          ? approvedTravelItemsByApproval.get(approval.id)
-          : undefined,
+        approvedTravelItems:
+          hasItemApprovals && (approvedTravelItemsByApproval.get(approval.id) || []).length > 0
+            ? approvedTravelItemsByApproval.get(approval.id)
+            : undefined,
       };
     })
     .filter(Boolean) as PurchaseItem[];
