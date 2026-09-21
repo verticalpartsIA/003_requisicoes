@@ -7,6 +7,7 @@ import {
   type TierThresholds,
 } from "@/lib/approval";
 import { parseBRLNumber } from "@/lib/number";
+import type { JsonValue } from "@/features/comando/types";
 
 type WinCriteria = "price" | "deadline" | "price_deadline";
 type QuotationStatus =
@@ -21,9 +22,11 @@ interface RequisitionRow {
   ticket_number: string;
   module: string;
   title: string;
+  description: string | null;
   justification: string;
   urgency: string;
   status: string;
+  module_data: Record<string, JsonValue> | null;
 }
 
 interface QuotationRow {
@@ -97,6 +100,8 @@ export interface QuotationQueueItem {
   suppliers: SupplierEntry[];
   winCriteria: WinCriteria;
   travelItems?: TravelItem[];
+  description?: string | null;
+  moduleData?: Record<string, JsonValue>;
 }
 
 const supplierSchema = z.object({
@@ -180,6 +185,8 @@ function mapQueueItem(
     module: requisition.module,
     requesterNotes: requisition.justification,
     status: mapQuotationStatus(requisition.status, quotation?.status || null),
+    description: requisition.description,
+    moduleData: requisition.module_data ?? {},
     suppliers: suppliers.map((supplier) => ({
       id: supplier.id,
       name: supplier.supplier_name,
@@ -294,7 +301,7 @@ async function logQuotationEvent(
 
 export const listQuotationQueue = createServerFn({ method: "GET" }).handler(async () => {
   const requisitionsResponse = await supabaseRest<RequisitionRow[]>(
-    "requisitions?select=id,ticket_number,module,title,justification,urgency,status&status=in.(ABERTO,COTAÇÃO)&order=created_at.asc",
+    "requisitions?select=id,ticket_number,module,title,description,justification,urgency,status,module_data&status=in.(ABERTO,COTAÇÃO)&order=created_at.asc",
   );
 
   const requisitions = requisitionsResponse.data;

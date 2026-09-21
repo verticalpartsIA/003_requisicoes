@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseRest } from "@/lib/supabase-rest";
+import type { JsonValue } from "@/features/comando/types";
 
 type WinCriteria = "price" | "deadline" | "price_deadline";
 
@@ -58,7 +59,7 @@ interface SupplierQuote {
 export interface PurchaseTravelItem {
   approvalItemId: string;
   itemId: string;
-  itemType: 'voo' | 'hotel' | 'carro' | 'produto';
+  itemType: "voo" | "hotel" | "carro" | "produto";
   productCode?: string | null;
   quantity?: number | null;
   description?: string | null;
@@ -79,6 +80,7 @@ export interface PurchaseItem {
   requesterName: string;
   requesterProfileId: string | null;
   requesterNotes: string;
+  moduleData?: Record<string, JsonValue>;
   totalValue: number;
   approvalLevel: 1 | 2 | 3;
   winCriteria: WinCriteria;
@@ -217,22 +219,25 @@ export const listPendingPurchases = createServerFn({ method: "GET" }).handler(as
   );
   const requisitions = requisitionsResponse.data;
   const quotationIds = approvals.map((item) => item.quotation_id).filter(Boolean) as string[];
-  const quotationsResponse = quotationIds.length === 0
-    ? { data: [] as QuotationRow[] }
-    : await supabaseRest<QuotationRow[]>(
-        `quotations?select=id,requisition_id,win_criteria&id=in.(${quotationIds.join(",")})`,
-      );
-  const suppliersResponse = quotationIds.length === 0
-    ? { data: [] as SupplierRow[] }
-    : await supabaseRest<SupplierRow[]>(
-        `quotation_suppliers?select=id,quotation_id,supplier_name,price,deadline,notes,is_winner&` +
-          `quotation_id=in.(${quotationIds.join(",")})`,
-      );
-  const purchasesResponse = requisitionIds.length === 0
-    ? { data: [] as PurchaseRow[] }
-    : await supabaseRest<PurchaseRow[]>(
-        `purchases?select=id,requisition_id,requires_receipt&requisition_id=in.(${requisitionIds.join(",")})`,
-      );
+  const quotationsResponse =
+    quotationIds.length === 0
+      ? { data: [] as QuotationRow[] }
+      : await supabaseRest<QuotationRow[]>(
+          `quotations?select=id,requisition_id,win_criteria&id=in.(${quotationIds.join(",")})`,
+        );
+  const suppliersResponse =
+    quotationIds.length === 0
+      ? { data: [] as SupplierRow[] }
+      : await supabaseRest<SupplierRow[]>(
+          `quotation_suppliers?select=id,quotation_id,supplier_name,price,deadline,notes,is_winner&` +
+            `quotation_id=in.(${quotationIds.join(",")})`,
+        );
+  const purchasesResponse =
+    requisitionIds.length === 0
+      ? { data: [] as PurchaseRow[] }
+      : await supabaseRest<PurchaseRow[]>(
+          `purchases?select=id,requisition_id,requires_receipt&requisition_id=in.(${requisitionIds.join(",")})`,
+        );
 
   const requisitionById = new Map(requisitions.map((item) => [item.id, item]));
   const quotationByRequisition = new Map(
@@ -253,7 +258,13 @@ export const listPendingPurchases = createServerFn({ method: "GET" }).handler(as
     .map((approval) => {
       const requisition = requisitionById.get(approval.requisition_id);
       return requisition
-        ? mapPurchaseItem(requisition, approval, quotationByRequisition, suppliersByQuotation, purchaseByRequisition)
+        ? mapPurchaseItem(
+            requisition,
+            approval,
+            quotationByRequisition,
+            suppliersByQuotation,
+            purchaseByRequisition,
+          )
         : null;
     })
     .filter(Boolean) as PurchaseItem[];

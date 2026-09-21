@@ -1,5 +1,6 @@
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import type { ApprovalRequestItem, ApprovalTravelItem } from "@/features/approvals/api";
+import type { JsonValue } from "@/features/comando/types";
 
 type WinCriteria = "price" | "deadline" | "price_deadline";
 
@@ -150,6 +151,7 @@ export async function listPendingApprovalsClient() {
         requesterName: requisition.requester_name,
         requesterProfileId: requisition.requester_profile_id,
         requesterNotes: requisition.justification,
+        moduleData: (requisition.module_data as Record<string, JsonValue> | null) ?? {},
         totalValue: approval.total_value || 0,
         approvalLevel: approval.approval_level as 1 | 2 | 3,
         winCriteria: (quotation?.win_criteria as WinCriteria | null) || "price",

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseRest } from "@/lib/supabase-rest";
+import type { JsonValue } from "@/features/comando/types";
 
 type WinCriteria = "price" | "deadline" | "price_deadline";
 
@@ -23,6 +24,7 @@ interface RequisitionRow {
   requester_profile_id: string | null;
   status: string;
   created_at: string;
+  module_data: Record<string, JsonValue> | null;
 }
 
 interface QuotationRow {
@@ -73,6 +75,7 @@ export interface ApprovalRequestItem {
   requesterName: string;
   requesterProfileId: string | null;
   requesterNotes: string;
+  moduleData?: Record<string, JsonValue>;
   totalValue: number;
   approvalLevel: 1 | 2 | 3;
   winCriteria: WinCriteria;
@@ -121,6 +124,7 @@ function mapApprovalRequest(
     requesterName: requisition.requester_name,
     requesterProfileId: requisition.requester_profile_id,
     requesterNotes: requisition.justification,
+    moduleData: requisition.module_data ?? {},
     totalValue: approval.total_value || 0,
     approvalLevel: approval.approval_level,
     winCriteria: quotation?.win_criteria || "price",
@@ -173,7 +177,7 @@ export const listPendingApprovals = createServerFn({ method: "GET" }).handler(as
 
   const requisitionIds = approvals.map((item) => item.requisition_id);
   const requisitionsResponse = await supabaseRest<RequisitionRow[]>(
-    `requisitions?select=id,ticket_number,module,title,justification,requester_name,requester_profile_id,status,created_at&id=in.(${requisitionIds.join(",")})&status=eq.APROVAÇÃO`,
+    `requisitions?select=id,ticket_number,module,title,justification,requester_name,requester_profile_id,status,created_at,module_data&id=in.(${requisitionIds.join(",")})&status=eq.APROVAÇÃO`,
   );
   const requisitions = requisitionsResponse.data;
   const quotationIds = approvals.map((item) => item.quotation_id).filter(Boolean) as string[];
