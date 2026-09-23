@@ -999,6 +999,11 @@ function MovimentacoesPage() {
       ? filtered
       : auditEntries.filter((e) => e.ticket === exportTicketId);
 
+    // Código do produto é a chave que o ERP (Omie) usa — vai junto do ticket.
+    // Ticket com vários itens: códigos separados por vírgula na mesma célula.
+    const productCodesCell = (ticket: string) =>
+      ticketMeta[ticket]?.productCodes?.join(", ") || "—";
+
     const fmtPrice = (v: number | null) =>
       v != null ? `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—";
 
@@ -1014,6 +1019,7 @@ function MovimentacoesPage() {
           {
             exportado_em: now.toISOString(),
             ticket: richDetail.ticket_id,
+            codigos_produto: ticketMeta[richDetail.ticket_id]?.productCodes ?? [],
             modulo: richDetail.module,
             status: richDetail.status,
             titulo: richDetail.title,
@@ -1074,6 +1080,7 @@ function MovimentacoesPage() {
       } else {
         const rows = ticketEntries.map((e) => ({
           ticket: e.ticket,
+          codigos_produto: ticketMeta[e.ticket]?.productCodes ?? [],
           modulo: e.module,
           etapa: e.stage,
           acao: e.action,
@@ -1100,6 +1107,7 @@ function MovimentacoesPage() {
         const rows: string[] = [
           "Secao;Campo;Valor",
           `Requisicao;Ticket;${richDetail.ticket_id}`,
+          `Requisicao;Codigo Produto;${productCodesCell(richDetail.ticket_id)}`,
           `Requisicao;Titulo;${richDetail.title}`,
           `Requisicao;Requisitante;${richDetail.requester_name}`,
           `Requisicao;Departamento;${richDetail.requester_department ?? "—"}`,
@@ -1127,11 +1135,12 @@ function MovimentacoesPage() {
         ].filter(Boolean);
         content = rows.join("\n");
       } else {
-        const header = "Ticket;Modulo;Etapa;Acao;Descricao;Requisitante;Titulo;Responsavel;Data\n";
+        const header =
+          "Ticket;Codigo Produto;Modulo;Etapa;Acao;Descricao;Requisitante;Titulo;Responsavel;Data\n";
         const rows = ticketEntries
           .map(
             (e) =>
-              `${e.ticket};${e.module};${e.stage};${e.action};${e.description};${ticketMeta[e.ticket]?.requester ?? "—"};${ticketMeta[e.ticket]?.title ?? "—"};${e.actor};${new Date(e.createdAt).toLocaleString("pt-BR")}`,
+              `${e.ticket};${productCodesCell(e.ticket)};${e.module};${e.stage};${e.action};${e.description};${ticketMeta[e.ticket]?.requester ?? "—"};${ticketMeta[e.ticket]?.title ?? "—"};${e.actor};${new Date(e.createdAt).toLocaleString("pt-BR")}`,
           )
           .join("\n");
         content = header + rows;

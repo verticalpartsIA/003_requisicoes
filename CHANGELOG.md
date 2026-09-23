@@ -5,6 +5,10 @@ linha por entrega — para o contexto completo (logs, causa raiz, decisões),
 os fixes/features mais investigativos linkam para um relatório em
 `docs/reports/`.
 
+## 2026-09-23
+
+- feat(movimentacoes,logs): exportação de auditoria (CSV/JSON) passa a incluir o código do produto (chave do ERP/Omie) ao lado do ticket — coluna "Codigo Produto" no CSV da lista filtrada e no CSV por ticket, e campo `codigos_produto` (array) no JSON. Tickets M1 com vários itens trazem os códigos separados por vírgula; módulos sem produto (M2-M7) ficam com "—". Os códigos vêm de `module_data.items[].product_code` (e do `product_code` da raiz no formato antigo), buscados em `getLogsOverview` via caminho JSON do PostgREST para não trazer o `module_data` inteiro
+
 ## 2026-09-21
 
 - feat(freight,pdf): wizard M5 (Frete) reformulado com campos estruturados — Cliente/Projeto, Tipo de Carga (com lista de elevadores: modelo/capacidade/paradas/passageiros/caixas/peso/volume), Serviço de Transporte e Locação de Munck como toggles independentes (capacidade/comprimento do veículo, tonelagem/lança/tempo de uso do Munck) e checklist de Equipamento Adicional (paleteira, paleteira elétrica, cinta de elevação, ganchos, ajudante, outros) com quantidade/especificação — desenhado a partir do histórico de 8 tickets M5 reais e do procedimento oficial de cotação de transporte/Munck da área de Compras. De quebra, corrigido o bloco de PDF do M5 em `template.ts`, que só imprimia local de descarga e foto — origem, destino, veículo, cliente e nº do projeto nunca apareciam no documento gerado. Cotação fracionada por serviço (Transporte × Munck × Ajudantes com fornecedores diferentes e mínimo de 3 propostas por item) fica para uma próxima rodada — ver [relatório](docs/reports/2026-09-21-m5-frete-formulario-estruturado.md)

@@ -51,6 +51,15 @@ type Profile = {
   department: string | null;
 };
 type UserRole = { user_id: string; role: string };
+// Só os campos de module_data que carregam código de produto (M1): itens
+// multi-produto (`items[].product_code`) e o formato antigo de item único
+// (`product_code` na raiz). Buscado à parte pra não trazer o JSONB inteiro
+// de toda requisição de todos os módulos.
+type ProductCodesRow = {
+  ticket_number: string;
+  items: Array<{ product_code?: string | null }> | null;
+  legacy_code: string | null;
+};
 type Quotation = { requisition_id: string; buyer_id: string | null };
 
 export interface LogsEntry {
@@ -110,9 +119,19 @@ export interface LogsPayload {
     responsible: string;
   }[];
   entries: LogsEntry[];
-  ticketMeta: Record<string, { title: string; requester: string; status: string; module: string }>;
+  ticketMeta: Record<
+    string,
+    { title: string; requester: string; status: string; module: string; productCodes: string[] }
+  >;
   totalEntries: number;
   generatedAt: string;
+}
+
+/** Códigos de produto (ERP) de uma requisição M1, na ordem dos itens, sem vazios/duplicados. */
+export function extractProductCodes(row: Pick<ProductCodesRow, "items" | "legacy_code">): string[] {
+  const raw = Array.isArray(row.items) ? row.items.map((i) => i?.product_code) : [row.legacy_code];
+  const codes = raw.map((c) => (typeof c === "string" ? c.trim() : "")).filter((c) => c.length > 0);
+  return [...new Set(codes)];
 }
 
 const hoursBetween = (a: string, b: string) =>
@@ -145,7 +164,7 @@ export const getLogsOverview = createServerFn({ method: "POST" })
     await verifyAccessToken(data.accessToken);
     const now = new Date();
 
-    const [reqsResp, logsResp, profilesResp, rolesResp, quotsResp] = await Promise.all([
+    const [reqsResp, logsResp, profilesResp, rolesResp, quotsResp, codesResp] = await Promise.all([
       supabaseRest<Requisition[]>(
         `requisitions?select=id,ticket_number,module,status,title,requester_name,requester_department,approver_id,created_at&order=created_at.desc&limit=10000`,
       ),
@@ -155,6 +174,9 @@ export const getLogsOverview = createServerFn({ method: "POST" })
       supabaseRest<Profile[]>(`profiles?select=id,full_name,email,department&limit=1000`),
       supabaseRest<UserRole[]>(`user_roles?select=user_id,role&limit=5000`),
       supabaseRest<Quotation[]>(`quotations?select=requisition_id,buyer_id&limit=10000`),
+      supabaseRest<ProductCodesRow[]>(
+        `requisitions?select=ticket_number,items:module_data->items,legacy_code:module_data->>product_code&module=eq.M1&limit=10000`,
+      ),
     ]);
 
     const reqs = reqsResp.data ?? [];
@@ -381,6 +403,10 @@ export const getLogsOverview = createServerFn({ method: "POST" })
       };
     });
 
+    const codesByTicket = new Map(
+      (codesResp.data ?? []).map((r) => [r.ticket_number, extractProductCodes(r)]),
+    );
+
     const ticketMeta: LogsPayload["ticketMeta"] = {};
     for (const r of reqs) {
       ticketMeta[r.ticket_number] = {
@@ -388,6 +414,7 @@ export const getLogsOverview = createServerFn({ method: "POST" })
         requester: r.requester_name,
         status: r.status,
         module: r.module,
+        productCodes: codesByTicket.get(r.ticket_number) ?? [],
       };
     }
 
