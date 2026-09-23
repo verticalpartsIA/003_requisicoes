@@ -75,6 +75,7 @@ import { notifyVpClickClient } from "@/features/vpclick/client";
 import { approvalLevelLabels, DEFAULT_TIER_THRESHOLDS, type TierThresholds } from "@/lib/approval";
 import { getM5SummaryItems } from "@/lib/m5-freight-summary";
 import { notifyWhatsappClient } from "@/features/whatsapp/client";
+import { partialApprovalItemLabel } from "@/features/whatsapp/partial-approval";
 import { getOmieProductCostClient } from "@/features/omie/client";
 import { getTierThresholds } from "@/features/admin/api";
 import {
@@ -901,14 +902,38 @@ function ApprovalPage() {
           module: selected.module,
           requesterName: selected.requesterName,
         }).catch(console.warn);
+        // Reprovação parcial: o requisitante precisa saber quais itens
+        // ficaram de fora — antes recebia a mesma mensagem da aprovação total.
+        const rejectedItems =
+          rejectedCount > 0
+            ? selected.travelItems
+                .filter((ti) => m2Decisions[ti.approvalItemId] === "rejected")
+                .map((ti) =>
+                  partialApprovalItemLabel({
+                    productCode: ti.productCode,
+                    description: ti.description,
+                    quantity: ti.quantity,
+                    fallbackLabel: travelItemConfig[ti.itemType]?.label ?? ti.itemType,
+                    supplierName: ti.supplierName,
+                  }),
+                )
+            : [];
         void notifyWhatsappClient({
-          stage: "REQUISITANTE_APROVADO_FINANCEIRO",
+          stage:
+            rejectedCount > 0
+              ? "REQUISITANTE_APROVADO_PARCIAL"
+              : "REQUISITANTE_APROVADO_FINANCEIRO",
           requisitionId: selected.requisitionId,
           ticketNumber: selected.id,
           title: selected.title,
           module: selected.module,
           requesterName: selected.requesterName,
           requesterId: selected.requesterProfileId ?? undefined,
+          ...(rejectedCount > 0 && {
+            rejectedItems,
+            approvedCount,
+            rejectionReason: justification,
+          }),
         }).catch(console.warn);
       } else {
         void notifyWhatsappClient({
