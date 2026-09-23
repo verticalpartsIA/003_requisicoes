@@ -7,7 +7,8 @@ import { BUILD_TIME } from "@/lib/build-info.generated";
 // módulo verifica periodicamente `version.json` (gerado a cada build por
 // scripts/build.mjs) e avisa o usuário quando uma versão mais nova foi
 // publicada, sem forçar o reload (evita perder algo que a pessoa esteja
-// digitando).
+// digitando). O botão do aviso limpa o cache deste site antes de recarregar
+// (ver clearSiteCacheAndReload).
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
 const FIRST_CHECK_DELAY_MS = 15 * 1000; // dá um tempo antes da primeira checagem
 
@@ -60,6 +61,55 @@ export function formatBuildTimeShort(buildTime: string): string | null {
   return `${date} ${time}h`;
 }
 
+/**
+ * "Atualizar agora": limpa o cache DESTE site (vprequisicoes) e recarrega.
+ *
+ * Escopo de propósito restrito à origem atual — o login é SSO vindo do
+ * vpsistema.com, então NÃO mexe em cookies, localStorage nem sessionStorage
+ * (é lá que fica a sessão). Também não usa o header `Clear-Site-Data`: alguns
+ * navegadores aplicam a limpeza ao domínio registrável inteiro
+ * (*.vpsistema.com), e aqui só pode afetar este site.
+ *
+ * 1. Cache Storage da origem (caches.*) — sempre por origem.
+ * 2. Service workers da origem (hoje o site não registra nenhum; cobre o futuro).
+ * 3. Rebusca a página atual e "/" com `cache: "reload"`, que força a rede e
+ *    substitui a cópia guardada no cache HTTP do navegador — os scripts em
+ *    /assets/ têm nome com hash, então uma página nova já aponta pros novos.
+ * 4. Recarrega.
+ */
+export async function clearSiteCacheAndReload(
+  win: Window & typeof globalThis = window,
+): Promise<void> {
+  try {
+    if ("caches" in win) {
+      const keys = await win.caches.keys();
+      await Promise.all(keys.map((k) => win.caches.delete(k)));
+    }
+  } catch {
+    // Cache Storage indisponível (ex.: contexto não seguro) — segue.
+  }
+  try {
+    const regs = (await win.navigator.serviceWorker?.getRegistrations?.()) ?? [];
+    await Promise.all(regs.map((r) => r.unregister()));
+  } catch {
+    // Sem suporte a service worker — segue.
+  }
+  const here = win.location.pathname + win.location.search;
+  const urls = Array.from(new Set([here, "/"]));
+  // O fetch resolve quando chegam os cabeçalhos, não o corpo — é preciso ler
+  // a resposta até o fim, senão o reload() logo em seguida aborta o download
+  // e a navegação cai na cópia antiga do cache.
+  await Promise.all(
+    urls.map((u) =>
+      win
+        .fetch(u, { cache: "reload", credentials: "same-origin" })
+        .then((r) => (r.ok ? r.arrayBuffer() : undefined))
+        .catch(() => undefined),
+    ),
+  );
+  win.location.reload();
+}
+
 export function startVersionCheck(): () => void {
   let notified = false;
 
@@ -81,7 +131,16 @@ export function startVersionCheck(): () => void {
           duration: Infinity,
           action: {
             label: "Atualizar agora",
-            onClick: () => window.location.reload(),
+            onClick: () => {
+              toast.loading("Limpando o cache e carregando a nova versão…", {
+                description: "Seu login continua ativo.",
+                duration: Infinity,
+              });
+              // Rede lenta não pode deixar a pessoa presa no aviso: recarrega
+              // de qualquer jeito em até 8s.
+              const fallback = setTimeout(() => window.location.reload(), 8000);
+              void clearSiteCacheAndReload().finally(() => clearTimeout(fallback));
+            },
           },
         });
       }
