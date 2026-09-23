@@ -16,6 +16,7 @@ export type WhatsappStage =
   | "REQUISITANTE_REPROVADO_GESTOR"
   | "REQUISITANTE_APROVADO_FINANCEIRO"
   | "REQUISITANTE_REPROVADO_FINANCEIRO"
+  | "REQUISITANTE_APROVADO_PARCIAL"
   | "REQUISITANTE_COMPRADO";
 
 export interface WhatsappNotifyInput {
@@ -34,6 +35,9 @@ export interface WhatsappNotifyInput {
   totalValue?: number;
   /** REQUISITANTE_REPROVADO_*: motivo informado por quem reprovou. */
   rejectionReason?: string;
+  /** REQUISITANTE_APROVADO_PARCIAL: itens reprovados (rótulo pronto) e quantos seguiram. */
+  rejectedItems?: string[];
+  approvedCount?: number;
 }
 
 export async function notifyWhatsappClient(input: WhatsappNotifyInput): Promise<void> {

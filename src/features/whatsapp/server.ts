@@ -13,6 +13,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseRest } from "@/lib/supabase-rest";
 import { getApprovalLevelForValue, DEFAULT_TIER_THRESHOLDS } from "@/lib/approval";
+import { buildPartialApprovalMessage } from "@/features/whatsapp/partial-approval";
 
 function evolutionApiUrl() {
   return process.env.EVOLUTION_API_URL ?? "http://72.61.48.156:8080";
@@ -180,6 +181,7 @@ const notifySchema = z.object({
     "REQUISITANTE_REPROVADO_GESTOR",
     "REQUISITANTE_APROVADO_FINANCEIRO",
     "REQUISITANTE_REPROVADO_FINANCEIRO",
+    "REQUISITANTE_APROVADO_PARCIAL",
     "REQUISITANTE_COMPRADO",
   ]),
   requisitionId: z.string().uuid(),
@@ -191,6 +193,8 @@ const notifySchema = z.object({
   requesterDepartment: z.string().optional(),
   totalValue: z.number().optional(),
   rejectionReason: z.string().optional(),
+  rejectedItems: z.array(z.string().max(300)).max(500).optional(),
+  approvedCount: z.number().int().nonnegative().optional(),
 });
 
 export const notifyWhatsappStage = createServerFn({ method: "POST" })
@@ -206,6 +210,8 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
       requesterDepartment,
       totalValue,
       rejectionReason,
+      rejectedItems,
+      approvedCount,
     } = data;
     const base = vpreqBaseUrl();
     const ctx = { stage, requisitionId, ticketNumber };
@@ -243,8 +249,7 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
         await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
       } else if (stage === "REQUISITANTE_CIENCIA_OK") {
         const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
-        const text =
-          `Sua requisição *${ticketNumber}* foi aprovada pelo seu gestor e já está em cotação.\n\n${title}`;
+        const text = `Sua requisição *${ticketNumber}* foi aprovada pelo seu gestor e já está em cotação.\n\n${title}`;
         await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
       } else if (stage === "REQUISITANTE_REPROVADO_GESTOR") {
         const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
@@ -255,8 +260,7 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
         await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
       } else if (stage === "REQUISITANTE_APROVADO_FINANCEIRO") {
         const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
-        const text =
-          `Sua requisição *${ticketNumber}* foi aprovada pelo financeiro e aguarda compra.\n\n${title}`;
+        const text = `Sua requisição *${ticketNumber}* foi aprovada pelo financeiro e aguarda compra.\n\n${title}`;
         await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
       } else if (stage === "REQUISITANTE_REPROVADO_FINANCEIRO") {
         const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
@@ -264,6 +268,16 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
           `Sua requisição *${ticketNumber}* foi reprovada pelo financeiro.\n\n${title}\n\n` +
           `Motivo: ${rejectionReason || "não informado"}\n\n` +
           `Se for o caso de ajustar alguma pendência, você pode editar e reenviar.`;
+        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+      } else if (stage === "REQUISITANTE_APROVADO_PARCIAL") {
+        const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
+        const text = buildPartialApprovalMessage({
+          ticketNumber,
+          title,
+          approvedCount: approvedCount ?? 0,
+          rejectedItems: rejectedItems ?? [],
+          rejectionReason,
+        });
         await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
       } else if (stage === "REQUISITANTE_COMPRADO") {
         const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
