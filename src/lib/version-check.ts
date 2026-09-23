@@ -96,9 +96,15 @@ export async function clearSiteCacheAndReload(
   }
   const here = win.location.pathname + win.location.search;
   const urls = Array.from(new Set([here, "/"]));
+  // O fetch resolve quando chegam os cabeçalhos, não o corpo — é preciso ler
+  // a resposta até o fim, senão o reload() logo em seguida aborta o download
+  // e a navegação cai na cópia antiga do cache.
   await Promise.all(
     urls.map((u) =>
-      win.fetch(u, { cache: "reload", credentials: "same-origin" }).catch(() => undefined),
+      win
+        .fetch(u, { cache: "reload", credentials: "same-origin" })
+        .then((r) => (r.ok ? r.arrayBuffer() : undefined))
+        .catch(() => undefined),
     ),
   );
   win.location.reload();

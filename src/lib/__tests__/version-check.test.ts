@@ -4,6 +4,7 @@ import { clearSiteCacheAndReload } from "@/lib/version-check";
 function fakeWindow(opts: { cacheKeys?: string[]; withCaches?: boolean } = {}) {
   const deleted: string[] = [];
   const unregister = vi.fn().mockResolvedValue(true);
+  const bodyRead = vi.fn().mockResolvedValue(new ArrayBuffer(0));
   const localStorageSetItem = vi.fn();
   const localStorageClear = vi.fn();
   const sessionStorageClear = vi.fn();
@@ -22,20 +23,28 @@ function fakeWindow(opts: { cacheKeys?: string[]; withCaches?: boolean } = {}) {
       serviceWorker: { getRegistrations: vi.fn().mockResolvedValue([{ unregister }]) },
     },
     location: { pathname: "/approval", search: "?x=1", reload: vi.fn() },
-    fetch: vi.fn().mockResolvedValue({ ok: true }),
+    fetch: vi.fn().mockImplementation(async () => ({ ok: true, arrayBuffer: bodyRead })),
     localStorage: { clear: localStorageClear, setItem: localStorageSetItem, removeItem: vi.fn() },
     sessionStorage: { clear: sessionStorageClear },
     document: { cookie: "sb-session=abc" },
   };
   if (opts.withCaches === false) delete (win as { caches?: unknown }).caches;
-  return { win, deleted, unregister, localStorageClear, sessionStorageClear };
+  return { win, deleted, unregister, bodyRead, localStorageClear, sessionStorageClear };
 }
 
 describe("clearSiteCacheAndReload", () => {
   it("apaga o Cache Storage, remove service workers, rebusca a página e recarrega", async () => {
-    const { win, deleted, unregister } = fakeWindow();
+    const { win, deleted, unregister, bodyRead } = fakeWindow();
+    const order: string[] = [];
+    bodyRead.mockImplementation(async () => {
+      order.push("body");
+      return new ArrayBuffer(0);
+    });
+    win.location.reload.mockImplementation(() => order.push("reload"));
     await clearSiteCacheAndReload(win as unknown as Window & typeof globalThis);
 
+    // O corpo das respostas é lido até o fim ANTES do reload.
+    expect(order).toEqual(["body", "body", "reload"]);
     expect(deleted).toEqual(["v1", "v2"]);
     expect(unregister).toHaveBeenCalledTimes(1);
     expect(win.fetch).toHaveBeenCalledWith("/approval?x=1", {
