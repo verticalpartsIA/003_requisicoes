@@ -66,6 +66,7 @@ import { pendencyOf, PENDENCY_TONE_CLASS, MODULE_ROUTES, OPEN_STATUSES } from "@
 import { cn } from "@/lib/utils";
 import { excelTable } from "@/lib/excel-table";
 import { actionLabel } from "@/lib/audit-actions";
+import { csvRow } from "@/lib/csv";
 
 /* ── Export types ── */
 
@@ -1104,46 +1105,109 @@ function MovimentacoesPage() {
       ext = "csv";
       mimeType = "text/csv;charset=utf-8";
       if (richDetail) {
+        const d = richDetail;
         const rows: string[] = [
-          "Secao;Campo;Valor",
-          `Requisicao;Ticket;${richDetail.ticket_id}`,
-          `Requisicao;Codigo Produto;${productCodesCell(richDetail.ticket_id)}`,
-          `Requisicao;Titulo;${richDetail.title}`,
-          `Requisicao;Requisitante;${richDetail.requester_name}`,
-          `Requisicao;Departamento;${richDetail.requester_department ?? "—"}`,
-          `Requisicao;Status;${richDetail.status}`,
-          `Requisicao;Criado em;${richDetail.created_at}`,
-          `Requisicao;Concluido em;${richDetail.completed_at ?? "—"}`,
-          ...richDetail.suppliers.map(
-            (s) =>
-              `Cotacao;Fornecedor;${s.name};Preco;${s.price != null ? s.price.toFixed(2) : "—"};Vencedor;${s.is_winner ? "SIM" : "NAO"};Proposta;${s.proposal_received ? "Recebida" : "Pendente"}`,
+          csvRow(["Secao", "Campo", "Valor"]),
+          csvRow(["Requisicao", "Ticket", d.ticket_id]),
+          csvRow(["Requisicao", "Codigo Produto", productCodesCell(d.ticket_id)]),
+          csvRow(["Requisicao", "Titulo", d.title]),
+          csvRow(["Requisicao", "Requisitante", d.requester_name]),
+          csvRow(["Requisicao", "Departamento", d.requester_department ?? "—"]),
+          csvRow(["Requisicao", "Status", d.status]),
+          csvRow(["Requisicao", "Criado em", d.created_at]),
+          csvRow(["Requisicao", "Concluido em", d.completed_at ?? "—"]),
+          ...d.suppliers.map((s) =>
+            csvRow([
+              "Cotacao",
+              "Fornecedor",
+              s.name,
+              "Preco",
+              s.price != null ? s.price.toFixed(2) : "—",
+              "Vencedor",
+              s.is_winner ? "SIM" : "NAO",
+              "Proposta",
+              s.proposal_received ? "Recebida" : "Pendente",
+            ]),
           ),
-          richDetail.win_criteria ? `Cotacao;Criterio Vencedor;${richDetail.win_criteria}` : "",
-          richDetail.approval_decision
-            ? `Aprovacao;Decisao;${richDetail.approval_decision};Nivel;${richDetail.approval_level ?? "—"};Valor;${richDetail.approval_value?.toFixed(2) ?? "—"};Data;${richDetail.approval_decided_at ?? "—"}`
+          d.win_criteria ? csvRow(["Cotacao", "Criterio Vencedor", d.win_criteria]) : "",
+          d.approval_decision
+            ? csvRow([
+                "Aprovacao",
+                "Decisao",
+                d.approval_decision,
+                "Nivel",
+                d.approval_level ?? "—",
+                "Valor",
+                d.approval_value?.toFixed(2) ?? "—",
+                "Data",
+                d.approval_decided_at ?? "—",
+              ])
             : "",
-          richDetail.purchase_supplier
-            ? `Compra;Fornecedor;${richDetail.purchase_supplier};Valor;${richDetail.purchase_price?.toFixed(2) ?? "—"};Pedido;${richDetail.purchase_order_number ?? "—"};Data;${richDetail.purchased_at ?? "—"}`
+          d.purchase_supplier
+            ? csvRow([
+                "Compra",
+                "Fornecedor",
+                d.purchase_supplier,
+                "Valor",
+                d.purchase_price?.toFixed(2) ?? "—",
+                "Pedido",
+                d.purchase_order_number ?? "—",
+                "Data",
+                d.purchased_at ?? "—",
+              ])
             : "",
-          richDetail.receipt_condition
-            ? `Recebimento;Condicao;${richDetail.receipt_condition};Entregador;${richDetail.deliverer_name ?? "—"};Data;${richDetail.received_at ?? "—"}`
+          d.receipt_condition
+            ? csvRow([
+                "Recebimento",
+                "Condicao",
+                d.receipt_condition,
+                "Entregador",
+                d.deliverer_name ?? "—",
+                "Data",
+                d.received_at ?? "—",
+              ])
             : "",
-          ...richDetail.ticket_audit_logs.map(
-            (l) =>
-              `Historico;Acao;${l.action};Responsavel;${l.actor_name ?? "Sistema"};Data;${l.created_at}`,
+          ...d.ticket_audit_logs.map((l) =>
+            csvRow([
+              "Historico",
+              "Acao",
+              l.action,
+              "Responsavel",
+              l.actor_name ?? "Sistema",
+              "Data",
+              l.created_at,
+            ]),
           ),
         ].filter(Boolean);
         content = rows.join("\n");
       } else {
-        const header =
-          "Ticket;Codigo Produto;Modulo;Etapa;Acao;Descricao;Requisitante;Titulo;Responsavel;Data\n";
-        const rows = ticketEntries
-          .map(
-            (e) =>
-              `${e.ticket};${productCodesCell(e.ticket)};${e.module};${e.stage};${e.action};${e.description};${ticketMeta[e.ticket]?.requester ?? "—"};${ticketMeta[e.ticket]?.title ?? "—"};${e.actor};${new Date(e.createdAt).toLocaleString("pt-BR")}`,
-          )
-          .join("\n");
-        content = header + rows;
+        const header = csvRow([
+          "Ticket",
+          "Codigo Produto",
+          "Modulo",
+          "Etapa",
+          "Acao",
+          "Descricao",
+          "Requisitante",
+          "Titulo",
+          "Responsavel",
+          "Data",
+        ]);
+        const rows = ticketEntries.map((e) =>
+          csvRow([
+            e.ticket,
+            productCodesCell(e.ticket),
+            e.module,
+            e.stage,
+            e.action,
+            e.description,
+            ticketMeta[e.ticket]?.requester ?? "—",
+            ticketMeta[e.ticket]?.title ?? "—",
+            e.actor,
+            new Date(e.createdAt).toLocaleString("pt-BR"),
+          ]),
+        );
+        content = [header, ...rows].join("\n");
       }
     } else {
       // PDF gerado no navegador e salvo no Supabase Storage (apenas por ticket)
