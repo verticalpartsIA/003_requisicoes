@@ -18,6 +18,8 @@ import {
   Filter,
   ScrollText,
   ShieldAlert,
+  CheckCheck,
+  XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { excelTable } from "@/lib/excel-table";
@@ -42,6 +44,23 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  applyDecision,
+  distinctSuppliers,
+  summarizeDecisions,
+  type ItemDecision,
+} from "@/features/approvals/item-decisions";
 import { type ApprovalRequestItem, type ApprovalTravelItem } from "@/features/approvals/api";
 import { toast } from "sonner";
 import { AccessGuard } from "@/components/access-guard";
@@ -649,7 +668,11 @@ function ApprovalPage() {
   };
 
   // M2 per-item decisions: approvalItemId → 'approved' | 'rejected'
-  const [m2Decisions, setM2Decisions] = useState<Record<string, "approved" | "rejected">>({});
+  const [m2Decisions, setM2Decisions] = useState<Record<string, ItemDecision>>({});
+  // Aprovação em massa: itens marcados na caixinha + filtro por fornecedor.
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+  const [supplierFilter, setSupplierFilter] = useState("Todos");
+  const [confirmItemsOpen, setConfirmItemsOpen] = useState(false);
 
   // Custo Omie por código de produto (M1) — vivo, buscado só quando o
   // aprovador abre uma requisição M1, não em lote na listagem.
@@ -713,6 +736,9 @@ function ApprovalPage() {
   const openApproval = (request: ApprovalRequestItem) => {
     setSelected(request);
     setJustification("");
+    setSelectedItemIds(new Set());
+    setSupplierFilter("Todos");
+    setConfirmItemsOpen(false);
     if (request.travelItems && request.travelItems.length > 0) {
       const initial: Record<string, "approved" | "rejected"> = {};
       request.travelItems.forEach((ti) => {
@@ -822,6 +848,13 @@ function ApprovalPage() {
       toast.error("Decida Aprovar ou Reprovar cada item antes de confirmar.");
       return;
     }
+    const hasRejected = selected.travelItems.some(
+      (ti) => m2Decisions[ti.approvalItemId] === "rejected",
+    );
+    if (hasRejected && !justification.trim()) {
+      toast.error("Informe o motivo da reprovação — ele é enviado ao requisitante.");
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -829,10 +862,14 @@ function ApprovalPage() {
         approvalItemId: ti.approvalItemId,
         itemId: ti.itemId,
         decision: m2Decisions[ti.approvalItemId]!,
-        notes: justification,
       }));
 
-      await decideItemsClient(selected.approvalId, selected.requisitionId, decisions);
+      await decideItemsClient(
+        selected.approvalId,
+        selected.requisitionId,
+        decisions,
+        justification,
+      );
 
       const approvedCount = decisions.filter((d) => d.decision === "approved").length;
       const rejectedCount = decisions.filter((d) => d.decision === "rejected").length;
@@ -886,6 +923,7 @@ function ApprovalPage() {
         }).catch(console.warn);
       }
 
+      setConfirmItemsOpen(false);
       setSelected(null);
       setJustification("");
       setM2Decisions({});
@@ -900,10 +938,53 @@ function ApprovalPage() {
     }
   };
 
-  const hasItemDecisions = (selected?.travelItems || []).length > 0;
-  const m2AllDecided =
-    hasItemDecisions &&
-    (selected?.travelItems || []).every((ti) => m2Decisions[ti.approvalItemId] !== undefined);
+  const decisionItems = selected?.travelItems || [];
+  const hasItemDecisions = decisionItems.length > 0;
+  const itemSummary = summarizeDecisions(decisionItems, m2Decisions);
+  const m2AllDecided = hasItemDecisions && itemSummary.allDecided;
+  const itemSuppliers = distinctSuppliers(decisionItems);
+  const visibleItems =
+    supplierFilter === "Todos"
+      ? decisionItems
+      : decisionItems.filter((ti) => ti.supplierName === supplierFilter);
+  const visibleSelectedCount = visibleItems.filter((ti) =>
+    selectedItemIds.has(ti.approvalItemId),
+  ).length;
+  const allVisibleSelected =
+    visibleItems.length > 0 && visibleSelectedCount === visibleItems.length;
+  const rejectionReasonMissing = itemSummary.rejected > 0 && !justification.trim();
+  const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  // Decide em lote: os itens marcados; sem marcação, todos os visíveis (filtro).
+  const decideInBulk = (decision: ItemDecision, scope: "visible" | "selected") => {
+    const ids =
+      scope === "selected"
+        ? visibleItems.filter((ti) => selectedItemIds.has(ti.approvalItemId))
+        : visibleItems;
+    setM2Decisions((prev) =>
+      applyDecision(
+        prev,
+        ids.map((ti) => ti.approvalItemId),
+        decision,
+      ),
+    );
+    setSelectedItemIds(new Set());
+  };
+  const toggleItemSelected = (id: string, checked: boolean) =>
+    setSelectedItemIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  const toggleAllVisible = (checked: boolean) =>
+    setSelectedItemIds((prev) => {
+      const next = new Set(prev);
+      visibleItems.forEach((ti) =>
+        checked ? next.add(ti.approvalItemId) : next.delete(ti.approvalItemId),
+      );
+      return next;
+    });
 
   if (!deptsLoaded) {
     return (
@@ -1228,12 +1309,95 @@ function ApprovalPage() {
                   {/* Aprovação por item — M2 (viagem) e M1 multi-itens (produtos) */}
                   {hasItemDecisions ? (
                     <div className="space-y-3">
-                      <p className="text-sm font-semibold text-foreground">
-                        {selected.moduleCode === "M1"
-                          ? "Itens do Pedido — decida cada item individualmente"
-                          : "Itens de Viagem — decida cada item individualmente"}
-                      </p>
-                      {(selected.travelItems || []).map((ti: ApprovalTravelItem) => {
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-foreground">
+                          {selected.moduleCode === "M1" ? "Itens do Pedido" : "Itens de Viagem"} (
+                          {decisionItems.length})
+                        </p>
+                        {/* Aprovação em massa — age sobre os itens visíveis (respeita o filtro) */}
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 text-xs border-green-500 text-green-700 hover:bg-green-50"
+                            onClick={() => decideInBulk("approved", "visible")}
+                          >
+                            <CheckCheck className="h-3.5 w-3.5" />
+                            {supplierFilter === "Todos"
+                              ? "Aprovar todos"
+                              : "Aprovar todos do filtro"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 text-xs border-red-300 text-red-700 hover:bg-red-50"
+                            onClick={() => decideInBulk("rejected", "visible")}
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                            {supplierFilter === "Todos"
+                              ? "Reprovar todos"
+                              : "Reprovar todos do filtro"}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2">
+                        <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                          <Checkbox
+                            checked={allVisibleSelected}
+                            onCheckedChange={(v) => toggleAllVisible(v === true)}
+                            aria-label="Selecionar todos os itens visíveis"
+                          />
+                          Selecionar todos
+                        </label>
+                        <span className="text-xs text-muted-foreground">
+                          Com a seleção ({visibleSelectedCount}):
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 text-xs"
+                          disabled={visibleSelectedCount === 0}
+                          onClick={() => decideInBulk("approved", "selected")}
+                        >
+                          <ThumbsUp className="h-3 w-3" /> Aprovar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 text-xs"
+                          disabled={visibleSelectedCount === 0}
+                          onClick={() => decideInBulk("rejected", "selected")}
+                        >
+                          <ThumbsDown className="h-3 w-3" /> Reprovar
+                        </Button>
+                        {itemSuppliers.length > 1 && (
+                          <div className="ml-auto flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">Fornecedor:</span>
+                            <Select
+                              value={supplierFilter}
+                              onValueChange={(v) => {
+                                setSupplierFilter(v);
+                                setSelectedItemIds(new Set());
+                              }}
+                            >
+                              <SelectTrigger className="h-7 w-[180px] text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Todos">Todos</SelectItem>
+                                {itemSuppliers.map((sup) => (
+                                  <SelectItem key={sup} value={sup}>
+                                    {sup}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
+
+                      {visibleItems.map((ti: ApprovalTravelItem) => {
                         const cfg = travelItemConfig[ti.itemType] ?? {
                           label: ti.itemType,
                           icon: null,
@@ -1255,6 +1419,13 @@ function ApprovalPage() {
                             <CardContent className="p-4">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
+                                  <Checkbox
+                                    checked={selectedItemIds.has(ti.approvalItemId)}
+                                    onCheckedChange={(v) =>
+                                      toggleItemSelected(ti.approvalItemId, v === true)
+                                    }
+                                    aria-label={`Selecionar ${label}`}
+                                  />
                                   {cfg.icon}
                                   <span className="text-sm font-semibold text-foreground">
                                     {label}
@@ -1310,29 +1481,49 @@ function ApprovalPage() {
                         );
                       })}
 
-                      <div className="rounded-lg bg-accent/50 p-3 text-xs text-muted-foreground">
-                        Total aprovado:{" "}
-                        <strong className="text-foreground">
-                          R${" "}
-                          {(selected.travelItems || [])
-                            .filter(
-                              (ti: ApprovalTravelItem) =>
-                                m2Decisions[ti.approvalItemId] === "approved",
-                            )
-                            .reduce((sum: number, ti: ApprovalTravelItem) => sum + ti.price, 0)
-                            .toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                        </strong>{" "}
-                        / Total geral: R${" "}
-                        {selected.totalValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      <div className="rounded-lg bg-accent/50 p-3 text-xs text-muted-foreground space-y-1">
+                        <div>
+                          <span className="text-green-700 font-semibold">
+                            {itemSummary.approved} aprovado(s)
+                          </span>{" "}
+                          ·{" "}
+                          <span className="text-red-700 font-semibold">
+                            {itemSummary.rejected} reprovado(s)
+                          </span>{" "}
+                          ·{" "}
+                          <span
+                            className={
+                              itemSummary.pending > 0 ? "font-semibold text-amber-700" : undefined
+                            }
+                          >
+                            {itemSummary.pending} pendente(s)
+                          </span>
+                        </div>
+                        <div>
+                          Total aprovado:{" "}
+                          <strong className="text-foreground">
+                            {brl(itemSummary.approvedValue)}
+                          </strong>{" "}
+                          / Total geral: {brl(selected.totalValue)}
+                        </div>
                       </div>
 
                       <div className="space-y-2">
-                        <Label className="text-sm">Observações (opcional)</Label>
+                        <Label className="text-sm">
+                          {itemSummary.rejected > 0
+                            ? "Motivo da reprovação (obrigatório — enviado ao requisitante)"
+                            : "Observações (opcional)"}
+                        </Label>
                         <Textarea
-                          placeholder="Comentário sobre a decisão..."
+                          placeholder={
+                            itemSummary.rejected > 0
+                              ? "Explique por que os itens foram reprovados..."
+                              : "Comentário sobre a decisão..."
+                          }
                           value={justification}
                           onChange={(e) => setJustification(e.target.value)}
                           rows={2}
+                          className={rejectionReasonMissing ? "border-red-400" : undefined}
                         />
                       </div>
 
@@ -1342,13 +1533,54 @@ function ApprovalPage() {
                         </Button>
                         <Button
                           variant="vp"
-                          onClick={handleM2Decide}
-                          disabled={!m2AllDecided || isSaving}
+                          onClick={() => setConfirmItemsOpen(true)}
+                          disabled={!m2AllDecided || rejectionReasonMissing || isSaving}
                           className="gap-1"
                         >
                           <CheckCircle2 className="h-4 w-4" /> Confirmar Decisões
                         </Button>
                       </DialogFooter>
+
+                      <AlertDialog open={confirmItemsOpen} onOpenChange={setConfirmItemsOpen}>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Confirmar decisões — {selected.id}</AlertDialogTitle>
+                            <AlertDialogDescription asChild>
+                              <div className="space-y-1 text-sm">
+                                <p>
+                                  <strong className="text-green-700">
+                                    {itemSummary.approved} item(s) aprovado(s)
+                                  </strong>{" "}
+                                  — {brl(itemSummary.approvedValue)}
+                                </p>
+                                <p>
+                                  <strong className="text-red-700">
+                                    {itemSummary.rejected} item(s) reprovado(s)
+                                  </strong>{" "}
+                                  — {brl(itemSummary.rejectedValue)}
+                                </p>
+                                <p className="pt-2">
+                                  {itemSummary.approved > 0
+                                    ? "A requisição segue para Compra com os itens aprovados."
+                                    : "Todos os itens reprovados — a requisição será encerrada."}
+                                </p>
+                              </div>
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isSaving}>Voltar</AlertDialogCancel>
+                            <AlertDialogAction
+                              disabled={isSaving}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                void handleM2Decide();
+                              }}
+                            >
+                              {isSaving ? "Gravando..." : "Confirmar"}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   ) : (
                     /* Padrão (não-M2) */
