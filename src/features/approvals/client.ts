@@ -267,77 +267,31 @@ export async function rejectRequisitionClient(
   if (logError) console.warn("[audit_logs] failed:", logError.message);
 }
 
+/**
+ * Grava a decisão de todos os itens (M1 multi-itens / M2) numa única
+ * transação no banco — função `decide_approval_items`
+ * (database/031_decide_approval_items_atomic.sql). Antes eram até ~30
+ * chamadas HTTP separadas; uma queda no meio deixava o ticket com parte dos
+ * itens decididos e a aprovação ainda pendente.
+ */
 export async function decideItemsClient(
   approvalId: string,
-  requisitionId: string,
+  _requisitionId: string,
   decisions: {
     approvalItemId: string;
     itemId: string;
     decision: "approved" | "rejected";
-    notes: string;
   }[],
+  notes: string,
 ) {
-  const { data: requisition, error: requisitionError } = await supabaseBrowser
-    .from("requisitions")
-    .select("ticket_number,status")
-    .eq("id", requisitionId)
-    .single();
-  if (requisitionError) throw requisitionError;
-
-  const decidedAt = new Date().toISOString();
-
-  for (const d of decisions) {
-    const { error } = await supabaseBrowser
-      .from("approval_items")
-      .update({ decision: d.decision, notes: d.notes || null, decided_at: decidedAt })
-      .eq("id", d.approvalItemId);
-    if (error) throw error;
-  }
-
-  const approvedIds = decisions.filter((d) => d.decision === "approved").map((d) => d.itemId);
-  const rejectedIds = decisions.filter((d) => d.decision === "rejected").map((d) => d.itemId);
-
-  if (approvedIds.length > 0) {
-    await supabaseBrowser
-      .from("requisition_items")
-      .update({ status: "approved" })
-      .in("id", approvedIds);
-  }
-  if (rejectedIds.length > 0) {
-    await supabaseBrowser
-      .from("requisition_items")
-      .update({ status: "rejected" })
-      .in("id", rejectedIds);
-  }
-
-  const allRejected = decisions.every((d) => d.decision === "rejected");
-  const overallDecision = allRejected ? "rejected" : "approved";
-  const nextStatus = allRejected ? "REJEITADO" : "COMPRA";
-  const approverId = (await supabaseBrowser.auth.getUser()).data.user?.id ?? null;
-
-  const { error: approvalError } = await supabaseBrowser
-    .from("approvals")
-    .update({ decision: overallDecision, decided_at: decidedAt, approver_id: approverId })
-    .eq("id", approvalId);
-  if (approvalError) throw approvalError;
-
-  const { error: requisitionUpdateError } = await supabaseBrowser
-    .from("requisitions")
-    .update({ status: nextStatus })
-    .eq("id", requisitionId);
-  if (requisitionUpdateError) throw requisitionUpdateError;
-
-  const { error: logError } = await supabaseBrowser.from("audit_logs").insert({
-    requisition_id: requisitionId,
-    ticket_number: requisition.ticket_number,
-    action: allRejected ? "APPROVAL_REJECTED" : "APPROVAL_GRANTED",
-    old_status: requisition.status,
-    new_status: nextStatus,
-    details: {
-      decisions: decisions.map((d) => ({ item_id: d.itemId, decision: d.decision })),
-      approved_count: approvedIds.length,
-      rejected_count: rejectedIds.length,
-    },
+  const { data, error } = await supabaseBrowser.rpc("decide_approval_items", {
+    p_approval_id: approvalId,
+    p_decisions: decisions.map((d) => ({
+      approval_item_id: d.approvalItemId,
+      decision: d.decision,
+    })),
+    p_notes: notes.trim() || null,
   });
-  if (logError) console.warn("[audit_logs] decideItemsClient failed:", logError.message);
+  if (error) throw new Error(error.message);
+  return data as { approved_count: number; rejected_count: number; new_status: string };
 }
