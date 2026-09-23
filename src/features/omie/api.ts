@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseRest } from "@/lib/supabase-rest";
+import { decodeHtmlEntitiesDeep } from "@/lib/html-entities";
 
 function omieKey() {
   return process.env.OMIE_APP_KEY ?? "8463170967";
@@ -36,7 +37,9 @@ async function omiePost<T>(
     }
     throw new Error(`Omie: ${data.faultstring}`);
   }
-  return data as T;
+  // Omie devolve textos com entidades HTML (`1/4&quot;`) — decodifica aqui,
+  // na única porta de entrada, pra nunca gravar/exibir o texto cru.
+  return decodeHtmlEntitiesDeep(data) as T;
 }
 
 export const validateOmieOrder = createServerFn({ method: "POST" })

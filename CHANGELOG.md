@@ -5,6 +5,12 @@ linha por entrega — para o contexto completo (logs, causa raiz, decisões),
 os fixes/features mais investigativos linkam para um relatório em
 `docs/reports/`.
 
+## 2026-09-23
+
+- fix(omie,M1): descrições de produto vindas da Omie chegam com entidades HTML (`1/4"` → `1/4&quot;`) e eram gravadas cruas em `title`/`description`/`module_data` — apareciam como `&quot;` na tela, no PDF e na exportação. `omiePost` agora decodifica toda resposta da Omie (`src/lib/html-entities.ts`); registros já gravados (5 tickets M1) são limpos pela migração `database/030_decode_omie_html_entities.sql`, que precisa ser aplicada
+- fix(movimentacoes): exportação CSV da auditoria não escapava campos — um título/descrição com `;`, aspas ou quebra de linha deslocava as colunas no Excel. Todas as linhas passam por `csvRow()` (`src/lib/csv.ts`), que envolve o campo em aspas e dobra aspas internas
+- feat(movimentacoes,logs): exportação de auditoria (CSV/JSON) passa a incluir o código do produto (chave do ERP/Omie) ao lado do ticket — coluna "Codigo Produto" no CSV da lista filtrada e no CSV por ticket, e campo `codigos_produto` (array) no JSON. Tickets M1 com vários itens trazem os códigos separados por vírgula; módulos sem produto (M2-M7) ficam com "—". Os códigos vêm de `module_data.items[].product_code` (e do `product_code` da raiz no formato antigo), buscados em `getLogsOverview` via caminho JSON do PostgREST para não trazer o `module_data` inteiro
+
 ## 2026-09-21
 
 - feat(freight,pdf): wizard M5 (Frete) reformulado com campos estruturados — Cliente/Projeto, Tipo de Carga (com lista de elevadores: modelo/capacidade/paradas/passageiros/caixas/peso/volume), Serviço de Transporte e Locação de Munck como toggles independentes (capacidade/comprimento do veículo, tonelagem/lança/tempo de uso do Munck) e checklist de Equipamento Adicional (paleteira, paleteira elétrica, cinta de elevação, ganchos, ajudante, outros) com quantidade/especificação — desenhado a partir do histórico de 8 tickets M5 reais e do procedimento oficial de cotação de transporte/Munck da área de Compras. De quebra, corrigido o bloco de PDF do M5 em `template.ts`, que só imprimia local de descarga e foto — origem, destino, veículo, cliente e nº do projeto nunca apareciam no documento gerado. Cotação fracionada por serviço (Transporte × Munck × Ajudantes com fornecedores diferentes e mínimo de 3 propostas por item) fica para uma próxima rodada — ver [relatório](docs/reports/2026-09-21-m5-frete-formulario-estruturado.md)
