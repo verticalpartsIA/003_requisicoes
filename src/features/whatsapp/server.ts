@@ -7,6 +7,10 @@
  * gestor" já usada em features/gestor/api.ts.
  *
  * NUNCA lança exceções para o chamador — qualquer erro é apenas logado.
+ *
+ * O aviso de requisição vencida (SLA) NÃO passa por aqui: é disparado
+ * direto do Postgres via pg_cron/pg_net a cada 4h, sem depender do app
+ * estar de pé. Ver database/035_sla_breach_notifications.sql.
  */
 
 import { createServerFn } from "@tanstack/react-start";
