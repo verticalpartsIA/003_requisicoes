@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CheckCircle2,
   Trophy,
@@ -89,6 +89,12 @@ import {
 } from "@/features/gestor/client";
 
 export const Route = createFileRoute("/approval")({
+  // Deep-link de WhatsApp: ?req=<requisitionId> abre direto o modal de
+  // decisão do item (ciência ou aprovação por alçada), sem precisar achar
+  // na lista — ver GestorSection/ApprovalPage abaixo.
+  validateSearch: (search: Record<string, unknown>) => ({
+    req: typeof search.req === "string" ? search.req : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "V3 Aprovação — VPRequisições" },
@@ -125,7 +131,15 @@ const travelItemConfig: Record<string, { label: string; icon: React.ReactNode }>
 
 // ─── Seção Gestor ──────────────────────────────────────────────────────────────
 
-function GestorSection({ gestorName }: { gestorName: string }) {
+function GestorSection({
+  gestorName,
+  deepLinkReq,
+  onDeepLinkChecked,
+}: {
+  gestorName: string;
+  deepLinkReq?: string;
+  onDeepLinkChecked?: (found: boolean) => void;
+}) {
   const [gestorQueue, setGestorQueue] = useState<GestorQueueItem[]>([]);
   const [selected, setSelected] = useState<GestorQueueItem | null>(null);
   const [notes, setNotes] = useState("");
@@ -141,6 +155,20 @@ function GestorSection({ gestorName }: { gestorName: string }) {
       setLoaded(true);
     });
   }, [user]);
+
+  // Deep-link de WhatsApp (?req=...): abre o modal de ciência direto, sem
+  // o gestor precisar procurar o item na lista.
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (!loaded || !deepLinkReq || deepLinkHandled.current) return;
+    deepLinkHandled.current = true;
+    const match = gestorQueue.find((item) => item.requisitionId === deepLinkReq);
+    if (match) {
+      setSelected(match);
+      setNotes("");
+    }
+    onDeepLinkChecked?.(!!match);
+  }, [loaded, deepLinkReq, gestorQueue, onDeepLinkChecked]);
 
   const reload = async () => {
     if (!user) return;
@@ -641,7 +669,9 @@ function AguardandoGestorSection({ gestorName }: { gestorName: string }) {
 function ApprovalPage() {
   const { session, profile, hasRole } = useAuth();
   const router = useRouter();
+  const { req: deepLinkReq } = Route.useSearch();
   const [approvals, setApprovals] = useState<ApprovalRequestItem[]>([]);
+  const [approvalsLoaded, setApprovalsLoaded] = useState(false);
   const [search, setSearch] = useState("");
   const [moduleFilter, setModuleFilter] = useState("Todos");
   const [levelFilter, setLevelFilter] = useState<"Todos" | 1 | 2 | 3>("Todos");
@@ -651,6 +681,12 @@ function ApprovalPage() {
   const [isGestor, setIsGestor] = useState(false);
   const [deptsLoaded, setDeptsLoaded] = useState(false);
   const [thresholds, setThresholds] = useState<TierThresholds>(DEFAULT_TIER_THRESHOLDS);
+  // Deep-link de WhatsApp (?req=...): cada fila (alçada/gestor) reporta se
+  // achou o item; null = ainda não checou. Só avisa "não encontrado" depois
+  // que as duas já tiverem respondido (ou a de gestor nem existir).
+  const [tierDeepLinkFound, setTierDeepLinkFound] = useState<boolean | null>(null);
+  const [gestorDeepLinkFound, setGestorDeepLinkFound] = useState<boolean | null>(null);
+  const deepLinkTierHandled = useRef(false);
 
   const { user } = useAuth();
 
@@ -720,7 +756,10 @@ function ApprovalPage() {
 
   useEffect(() => {
     if (!session) return;
-    void listPendingApprovalsClient().then(setApprovals);
+    void listPendingApprovalsClient().then((data) => {
+      setApprovals(data);
+      setApprovalsLoaded(true);
+    });
   }, [session]);
 
   useEffect(() => {
@@ -752,6 +791,30 @@ function ApprovalPage() {
       setM2Decisions({});
     }
   };
+
+  // Deep-link de WhatsApp (?req=...) na fila de aprovação por alçada — abre
+  // o modal de decisão direto, valendo pros 3 níveis (o nível já vem do
+  // próprio item, não muda a rota).
+  useEffect(() => {
+    if (!approvalsLoaded || !deepLinkReq || deepLinkTierHandled.current) return;
+    deepLinkTierHandled.current = true;
+    const match = approvals.find((a) => a.requisitionId === deepLinkReq);
+    if (match) openApproval(match);
+    setTierDeepLinkFound(!!match);
+  }, [approvalsLoaded, deepLinkReq, approvals]);
+
+  // Só um dos dois lugares (ciência ou alçada) vai ter o item — avisa que
+  // sumiu (provavelmente já foi decidido por outra pessoa) só depois que
+  // ambos já responderam.
+  useEffect(() => {
+    if (!deepLinkReq) return;
+    if (tierDeepLinkFound === null) return;
+    if (isGestor && gestorDeepLinkFound === null) return;
+    const foundAnywhere = tierDeepLinkFound || (isGestor && gestorDeepLinkFound);
+    if (!foundAnywhere) {
+      toast.info("Esse item não está mais disponível — provavelmente já foi decidido.");
+    }
+  }, [deepLinkReq, tierDeepLinkFound, gestorDeepLinkFound, isGestor]);
 
   const handleApprove = async () => {
     if (!selected) return;
@@ -1053,7 +1116,13 @@ function ApprovalPage() {
       )}
 
       {/* Seção Gestor (aparece apenas para usuários com departamentos gerenciados) */}
-      {isGestor && <GestorSection gestorName={gestorName} />}
+      {isGestor && (
+        <GestorSection
+          gestorName={gestorName}
+          deepLinkReq={deepLinkReq}
+          onDeepLinkChecked={setGestorDeepLinkFound}
+        />
+      )}
 
       {/* Separador entre seções quando gestor também é aprovador */}
       {isGestor && (hasRole("admin") || hasRole("aprovador")) && (

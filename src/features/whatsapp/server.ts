@@ -229,7 +229,7 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
         const numbers = await getWhatsappNumbers(userIds);
         const text =
           `Você tem um pedido *${ticketNumber}* feito por *${requesterName}* aguardando sua ciência.\n\n` +
-          `${title}\n\n🔗 Dar ciência: ${base}/approval`;
+          `${title}\n\n🔗 Dar ciência: ${base}/approval?req=${requisitionId}`;
         await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
       } else if (stage === "COMPRADOR_COTAR") {
         const userIds = await getUserIdsByRole("cotador");
@@ -245,7 +245,7 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
         const numbers = await getWhatsappNumbers(userIds);
         const text =
           `Aprovação pendente: ticket *${ticketNumber}* (Nível ${tier})\n\n` +
-          `${title} — solicitante: ${requesterName}\n\n🔗 Aprovar: ${base}/approval`;
+          `${title} — solicitante: ${requesterName}\n\n🔗 Aprovar: ${base}/approval?req=${requisitionId}`;
         await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
       } else if (stage === "COMPRA_APROVADA") {
         const userIds = await getUserIdsByRole("comprador");
