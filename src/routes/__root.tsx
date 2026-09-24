@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { Outlet, Link, Navigate, createRootRoute, HeadContent, Scripts, useRouterState } from "@tanstack/react-router";
+import {
+  Outlet,
+  Link,
+  Navigate,
+  createRootRoute,
+  HeadContent,
+  Scripts,
+  useRouterState,
+} from "@tanstack/react-router";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Toaster } from "@/components/ui/sonner";
@@ -37,10 +45,16 @@ export const Route = createRootRoute({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "VPRequisições — VerticalParts" },
-      { name: "description", content: "Sistema de gestão de compras e requisições da VerticalParts" },
+      {
+        name: "description",
+        content: "Sistema de gestão de compras e requisições da VerticalParts",
+      },
       { name: "author", content: "VerticalParts" },
       { property: "og:title", content: "VPRequisições — VerticalParts" },
-      { property: "og:description", content: "Sistema de gestão de compras e requisições da VerticalParts" },
+      {
+        property: "og:description",
+        content: "Sistema de gestão de compras e requisições da VerticalParts",
+      },
       { property: "og:type", content: "website" },
     ],
     links: [
@@ -84,6 +98,12 @@ function ProtectedApp() {
   const { isLoading, session, profile } = useAuth();
   const currentPath = useRouterState({
     select: (state) => state.location.pathname,
+  });
+  // pathname + querystring (ex.: "/approval?req=..."), pra deep-links de
+  // WhatsApp sobreviverem ao redirect de login sem sessão — só pathname
+  // perderia o "?req=..." e mandaria o usuário pra lista genérica.
+  const currentHref = useRouterState({
+    select: (state) => state.location.href,
   });
 
   const [bootVideoEnded, setBootVideoEnded] = useState(false);
@@ -141,7 +161,7 @@ function ProtectedApp() {
     currentPath.startsWith("/pedido-comando/");
 
   if (!session && !isPublicRoute) {
-    return <Navigate to="/login" search={{ redirect: currentPath }} />;
+    return <Navigate to="/login" search={{ redirect: currentHref }} />;
   }
 
   if (session && currentPath === "/login") {

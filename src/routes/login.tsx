@@ -5,7 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/features/auth/auth-context";
 import { friendlySupabaseError } from "@/lib/supabase-error";
 import { toast } from "sonner";
@@ -30,7 +36,7 @@ function LoginPage() {
 
   useEffect(() => {
     if (session) {
-      void navigate({ to: redirect || "/" });
+      void navigate({ href: redirect || "/" });
     }
   }, [navigate, redirect, session]);
 
@@ -47,7 +53,7 @@ function LoginPage() {
     try {
       await signInWithPassword(email.trim(), password);
       toast.success("Acesso liberado com sucesso.");
-      void navigate({ to: redirect || "/" });
+      void navigate({ href: redirect || "/" });
     } catch (error) {
       toast.error(friendlySupabaseError(error));
     } finally {
@@ -122,7 +128,12 @@ function LoginPage() {
                 disabled={isLoading || isSubmitting}
               />
             </div>
-            <Button type="submit" variant="vp" className="w-full" disabled={isLoading || isSubmitting}>
+            <Button
+              type="submit"
+              variant="vp"
+              className="w-full"
+              disabled={isLoading || isSubmitting}
+            >
               <LogIn className="h-4 w-4 mr-2" />
               Entrar
             </Button>
