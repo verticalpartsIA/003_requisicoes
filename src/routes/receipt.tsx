@@ -1,6 +1,19 @@
 import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { PackageCheck, Truck, User, Building2, ClipboardCheck, AlertTriangle, CheckCircle2, Eye, Search, Filter, ScrollText, Package } from "lucide-react";
+import {
+  PackageCheck,
+  Truck,
+  User,
+  Building2,
+  ClipboardCheck,
+  AlertTriangle,
+  CheckCircle2,
+  Eye,
+  Search,
+  Filter,
+  ScrollText,
+  Package,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,21 +26,36 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { type PendingReceiptItem, type ReceiptLineItem } from "@/features/receipts/api";
 import { toast } from "sonner";
 import { AccessGuard } from "@/components/access-guard";
-import { listPendingReceiptsClient, registerReceiptClient, markReceiptItemClient } from "@/features/receipts/client";
+import {
+  listPendingReceiptsClient,
+  registerReceiptClient,
+  markReceiptItemClient,
+} from "@/features/receipts/client";
 import { excelTable } from "@/lib/excel-table";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/features/auth/auth-context";
 import { notifyVpClickClient } from "@/features/vpclick/client";
+import { notifyWhatsappClient } from "@/features/whatsapp/client";
 
 export const Route = createFileRoute("/receipt")({
   head: () => ({
     meta: [
       { title: "V5 Recebimento — VPRequisições" },
-      { name: "description", content: "Registro de recebimento e conferência de materiais e serviços" },
+      {
+        name: "description",
+        content: "Registro de recebimento e conferência de materiais e serviços",
+      },
     ],
   }),
   component: ReceiptPage,
@@ -83,7 +111,11 @@ function ReceiptPage() {
     setTogglingItemId(item.id);
     // Otimista: atualiza a UI antes da resposta do servidor.
     setDialogItems((prev) =>
-      prev.map((it) => (it.id === item.id ? { ...it, receivedAt: willReceive ? new Date().toISOString() : null } : it)),
+      prev.map((it) =>
+        it.id === item.id
+          ? { ...it, receivedAt: willReceive ? new Date().toISOString() : null }
+          : it,
+      ),
     );
     try {
       await markReceiptItemClient(item.id, willReceive);
@@ -93,7 +125,9 @@ function ReceiptPage() {
             ? {
                 ...p,
                 items: p.items.map((it) =>
-                  it.id === item.id ? { ...it, receivedAt: willReceive ? new Date().toISOString() : null } : it,
+                  it.id === item.id
+                    ? { ...it, receivedAt: willReceive ? new Date().toISOString() : null }
+                    : it,
                 ),
               }
             : p,
@@ -122,7 +156,9 @@ function ReceiptPage() {
     if (dialogItems.length > 0) {
       const pendentes = dialogItems.filter((it) => !it.receivedAt).length;
       if (pendentes > 0) {
-        toast.error(`Ainda há ${pendentes} ${pendentes === 1 ? "item não recebido" : "itens não recebidos"}. Marque todos antes de finalizar.`);
+        toast.error(
+          `Ainda há ${pendentes} ${pendentes === 1 ? "item não recebido" : "itens não recebidos"}. Marque todos antes de finalizar.`,
+        );
         return;
       }
     }
@@ -147,6 +183,15 @@ function ReceiptPage() {
         module: selectedItem.category,
         requesterName: selectedItem.requester,
       }).catch(console.warn);
+      void notifyWhatsappClient({
+        stage: "EXPEDICAO_RECEBIMENTO",
+        requisitionId: selectedItem.requisitionId,
+        ticketNumber: selectedItem.id,
+        title: selectedItem.description,
+        module: selectedItem.category,
+        requesterName: selectedItem.requester,
+        supplierName: selectedItem.supplier,
+      }).catch(console.warn);
       closeDialog();
       setPendingItems(await listPendingReceiptsClient());
       await router.invalidate();
@@ -158,7 +203,9 @@ function ReceiptPage() {
         toast.info("O item foi devolvido ao fluxo de compra para tratativa.");
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível registrar o recebimento.");
+      toast.error(
+        error instanceof Error ? error.message : "Não foi possível registrar o recebimento.",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -186,291 +233,323 @@ function ReceiptPage() {
 
   return (
     <AccessGuard roles={["admin", "almoxarife"]}>
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
-          <PackageCheck className="h-5 w-5 text-vp-yellow-dark" />
+      <div className="max-w-5xl mx-auto space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
+            <PackageCheck className="h-5 w-5 text-vp-yellow-dark" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-foreground">V5 — Recebimento de Materiais</h1>
+            <p className="text-sm text-muted-foreground">
+              Conferência e registro de entrega de materiais
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-foreground">V5 — Recebimento de Materiais</h1>
-          <p className="text-sm text-muted-foreground">Conferência e registro de entrega de materiais</p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Card className="card-hover-yellow">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50">
+                <Truck className="h-5 w-5 text-vp-yellow-dark" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{pendingItems.length}</p>
+                <p className="text-xs text-muted-foreground">Aguardando Recebimento</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="card-hover-yellow">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-50">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">Fluxo final</p>
+                <p className="text-xs text-muted-foreground">Recepção física e conferência</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="card-hover-yellow">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-50">
+                <AlertTriangle className="h-5 w-5 text-red-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">Tratativa</p>
+                <p className="text-xs text-muted-foreground">Avarias voltam para compra</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="card-hover-yellow">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50">
-              <Truck className="h-5 w-5 text-vp-yellow-dark" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{pendingItems.length}</p>
-              <p className="text-xs text-muted-foreground">Aguardando Recebimento</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="card-hover-yellow">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-50">
-              <CheckCircle2 className="h-5 w-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">Fluxo final</p>
-              <p className="text-xs text-muted-foreground">Recepção física e conferência</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="card-hover-yellow">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-50">
-              <AlertTriangle className="h-5 w-5 text-red-500" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">Tratativa</p>
-              <p className="text-xs text-muted-foreground">Avarias voltam para compra</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        {pendingItems.length > 0 && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por ticket, título ou solicitante..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <Select value={moduleFilter} onValueChange={setModuleFilter}>
+                  <SelectTrigger className="w-full sm:w-[130px]">
+                    <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <SelectValue placeholder="Módulo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["Todos", "M1", "M2", "M3", "M4", "M5", "M6"].map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {m === "Todos" ? "Módulo" : m}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-      {pendingItems.length > 0 && (
         <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Entregas Pendentes</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {pendingItems.length === 0 ? (
+              <div className="p-8 text-center">
+                <PackageCheck className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
+                <p className="text-muted-foreground">Nenhum recebimento pendente.</p>
+              </div>
+            ) : filteredItems.length === 0 ? (
+              <div className="p-8 text-center">
+                <p className="text-muted-foreground text-sm">
+                  Nenhum resultado para os filtros atuais.
+                </p>
+              </div>
+            ) : (
+              filteredItems.map((item) => (
+                <div
+                  key={item.purchaseId}
+                  className="flex items-center justify-between p-4 rounded-lg border hover:border-vp-yellow transition-colors"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm">{item.id}</span>
+                      <Badge variant="outline" className="text-xs">
+                        {item.requisition}
+                      </Badge>
+                      {item.purchaseOrderNumber && (
+                        <Badge variant="secondary" className="text-xs">
+                          Pedido {item.purchaseOrderNumber}
+                        </Badge>
+                      )}
+                      {item.items && item.items.length > 0 && (
+                        <Badge
+                          variant={
+                            item.items.every((it) => it.receivedAt) ? "secondary" : "outline"
+                          }
+                          className={cn(
+                            "text-xs gap-1",
+                            item.items.every((it) => it.receivedAt)
+                              ? "bg-green-100 text-green-800 border-green-200"
+                              : "text-amber-700 border-amber-300",
+                          )}
+                        >
+                          <Package className="h-3 w-3" />
+                          {item.items.filter((it) => it.receivedAt).length}/{item.items.length}{" "}
+                          itens recebidos
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium">{item.description}</p>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Building2 className="h-3 w-3" />
+                        {item.supplier}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <User className="h-3 w-3" />
+                        {item.requester}
+                      </span>
+                      <span>{item.purchaseDate}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      to="/movimentacoes"
+                      search={{ ticket: item.id, module: undefined }}
+                      title="Ver histórico completo do ticket"
+                      className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-vp-yellow transition-colors"
+                    >
+                      <ScrollText className="h-3.5 w-3.5" />
+                    </Link>
+                    <Button variant="vp" size="sm" onClick={() => openReceiptForm(item)}>
+                      <ClipboardCheck className="h-4 w-4 mr-1" /> Receber
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Dialog open={dialogOpen} onOpenChange={(open) => !open && closeDialog()}>
+          <DialogContent className={cn("max-w-lg", dialogItems.length > 0 && "max-w-2xl")}>
+            <DialogHeader>
+              <DialogTitle>Recebimento de Materiais</DialogTitle>
+              <DialogDescription>
+                {selectedItem?.description} — {selectedItem?.id}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted/50 p-3 space-y-1 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Requisitante Original</span>
+                  <span className="font-medium text-right">{selectedItem?.requester}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Fornecedor</span>
+                  <span className="font-medium text-right">{selectedItem?.supplier}</span>
+                </div>
+                {selectedItem?.invoiceNumber && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">NF</span>
+                    <span className="font-medium text-right">{selectedItem.invoiceNumber}</span>
+                  </div>
+                )}
+              </div>
+
+              {dialogItems.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium">Itens ({dialogItems.length})</label>
+                    <span className="text-xs text-muted-foreground">
+                      {dialogItems.filter((it) => it.receivedAt).length}/{dialogItems.length}{" "}
+                      recebidos
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Marque cada item conforme ele chega — compras fracionadas entre fornecedores
+                    costumam entregar em ondas diferentes.
+                  </p>
+                  <div className={excelTable.wrapper}>
+                    <div className={excelTable.scrollBody}>
+                      <table className={excelTable.table}>
+                        <thead className={excelTable.thead}>
+                          <tr className={excelTable.headRow}>
+                            <th className={cn(excelTable.th, "w-10")}>Recebido</th>
+                            <th className={excelTable.th}>Produto</th>
+                            <th className={cn(excelTable.thRight, "w-16")}>Qtd.</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dialogItems.map((it, i) => (
+                            <tr key={it.id} className={excelTable.row(i)}>
+                              <td className={excelTable.td}>
+                                <input
+                                  type="checkbox"
+                                  checked={!!it.receivedAt}
+                                  disabled={togglingItemId === it.id}
+                                  onChange={() => void toggleItemReceived(it)}
+                                  className="h-4 w-4 rounded border-border accent-vp-yellow"
+                                  aria-label={`Marcar ${it.description} como recebido`}
+                                />
+                              </td>
+                              <td className={excelTable.td}>
+                                {it.productCode && (
+                                  <span className="font-mono text-muted-foreground mr-1">
+                                    [{it.productCode}]
+                                  </span>
+                                )}
+                                {it.description}
+                              </td>
+                              <td className={cn(excelTable.tdRight, "text-foreground")}>
+                                {it.quantity ?? "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Nome do Entregador (opcional)</label>
                 <Input
-                  placeholder="Buscar por ticket, título ou solicitante..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9"
+                  placeholder="Nome do motorista / entregador"
+                  value={delivererName}
+                  onChange={(e) => setDelivererName(e.target.value)}
                 />
               </div>
-              <Select value={moduleFilter} onValueChange={setModuleFilter}>
-                <SelectTrigger className="w-full sm:w-[130px]">
-                  <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
-                  <SelectValue placeholder="Módulo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {["Todos", "M1", "M2", "M3", "M4", "M5", "M6"].map((m) => (
-                    <SelectItem key={m} value={m}>{m === "Todos" ? "Módulo" : m}</SelectItem>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Empresa que Entregou (opcional)</label>
+                <Input
+                  placeholder="Transportadora / empresa"
+                  value={carrierCompany}
+                  onChange={(e) => setCarrierCompany(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Conformidade do Produto</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["ok", "damaged", "mismatch"] as Condition[]).map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setCondition(c)}
+                      className={`rounded-lg border-2 p-3 text-center text-xs font-medium transition-all ${
+                        condition === c
+                          ? c === "ok"
+                            ? "border-green-500 bg-green-50 text-green-700"
+                            : c === "damaged"
+                              ? "border-amber-500 bg-amber-50 text-amber-700"
+                              : "border-red-500 bg-red-50 text-red-700"
+                          : "border-border hover:border-muted-foreground/40"
+                      }`}
+                    >
+                      {c === "ok" && <CheckCircle2 className="h-5 w-5 mx-auto mb-1" />}
+                      {c === "damaged" && <AlertTriangle className="h-5 w-5 mx-auto mb-1" />}
+                      {c === "mismatch" && <Eye className="h-5 w-5 mx-auto mb-1" />}
+                      {conditionLabel(c)}
+                    </button>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Entregas Pendentes</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {pendingItems.length === 0 ? (
-            <div className="p-8 text-center">
-              <PackageCheck className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
-              <p className="text-muted-foreground">Nenhum recebimento pendente.</p>
-            </div>
-          ) : filteredItems.length === 0 ? (
-            <div className="p-8 text-center">
-              <p className="text-muted-foreground text-sm">Nenhum resultado para os filtros atuais.</p>
-            </div>
-          ) : (
-            filteredItems.map((item) => (
-              <div
-                key={item.purchaseId}
-                className="flex items-center justify-between p-4 rounded-lg border hover:border-vp-yellow transition-colors"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm">{item.id}</span>
-                    <Badge variant="outline" className="text-xs">{item.requisition}</Badge>
-                    {item.purchaseOrderNumber && (
-                      <Badge variant="secondary" className="text-xs">Pedido {item.purchaseOrderNumber}</Badge>
-                    )}
-                    {item.items && item.items.length > 0 && (
-                      <Badge
-                        variant={item.items.every((it) => it.receivedAt) ? "secondary" : "outline"}
-                        className={cn("text-xs gap-1", item.items.every((it) => it.receivedAt) ? "bg-green-100 text-green-800 border-green-200" : "text-amber-700 border-amber-300")}
-                      >
-                        <Package className="h-3 w-3" />
-                        {item.items.filter((it) => it.receivedAt).length}/{item.items.length} itens recebidos
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-sm font-medium">{item.description}</p>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{item.supplier}</span>
-                    <span className="flex items-center gap-1"><User className="h-3 w-3" />{item.requester}</span>
-                    <span>{item.purchaseDate}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Link
-                    to="/movimentacoes"
-                    search={{ ticket: item.id, module: undefined }}
-                    title="Ver histórico completo do ticket"
-                    className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-vp-yellow transition-colors"
-                  >
-                    <ScrollText className="h-3.5 w-3.5" />
-                  </Link>
-                  <Button variant="vp" size="sm" onClick={() => openReceiptForm(item)}>
-                    <ClipboardCheck className="h-4 w-4 mr-1" /> Receber
-                  </Button>
                 </div>
               </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => !open && closeDialog()}>
-        <DialogContent className={cn("max-w-lg", dialogItems.length > 0 && "max-w-2xl")}>
-          <DialogHeader>
-            <DialogTitle>Recebimento de Materiais</DialogTitle>
-            <DialogDescription>
-              {selectedItem?.description} — {selectedItem?.id}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="rounded-lg bg-muted/50 p-3 space-y-1 text-sm">
-              <div className="flex justify-between gap-3">
-                <span className="text-muted-foreground">Requisitante Original</span>
-                <span className="font-medium text-right">{selectedItem?.requester}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-muted-foreground">Fornecedor</span>
-                <span className="font-medium text-right">{selectedItem?.supplier}</span>
-              </div>
-              {selectedItem?.invoiceNumber && (
-                <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">NF</span>
-                  <span className="font-medium text-right">{selectedItem.invoiceNumber}</span>
+              {needsNotes && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-red-600">
+                    Descreva o problema ou divergência *
+                  </label>
+                  <Textarea
+                    placeholder="Ex.: Embalagem rompida, quantidade divergente, modelo incorreto..."
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={3}
+                  />
                 </div>
               )}
             </div>
 
-            {dialogItems.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium">Itens ({dialogItems.length})</label>
-                  <span className="text-xs text-muted-foreground">
-                    {dialogItems.filter((it) => it.receivedAt).length}/{dialogItems.length} recebidos
-                  </span>
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Marque cada item conforme ele chega — compras fracionadas entre fornecedores costumam entregar em ondas diferentes.
-                </p>
-                <div className={excelTable.wrapper}>
-                  <div className={excelTable.scrollBody}>
-                    <table className={excelTable.table}>
-                      <thead className={excelTable.thead}>
-                        <tr className={excelTable.headRow}>
-                          <th className={cn(excelTable.th, "w-10")}>Recebido</th>
-                          <th className={excelTable.th}>Produto</th>
-                          <th className={cn(excelTable.thRight, "w-16")}>Qtd.</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {dialogItems.map((it, i) => (
-                          <tr key={it.id} className={excelTable.row(i)}>
-                            <td className={excelTable.td}>
-                              <input
-                                type="checkbox"
-                                checked={!!it.receivedAt}
-                                disabled={togglingItemId === it.id}
-                                onChange={() => void toggleItemReceived(it)}
-                                className="h-4 w-4 rounded border-border accent-vp-yellow"
-                                aria-label={`Marcar ${it.description} como recebido`}
-                              />
-                            </td>
-                            <td className={excelTable.td}>
-                              {it.productCode && <span className="font-mono text-muted-foreground mr-1">[{it.productCode}]</span>}
-                              {it.description}
-                            </td>
-                            <td className={cn(excelTable.tdRight, "text-foreground")}>{it.quantity ?? "—"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Nome do Entregador (opcional)</label>
-              <Input
-                placeholder="Nome do motorista / entregador"
-                value={delivererName}
-                onChange={(e) => setDelivererName(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Empresa que Entregou (opcional)</label>
-              <Input
-                placeholder="Transportadora / empresa"
-                value={carrierCompany}
-                onChange={(e) => setCarrierCompany(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Conformidade do Produto</label>
-              <div className="grid grid-cols-3 gap-2">
-                {(["ok", "damaged", "mismatch"] as Condition[]).map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setCondition(c)}
-                    className={`rounded-lg border-2 p-3 text-center text-xs font-medium transition-all ${
-                      condition === c
-                        ? c === "ok"
-                          ? "border-green-500 bg-green-50 text-green-700"
-                          : c === "damaged"
-                            ? "border-amber-500 bg-amber-50 text-amber-700"
-                            : "border-red-500 bg-red-50 text-red-700"
-                        : "border-border hover:border-muted-foreground/40"
-                    }`}
-                  >
-                    {c === "ok" && <CheckCircle2 className="h-5 w-5 mx-auto mb-1" />}
-                    {c === "damaged" && <AlertTriangle className="h-5 w-5 mx-auto mb-1" />}
-                    {c === "mismatch" && <Eye className="h-5 w-5 mx-auto mb-1" />}
-                    {conditionLabel(c)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {needsNotes && (
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-red-600">
-                  Descreva o problema ou divergência *
-                </label>
-                <Textarea
-                  placeholder="Ex.: Embalagem rompida, quantidade divergente, modelo incorreto..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={3}
-                />
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={closeDialog}>
-              Cancelar
-            </Button>
-            <Button variant="vp" onClick={handleSubmit} disabled={isSaving}>
-              <PackageCheck className="h-4 w-4 mr-1" /> Finalizar Recebimento
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={closeDialog}>
+                Cancelar
+              </Button>
+              <Button variant="vp" onClick={handleSubmit} disabled={isSaving}>
+                <PackageCheck className="h-4 w-4 mr-1" /> Finalizar Recebimento
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
     </AccessGuard>
   );
 }

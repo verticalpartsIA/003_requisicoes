@@ -7,7 +7,8 @@ os fixes/features mais investigativos linkam para um relatório em
 
 ## 2026-09-24
 
-- feat(admin): novo papel `expedicao` (enum `database/034_expedicao_role.sql`, aplicado em produção), disponível em `/admin` para o admin designar quem recebe o aviso de chegada/expedição de produto — ainda sem gatilho de WhatsApp associado (V5/recebimento não dispara nada hoje; falta decidir como identificar "entrega na empresa", já que `delivery_location` é texto livre por módulo, não um campo estruturado)
+- feat(whatsapp,receipt): novo estágio `EXPEDICAO_RECEBIMENTO` — toda vez que um recebimento é registrado em V5 (`receipt.tsx`), quem tiver o papel `expedicao` recebe aviso de WhatsApp com ticket, título, fornecedor e solicitante. Por decisão explícita, dispara para **toda** requisição recebida (não só entrega na empresa) — não há hoje um campo estruturado de local de entrega para diferenciar isso; `delivery_location` é texto livre por módulo
+- feat(admin): novo papel `expedicao` (enum `database/034_expedicao_role.sql`, aplicado em produção), disponível em `/admin` para o admin designar quem recebe o aviso de chegada/expedição de produto
 - feat(whatsapp,admin): novo papel `cotador`, separado de `comprador` — permite parametrizar quem recebe o gatilho de WhatsApp da etapa de Cotação (`COMPRADOR_COTAR`) independentemente de quem recebe o de Compra (`COMPRA_APROVADA`). A mesma pessoa pode ter os dois papéis; numa ausência (ex.: férias), basta trocar o papel em `/admin` para redirecionar o gatilho, sem mexer em código. RLS estendida em `database/033_cotador_role_rls.sql` (mesmo acesso do comprador às tabelas de cotação, sem estender a `purchases`/status de compra) e enum em `database/032_cotador_role.sql` — migrações já aplicadas em produção; testado atribuindo `cotador` à Andreia Oliveira (mantendo `comprador`)
 
 ## 2026-09-23
