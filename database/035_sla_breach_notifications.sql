@@ -18,6 +18,13 @@
 -- disparada por pg_cron com credencial embutida na função). O
 -- EVOLUTION_APIKEY abaixo precisa ser preenchido manualmente antes de
 -- aplicar esta migração em produção — ver CHANGELOG.md.
+--
+-- Backlog: só entram tickets vencidos há no máximo 168h (7 dias) além da
+-- meta da etapa. Ticket "morto"/esquecido com atraso maior que isso nunca
+-- dispara aviso (nem agora, nem depois — só volta a ser elegível se mudar
+-- de etapa) pra não avisar o requisitante de coisa de meses atrás como se
+-- fosse novidade. Decisão explícita do usuário ao ligar isso em produção
+-- e ver 25 tickets vencidos, alguns com 1000+h de atraso.
 
 create table if not exists public.sla_notifications (
   requisition_id  uuid not null references public.requisitions(id) on delete cascade,
@@ -115,6 +122,7 @@ as $$
   left join public.profiles p on p.id = sm.requester_profile_id
   where sm.stage_start is not null
     and now() - sm.stage_start >= (t.hours || ' hours')::interval
+    and now() - sm.stage_start <= ((t.hours + 168) || ' hours')::interval
     and not exists (
       select 1 from public.sla_notifications n
       where n.requisition_id = sm.requisition_id

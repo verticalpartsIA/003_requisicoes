@@ -63,6 +63,19 @@ var na Hostinger) antes da migração ser aplicada. Sem isso, a função roda
 mas todo aviso fica com status `skipped_no_apikey` no
 `whatsapp_notification_log` — não quebra nada, só não envia.
 
+## Backlog no primeiro run em produção
+
+Ao testar `private.sla_active_breaches()` em produção antes de deixar o
+cron disparar de verdade, apareceram **25 tickets vencidos**, vários com
+mais de 1000h (40+ dias) de atraso — provavelmente tickets esquecidos ou
+de teste. Mandar "sua requisição está vencida há 63 dias" pro requisitante
+não fazia sentido. Decisão (explícita do usuário): a função só considera
+vencido um ticket com **até 168h (7 dias) de atraso além da meta da
+etapa** — `now() - stage_start <= target_hours + 168h`. Passado isso, o
+ticket nunca mais aparece na função (não é retomado depois) a menos que
+mude de etapa, o que reinicia o relógio. Reduziu de 25 para 11 tickets no
+teste em produção.
+
 ## Limitações conhecidas
 
 - `net.http_post` é assíncrono (fire-and-forget via fila do `pg_net`) — o
