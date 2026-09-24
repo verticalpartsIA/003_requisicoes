@@ -225,7 +225,7 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
           `${title}\n\n🔗 Dar ciência: ${base}/approval`;
         await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
       } else if (stage === "COMPRADOR_COTAR") {
-        const userIds = await getUserIdsByRole("comprador");
+        const userIds = await getUserIdsByRole("cotador");
         const numbers = await getWhatsappNumbers(userIds);
         const text =
           `Tem cotação pra você fazer: pedido *${ticketNumber}*\n\n` +
