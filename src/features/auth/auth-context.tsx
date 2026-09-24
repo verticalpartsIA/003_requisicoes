@@ -8,7 +8,8 @@ export type AppRole =
   | "cotador"
   | "comprador"
   | "aprovador"
-  | "almoxarife";
+  | "almoxarife"
+  | "expedicao";
 
 interface Profile {
   id: string;

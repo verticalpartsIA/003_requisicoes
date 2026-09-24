@@ -97,6 +97,7 @@ const ALL_ROLES: AppRole[] = [
   "comprador",
   "aprovador",
   "almoxarife",
+  "expedicao",
 ];
 
 const ROLE_LABELS: Record<AppRole, string> = {
@@ -106,6 +107,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
   comprador: "Comprador",
   aprovador: "Aprovador",
   almoxarife: "Almoxarife",
+  expedicao: "Expedição",
 };
 
 const ROLE_COLORS: Record<AppRole, string> = {
@@ -115,6 +117,7 @@ const ROLE_COLORS: Record<AppRole, string> = {
   comprador: "bg-purple-100 text-purple-700 border-purple-200",
   aprovador: "bg-green-100 text-green-700 border-green-200",
   almoxarife: "bg-orange-100 text-orange-700 border-orange-200",
+  expedicao: "bg-cyan-100 text-cyan-700 border-cyan-200",
 };
 
 const TIER_LABELS: Record<1 | 2 | 3, string> = {
