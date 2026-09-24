@@ -1,0 +1,11 @@
+-- Novo role 'cotador', separado de 'comprador': permite parametrizar quem
+-- recebe o gatilho de WhatsApp da etapa de Cotação (COMPRADOR_COTAR)
+-- independentemente de quem recebe o gatilho de Compra (COMPRA_APROVADA).
+-- Uma mesma pessoa pode ter os dois papéis (ex.: Andreia = cotador +
+-- comprador); em uma ausência (férias), basta remover/adicionar o papel
+-- em /admin para redirecionar o gatilho, sem tocar em código.
+--
+-- ALTER TYPE ... ADD VALUE precisa rodar isolado (não pode ser usado na
+-- mesma transação em que é criado) — por isso fica em migração própria,
+-- separada da que ajusta as policies de RLS (033_cotador_role_rls.sql).
+alter type public.app_role add value if not exists 'cotador';

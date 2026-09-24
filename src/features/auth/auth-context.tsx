@@ -1,17 +1,11 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 
 export type AppRole =
   | "admin"
   | "solicitante"
+  | "cotador"
   | "comprador"
   | "aprovador"
   | "almoxarife";
@@ -48,17 +42,15 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 async function loadProfileAndRoles(userId: string) {
-  const [{ data: profile, error: profileError }, { data: roles, error: rolesError }] = await Promise.all([
-    supabaseBrowser
-      .from("profiles")
-      .select("id, full_name, department, email")
-      .eq("id", userId)
-      .maybeSingle(),
-    supabaseBrowser
-      .from("user_roles")
-      .select("role,approval_tier")
-      .eq("user_id", userId),
-  ]);
+  const [{ data: profile, error: profileError }, { data: roles, error: rolesError }] =
+    await Promise.all([
+      supabaseBrowser
+        .from("profiles")
+        .select("id, full_name, department, email")
+        .eq("id", userId)
+        .maybeSingle(),
+      supabaseBrowser.from("user_roles").select("role,approval_tier").eq("user_id", userId),
+    ]);
 
   if (profileError) throw profileError;
   if (rolesError) throw rolesError;
@@ -107,10 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
 
         const [{ data: sessionData }, { data: userData }] = await Promise.race([
-          Promise.all([
-            supabaseBrowser.auth.getSession(),
-            supabaseBrowser.auth.getUser(),
-          ]),
+          Promise.all([supabaseBrowser.auth.getSession(), supabaseBrowser.auth.getUser()]),
           timeout,
         ]);
 
@@ -185,34 +174,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return Math.max(...tiers) as 1 | 2 | 3;
   }, [roleAssignments]);
 
-  const value = useMemo<AuthContextValue>(() => ({
-    isLoading,
-    session,
-    user,
-    profile,
-    roles,
-    roleAssignments,
-    approvalTier,
-    isRecoverySession,
-    signInWithPassword: async (email: string, password: string) => {
-      const { error } = await supabaseBrowser.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-    },
-    signOut: async () => {
-      const { error } = await supabaseBrowser.auth.signOut();
-      if (error) throw error;
-    },
-    refreshProfile,
-    hasRole: (role: AppRole) => roles.includes(role),
-    resetPasswordForEmail: async (email: string, redirectTo: string) => {
-      const { error } = await supabaseBrowser.auth.resetPasswordForEmail(email, { redirectTo });
-      if (error) throw error;
-    },
-    updatePassword: async (newPassword: string) => {
-      const { error } = await supabaseBrowser.auth.updateUser({ password: newPassword });
-      if (error) throw error;
-    },
-  }), [approvalTier, isLoading, isRecoverySession, profile, roleAssignments, roles, session, user]);
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      isLoading,
+      session,
+      user,
+      profile,
+      roles,
+      roleAssignments,
+      approvalTier,
+      isRecoverySession,
+      signInWithPassword: async (email: string, password: string) => {
+        const { error } = await supabaseBrowser.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      },
+      signOut: async () => {
+        const { error } = await supabaseBrowser.auth.signOut();
+        if (error) throw error;
+      },
+      refreshProfile,
+      hasRole: (role: AppRole) => roles.includes(role),
+      resetPasswordForEmail: async (email: string, redirectTo: string) => {
+        const { error } = await supabaseBrowser.auth.resetPasswordForEmail(email, { redirectTo });
+        if (error) throw error;
+      },
+      updatePassword: async (newPassword: string) => {
+        const { error } = await supabaseBrowser.auth.updateUser({ password: newPassword });
+        if (error) throw error;
+      },
+    }),
+    [approvalTier, isLoading, isRecoverySession, profile, roleAssignments, roles, session, user],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

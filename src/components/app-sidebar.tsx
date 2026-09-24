@@ -62,9 +62,7 @@ const system = [
   { title: "Admin", url: "/admin", icon: Shield },
 ];
 
-const integrations = [
-  { title: "Estoque Omie", url: "/estoque-omie", icon: Boxes },
-];
+const integrations = [{ title: "Estoque Omie", url: "/estoque-omie", icon: Boxes }];
 
 /** Nome de exibição: usa o nome do perfil; sem ele, monta a partir do e-mail
  *  ("gelson.simoes@..." → "Gelson Simoes"), nunca exibindo o e-mail cru. */
@@ -92,21 +90,23 @@ export function AppSidebar() {
   const visibleModules = modules.filter(() => roles.length > 0);
   const visibleWorkflows = workflows.filter((item) => {
     if (hasRole("admin")) return true;
-    if (item.url === "/quoting" || item.url === "/purchasing") return hasRole("comprador");
+    if (item.url === "/quoting") return hasRole("comprador") || hasRole("cotador");
+    if (item.url === "/purchasing") return hasRole("comprador");
     if (item.url === "/approval") return hasRole("aprovador");
     if (item.url === "/receipt") return hasRole("almoxarife");
     return false;
   });
   const visibleSystem = system.filter((item) => {
     if (item.url === "/") return true;
-    if (item.url === "/analytics") return hasRole("admin") || hasRole("comprador") || hasRole("aprovador");
+    if (item.url === "/analytics")
+      return hasRole("admin") || hasRole("comprador") || hasRole("aprovador");
     if (item.url === "/logs" || item.url === "/movimentacoes") return hasRole("admin");
     if (item.url === "/admin") return hasRole("admin");
     return false;
   });
-  const visibleIntegrations = integrations.filter(() => (
-    hasRole("admin") || hasRole("comprador") || hasRole("almoxarife")
-  ));
+  const visibleIntegrations = integrations.filter(
+    () => hasRole("admin") || hasRole("comprador") || hasRole("almoxarife"),
+  );
 
   const handleSignOut = async () => {
     try {

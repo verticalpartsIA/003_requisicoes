@@ -5,6 +5,10 @@ linha por entrega — para o contexto completo (logs, causa raiz, decisões),
 os fixes/features mais investigativos linkam para um relatório em
 `docs/reports/`.
 
+## 2026-09-24
+
+- feat(whatsapp,admin): novo papel `cotador`, separado de `comprador` — permite parametrizar quem recebe o gatilho de WhatsApp da etapa de Cotação (`COMPRADOR_COTAR`) independentemente de quem recebe o de Compra (`COMPRA_APROVADA`). A mesma pessoa pode ter os dois papéis; numa ausência (ex.: férias), basta trocar o papel em `/admin` para redirecionar o gatilho, sem mexer em código. RLS estendida em `database/033_cotador_role_rls.sql` (mesmo acesso do comprador às tabelas de cotação, sem estender a `purchases`/status de compra) e enum em `database/032_cotador_role.sql` — migrações pendentes de aplicação em produção
+
 ## 2026-09-23
 
 - feat(version-check): o botão "Atualizar agora" do aviso de nova versão agora limpa o cache deste site antes de recarregar — apaga o Cache Storage e service workers da origem e rebusca a página com `cache: "reload"`, com um aviso "Limpando o cache…" enquanto roda. Escopo restrito a vprequisicoes: não toca em cookies/localStorage/sessionStorage (login SSO via vpsistema.com) e, por isso, não usa `Clear-Site-Data` (alguns navegadores aplicam ao domínio registrável inteiro)
