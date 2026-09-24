@@ -183,6 +183,7 @@ const notifySchema = z.object({
     "REQUISITANTE_REPROVADO_FINANCEIRO",
     "REQUISITANTE_APROVADO_PARCIAL",
     "REQUISITANTE_COMPRADO",
+    "EXPEDICAO_RECEBIMENTO",
   ]),
   requisitionId: z.string().uuid(),
   ticketNumber: z.string(),
@@ -195,6 +196,7 @@ const notifySchema = z.object({
   rejectionReason: z.string().optional(),
   rejectedItems: z.array(z.string().max(300)).max(500).optional(),
   approvedCount: z.number().int().nonnegative().optional(),
+  supplierName: z.string().max(200).optional(),
 });
 
 export const notifyWhatsappStage = createServerFn({ method: "POST" })
@@ -212,6 +214,7 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
       rejectionReason,
       rejectedItems,
       approvedCount,
+      supplierName,
     } = data;
     const base = vpreqBaseUrl();
     const ctx = { stage, requisitionId, ticketNumber };
@@ -282,6 +285,14 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
       } else if (stage === "REQUISITANTE_COMPRADO") {
         const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
         const text = `Sua requisição *${ticketNumber}* foi comprada! 🛒\n\n${title}`;
+        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+      } else if (stage === "EXPEDICAO_RECEBIMENTO") {
+        const userIds = await getUserIdsByRole("expedicao");
+        const numbers = await getWhatsappNumbers(userIds);
+        const text =
+          `📦 Chegou material do pedido *${ticketNumber}*\n\n${title}` +
+          (supplierName ? ` — fornecedor: ${supplierName}` : "") +
+          `\nSolicitante: ${requesterName}`;
         await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
       }
     } catch (err) {
