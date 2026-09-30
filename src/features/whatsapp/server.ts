@@ -18,6 +18,10 @@ import { z } from "zod";
 import { supabaseRest } from "@/lib/supabase-rest";
 import { getApprovalLevelForValue, DEFAULT_TIER_THRESHOLDS } from "@/lib/approval";
 import { buildPartialApprovalMessage } from "@/features/whatsapp/partial-approval";
+import {
+  createApprovalQuickLink,
+  QUICK_LINK_TTL_HOURS,
+} from "@/features/approvals/quick-link.server";
 
 function evolutionApiUrl() {
   return process.env.EVOLUTION_API_URL ?? "http://72.61.48.156:8080";
@@ -29,7 +33,10 @@ function evolutionInstance() {
   return process.env.EVOLUTION_INSTANCE ?? "pv360";
 }
 function vpreqBaseUrl() {
-  return process.env.VPREQ_BASE_URL ?? "https://maroon-dove-178367.hostingersite.com";
+  return (process.env.VPREQ_BASE_URL ?? "https://maroon-dove-178367.hostingersite.com").replace(
+    /\/+$/,
+    "",
+  );
 }
 
 async function logAttempt(entry: {
@@ -162,6 +169,34 @@ async function getWhatsappNumbers(userIds: string[]): Promise<string[]> {
   return (resp.data ?? []).map((r) => r.whatsapp_number).filter((n): n is string => !!n);
 }
 
+/** Como getWhatsappNumbers, mas mantém o vínculo usuário → número (o link de
+ *  aprovação rápida é emitido por aprovador). */
+async function getWhatsappRecipients(
+  userIds: string[],
+): Promise<{ userId: string; number: string }[]> {
+  if (!userIds.length) return [];
+  const ids = userIds.map((id) => `"${id}"`).join(",");
+  const resp = await supabaseRest<{ id: string; whatsapp_number: string | null }[]>(
+    `profiles?select=id,whatsapp_number&id=in.(${ids})`,
+  );
+  return (resp.data ?? [])
+    .filter((r): r is { id: string; whatsapp_number: string } => !!r.whatsapp_number)
+    .map((r) => ({ userId: r.id, number: r.whatsapp_number }));
+}
+
+/** Nome do solicitante direto da requisição — o front nem sempre o envia
+ *  (ex.: finalização da cotação manda ""), e a mensagem saía "solicitante: ". */
+async function resolveRequesterName(requisitionId: string): Promise<string> {
+  try {
+    const resp = await supabaseRest<{ requester_name: string | null }[]>(
+      `requisitions?select=requester_name&id=eq.${requisitionId}&limit=1`,
+    );
+    return resp.data?.[0]?.requester_name?.trim() || "não informado";
+  } catch {
+    return "não informado";
+  }
+}
+
 async function getTierThresholds() {
   const resp = await supabaseRest<{ key: string; value: string }[]>(
     `settings?select=key,value&key=in.(tier1_max,tier2_max)`,
@@ -211,7 +246,7 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
       requisitionId,
       ticketNumber,
       title,
-      requesterName,
+      requesterName: requesterNameInput,
       requesterId,
       requesterDepartment,
       totalValue,
@@ -221,6 +256,7 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
       supplierName,
     } = data;
     const base = vpreqBaseUrl();
+    const requesterName = requesterNameInput.trim() || (await resolveRequesterName(requisitionId));
     const ctx = { stage, requisitionId, ticketNumber };
 
     try {
@@ -242,11 +278,34 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
         const thresholds = await getTierThresholds();
         const tier = getApprovalLevelForValue(totalValue ?? 0, thresholds);
         const userIds = await getUserIdsByRoleAndTier("aprovador", tier);
-        const numbers = await getWhatsappNumbers(userIds);
-        const text =
+        const recipients = await getWhatsappRecipients(userIds);
+        const approvalResp = await supabaseRest<{ id: string }[]>(
+          `approvals?select=id&requisition_id=eq.${requisitionId}&limit=1`,
+        );
+        const approvalId = approvalResp.data?.[0]?.id;
+        const header =
           `Aprovação pendente: ticket *${ticketNumber}* (Nível ${tier})\n\n` +
-          `${title} — solicitante: ${requesterName}\n\n🔗 Aprovar: ${base}/approval?req=${requisitionId}`;
-        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+          `${title} — solicitante: ${requesterName}\n\n`;
+        const systemLink = `💻 Abrir no sistema: ${base}/approval?req=${requisitionId}`;
+        await Promise.all(
+          recipients.map(async ({ userId, number }) => {
+            // Link de aprovação com 1 toque, exclusivo deste aprovador. Se não
+            // der pra emitir, cai no link normal (que pede login) — o aviso
+            // nunca deixa de sair por causa disso.
+            let text = `${header}${systemLink}`;
+            if (approvalId) {
+              try {
+                const token = await createApprovalQuickLink(approvalId, userId);
+                text =
+                  `${header}👉 Aprovar/Reprovar direto pelo celular (vale ${QUICK_LINK_TTL_HOURS}h, uso único):\n` +
+                  `${base}/aprovar/${token}\n\n${systemLink}`;
+              } catch (err) {
+                console.warn("[whatsapp] falha ao emitir link de aprovação rápida", err);
+              }
+            }
+            await sendWhatsappText(number, text, ctx);
+          }),
+        );
       } else if (stage === "COMPRA_APROVADA") {
         const userIds = await getUserIdsByRole("comprador");
         const numbers = await getWhatsappNumbers(userIds);
