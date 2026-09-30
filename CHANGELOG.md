@@ -5,6 +5,11 @@ linha por entrega — para o contexto completo (logs, causa raiz, decisões),
 os fixes/features mais investigativos linkam para um relatório em
 `docs/reports/`.
 
+## 2026-09-30
+
+- feat(approval,whatsapp): aviso de aprovação pendente agora traz link de **aprovação com 1 toque** (`/aprovar/<token>`, página pública sem login) — token aleatório (só o hash SHA-256 no banco), exclusivo de cada aprovador, uso único, validade de 4h, alçada revalidada na decisão; decide o ticket inteiro (aprovar tudo/reprovar tudo com motivo), item a item segue no fluxo logado. `database/036_approval_quick_links.sql` (tabela sem policies + função `quick_decide_approval` só para service_role, já aplicada em produção e testada com rollback). Se o link não puder ser emitido, o aviso cai no link normal.
+- fix(whatsapp): "solicitante:" saía em branco no aviso de aprovação (a finalização da cotação manda `requesterName: ""`) — o servidor agora resolve o nome direto da requisição quando vier vazio; `VPREQ_BASE_URL` com barra no final não gera mais `//` nos links.
+
 ## 2026-09-24
 
 - feat(approval,whatsapp): links de WhatsApp de Ciência do Gestor e Aprovação por alçada (níveis 1/2/3) agora são deep-link — `/approval?req=<requisitionId>` abre direto o modal de decisão do item certo, sem precisar procurar na lista. Cobre quem decide pelo celular sem abrir o app primeiro. Se o item já foi decidido por outra pessoa antes do clique, mostra aviso em vez de tela vazia. Corrigido também o redirect de sessão expirada (`__root.tsx`/`login.tsx`) para preservar a querystring — antes perdia o `?req=...` e mandava pra lista genérica depois do login. Escopo intencionalmente restrito a Ciência/Aprovação; Cotação e Compra ficam de fora por decisão do usuário

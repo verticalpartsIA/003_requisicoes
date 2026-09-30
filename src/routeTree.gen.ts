@@ -30,6 +30,7 @@ import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PedidoComandoTokenRouteImport } from './routes/pedido-comando.$token'
+import { Route as AprovarTokenRouteImport } from './routes/aprovar.$token'
 
 const TripsRoute = TripsRouteImport.update({
   id: '/trips',
@@ -136,6 +137,11 @@ const PedidoComandoTokenRoute = PedidoComandoTokenRouteImport.update({
   path: '/pedido-comando/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AprovarTokenRoute = AprovarTokenRouteImport.update({
+  id: '/aprovar/$token',
+  path: '/aprovar/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -158,6 +164,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/services': typeof ServicesRoute
   '/trips': typeof TripsRoute
+  '/aprovar/$token': typeof AprovarTokenRoute
   '/pedido-comando/$token': typeof PedidoComandoTokenRoute
 }
 export interface FileRoutesByTo {
@@ -181,6 +188,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/services': typeof ServicesRoute
   '/trips': typeof TripsRoute
+  '/aprovar/$token': typeof AprovarTokenRoute
   '/pedido-comando/$token': typeof PedidoComandoTokenRoute
 }
 export interface FileRoutesById {
@@ -205,6 +213,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/services': typeof ServicesRoute
   '/trips': typeof TripsRoute
+  '/aprovar/$token': typeof AprovarTokenRoute
   '/pedido-comando/$token': typeof PedidoComandoTokenRoute
 }
 export interface FileRouteTypes {
@@ -230,6 +239,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/services'
     | '/trips'
+    | '/aprovar/$token'
     | '/pedido-comando/$token'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -253,6 +263,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/services'
     | '/trips'
+    | '/aprovar/$token'
     | '/pedido-comando/$token'
   id:
     | '__root__'
@@ -276,6 +287,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/services'
     | '/trips'
+    | '/aprovar/$token'
     | '/pedido-comando/$token'
   fileRoutesById: FileRoutesById
 }
@@ -300,6 +312,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   ServicesRoute: typeof ServicesRoute
   TripsRoute: typeof TripsRoute
+  AprovarTokenRoute: typeof AprovarTokenRoute
   PedidoComandoTokenRoute: typeof PedidoComandoTokenRoute
 }
 
@@ -452,6 +465,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PedidoComandoTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/aprovar/$token': {
+      id: '/aprovar/$token'
+      path: '/aprovar/$token'
+      fullPath: '/aprovar/$token'
+      preLoaderRoute: typeof AprovarTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -476,6 +496,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   ServicesRoute: ServicesRoute,
   TripsRoute: TripsRoute,
+  AprovarTokenRoute: AprovarTokenRoute,
   PedidoComandoTokenRoute: PedidoComandoTokenRoute,
 }
 export const routeTree = rootRouteImport

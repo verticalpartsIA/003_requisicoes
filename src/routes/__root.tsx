@@ -158,7 +158,8 @@ function ProtectedApp() {
   const isPublicRoute =
     currentPath === "/login" ||
     currentPath === "/reset-password" ||
-    currentPath.startsWith("/pedido-comando/");
+    currentPath.startsWith("/pedido-comando/") ||
+    currentPath.startsWith("/aprovar/");
 
   if (!session && !isPublicRoute) {
     return <Navigate to="/login" search={{ redirect: currentHref }} />;
