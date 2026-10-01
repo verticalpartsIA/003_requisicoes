@@ -22,6 +22,7 @@ import {
   createApprovalQuickLink,
   QUICK_LINK_TTL_HOURS,
 } from "@/features/approvals/quick-link.server";
+import { createCienciaQuickLink } from "@/features/approvals/ciencia-link.server";
 
 function evolutionApiUrl() {
   return process.env.EVOLUTION_API_URL ?? "http://72.61.48.156:8080";
@@ -289,11 +290,32 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
     try {
       if (stage === "LIDER_CIENCIA") {
         const userIds = await resolveLiderUserIds(requesterId, requesterDepartment);
-        const numbers = await getWhatsappNumbers(userIds);
-        const text =
+        const recipients = await getWhatsappRecipients(userIds);
+        const numbers = recipients.map((r) => r.number);
+        const header =
           `Você tem um pedido *${ticketNumber}* feito por *${requesterName}* aguardando sua ciência.\n\n` +
-          `${title}\n\n🔗 Dar ciência: ${base}/approval?req=${requisitionId}`;
-        await sendToAll(numbers, text, ctx);
+          `${title}\n\n`;
+        const systemLink = `💻 Abrir no sistema: ${base}/approval?req=${requisitionId}`;
+        await Promise.all(
+          recipients.map(async ({ userId, number }) => {
+            // Link de ciência com 1 toque, exclusivo deste gestor. Se não der
+            // pra emitir, cai no link normal (que pede login) — o aviso nunca
+            // deixa de sair por causa disso.
+            let text = `${header}🔗 Dar ciência: ${base}/approval?req=${requisitionId}`;
+            try {
+              const token = await createCienciaQuickLink(requisitionId, userId);
+              text =
+                `${header}👉 Dar ciência/Reprovar direto pelo celular (vale ${QUICK_LINK_TTL_HOURS}h, uso único):\n` +
+                `${base}/aprovar/${token}\n\n${systemLink}`;
+            } catch (err) {
+              console.warn("[whatsapp] falha ao emitir link de ciência rápida", err);
+            }
+            await sendWhatsappText(number, text, ctx);
+          }),
+        );
+        if (!recipients.length) {
+          await logAttempt({ ...ctx, recipientNumber: "", status: "skipped_no_number" });
+        }
 
         // Confirmação ao próprio solicitante (se ele também é quem dá a ciência,
         // já recebeu a mensagem acima — não duplica).
