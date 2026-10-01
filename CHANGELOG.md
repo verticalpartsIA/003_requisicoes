@@ -5,6 +5,10 @@ linha por entrega — para o contexto completo (logs, causa raiz, decisões),
 os fixes/features mais investigativos linkam para um relatório em
 `docs/reports/`.
 
+## 2026-10-01
+
+- fix(auth): SSO do portal vpsistema.com continuava quebrado após o fix anterior (PR #103) — aquele fix presumia que portal e VPRequisições usavam o mesmo projeto Supabase (são dois projetos diferentes, confirmado via API) e trocou o client para `@supabase/ssr`, cujo `flowType` padrão "pkce" ignora o `#access_token=` gerado pelo mecanismo de SSO que o portal já tinha (`sso-proxy` + `generateLink`/magiclink). Revertido para `createClient` simples com `flowType: "implicit"`. Ver `docs/reports/2026-10-01-sso-portal-flowtype-regressao.md`
+
 ## 2026-09-30
 
 - feat(approval,whatsapp): aviso de aprovação pendente agora traz link de **aprovação com 1 toque** (`/aprovar/<token>`, página pública sem login) — token aleatório (só o hash SHA-256 no banco), exclusivo de cada aprovador, uso único, validade de 4h, alçada revalidada na decisão; decide o ticket inteiro (aprovar tudo/reprovar tudo com motivo), item a item segue no fluxo logado. `database/036_approval_quick_links.sql` (tabela sem policies + função `quick_decide_approval` só para service_role, já aplicada em produção e testada com rollback). Se o link não puder ser emitido, o aviso cai no link normal.
