@@ -197,6 +197,33 @@ async function resolveRequesterName(requisitionId: string): Promise<string> {
   }
 }
 
+/** Envia o mesmo texto a vários números. Se não houver nenhum destinatário
+ *  com WhatsApp, registra isso no log — antes a falha era silenciosa. */
+async function sendToAll(
+  numbers: string[],
+  text: string,
+  ctx: { stage: string; requisitionId: string; ticketNumber: string },
+): Promise<void> {
+  if (!numbers.length) {
+    await logAttempt({ ...ctx, recipientNumber: "", status: "skipped_no_number" });
+    return;
+  }
+  await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+}
+
+/** Perfil do solicitante gravado na própria requisição (o front nem sempre o
+ *  envia — ex.: finalização da cotação e recebimento). */
+async function resolveRequesterProfileId(requisitionId: string): Promise<string | undefined> {
+  try {
+    const resp = await supabaseRest<{ requester_profile_id: string | null }[]>(
+      `requisitions?select=requester_profile_id&id=eq.${requisitionId}&limit=1`,
+    );
+    return resp.data?.[0]?.requester_profile_id ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function getTierThresholds() {
   const resp = await supabaseRest<{ key: string; value: string }[]>(
     `settings?select=key,value&key=in.(tier1_max,tier2_max)`,
@@ -266,14 +293,27 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
         const text =
           `Você tem um pedido *${ticketNumber}* feito por *${requesterName}* aguardando sua ciência.\n\n` +
           `${title}\n\n🔗 Dar ciência: ${base}/approval?req=${requisitionId}`;
-        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+        await sendToAll(numbers, text, ctx);
+
+        // Confirmação ao próprio solicitante (se ele também é quem dá a ciência,
+        // já recebeu a mensagem acima — não duplica).
+        const own = (await getWhatsappNumbers(requesterId ? [requesterId] : [])).filter(
+          (n) => !numbers.includes(n),
+        );
+        if (own.length) {
+          await sendToAll(
+            own,
+            `Sua requisição *${ticketNumber}* foi criada e enviada para a ciência do seu gestor.\n\n${title}`,
+            { ...ctx, stage: "REQUISITANTE_CRIADA" },
+          );
+        }
       } else if (stage === "COMPRADOR_COTAR") {
         const userIds = await getUserIdsByRole("cotador");
         const numbers = await getWhatsappNumbers(userIds);
         const text =
           `Tem cotação pra você fazer: pedido *${ticketNumber}*\n\n` +
           `${title} — solicitante: ${requesterName}, já com ciência do gestor.\n\n🔗 Cotar: ${base}/quoting`;
-        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+        await sendToAll(numbers, text, ctx);
       } else if (stage === "APROVACAO_PENDENTE") {
         const thresholds = await getTierThresholds();
         const tier = getApprovalLevelForValue(totalValue ?? 0, thresholds);
@@ -306,35 +346,46 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
             await sendWhatsappText(number, text, ctx);
           }),
         );
+        if (!recipients.length) {
+          await logAttempt({ ...ctx, recipientNumber: "", status: "skipped_no_number" });
+        }
+
+        const reqId = requesterId ?? (await resolveRequesterProfileId(requisitionId));
+        const own = await getWhatsappNumbers(reqId ? [reqId] : []);
+        await sendToAll(
+          own,
+          `Sua requisição *${ticketNumber}* foi cotada e está aguardando aprovação financeira.\n\n${title}`,
+          { ...ctx, stage: "REQUISITANTE_COTADO" },
+        );
       } else if (stage === "COMPRA_APROVADA") {
         const userIds = await getUserIdsByRole("comprador");
         const numbers = await getWhatsappNumbers(userIds);
         const text =
           `Tem compra aprovada pra você fazer: pedido *${ticketNumber}*\n\n` +
           `${title} já foi aprovado pelo gestor de alçada.\n\n🔗 Comprar: ${base}/purchasing`;
-        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+        await sendToAll(numbers, text, ctx);
       } else if (stage === "REQUISITANTE_CIENCIA_OK") {
         const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
         const text = `Sua requisição *${ticketNumber}* foi aprovada pelo seu gestor e já está em cotação.\n\n${title}`;
-        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+        await sendToAll(numbers, text, ctx);
       } else if (stage === "REQUISITANTE_REPROVADO_GESTOR") {
         const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
         const text =
           `Sua requisição *${ticketNumber}* foi reprovada pelo seu gestor.\n\n${title}\n\n` +
           `Motivo: ${rejectionReason || "não informado"}\n\n` +
           `Se for o caso de ajustar alguma pendência, você pode editar e reenviar.`;
-        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+        await sendToAll(numbers, text, ctx);
       } else if (stage === "REQUISITANTE_APROVADO_FINANCEIRO") {
         const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
         const text = `Sua requisição *${ticketNumber}* foi aprovada pelo financeiro e aguarda compra.\n\n${title}`;
-        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+        await sendToAll(numbers, text, ctx);
       } else if (stage === "REQUISITANTE_REPROVADO_FINANCEIRO") {
         const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
         const text =
           `Sua requisição *${ticketNumber}* foi reprovada pelo financeiro.\n\n${title}\n\n` +
           `Motivo: ${rejectionReason || "não informado"}\n\n` +
           `Se for o caso de ajustar alguma pendência, você pode editar e reenviar.`;
-        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+        await sendToAll(numbers, text, ctx);
       } else if (stage === "REQUISITANTE_APROVADO_PARCIAL") {
         const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
         const text = buildPartialApprovalMessage({
@@ -344,11 +395,11 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
           rejectedItems: rejectedItems ?? [],
           rejectionReason,
         });
-        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+        await sendToAll(numbers, text, ctx);
       } else if (stage === "REQUISITANTE_COMPRADO") {
         const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);
         const text = `Sua requisição *${ticketNumber}* foi comprada! 🛒\n\n${title}`;
-        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+        await sendToAll(numbers, text, ctx);
       } else if (stage === "EXPEDICAO_RECEBIMENTO") {
         const userIds = await getUserIdsByRole("expedicao");
         const numbers = await getWhatsappNumbers(userIds);
@@ -356,7 +407,20 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
           `📦 Chegou material do pedido *${ticketNumber}*\n\n${title}` +
           (supplierName ? ` — fornecedor: ${supplierName}` : "") +
           `\nSolicitante: ${requesterName}`;
-        await Promise.all(numbers.map((n) => sendWhatsappText(n, text, ctx)));
+        await sendToAll(numbers, text, ctx);
+
+        const reqId = requesterId ?? (await resolveRequesterProfileId(requisitionId));
+        const own = (await getWhatsappNumbers(reqId ? [reqId] : [])).filter(
+          (n) => !numbers.includes(n),
+        );
+        if (own.length) {
+          await sendToAll(
+            own,
+            `📦 O material da sua requisição *${ticketNumber}* chegou na expedição.\n\n${title}` +
+              (supplierName ? ` — fornecedor: ${supplierName}` : ""),
+            { ...ctx, stage: "REQUISITANTE_RECEBIDO" },
+          );
+        }
       }
     } catch (err) {
       // Nunca propaga — WhatsApp é efeito colateral. Erro aqui é antes de
