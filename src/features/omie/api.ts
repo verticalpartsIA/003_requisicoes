@@ -101,7 +101,7 @@ export interface OmieStockPosition {
   estoqueReservado: number;
   estoqueDisponivel: number;
   estoqueMinimo: number;
-  /** Quanto ainda pode ser pedido sem passar do mínimo: max(0, mínimo - disponível). */
+  /** Quanto falta para atingir o mínimo: max(0, mínimo - disponível). Só referência para exibição — não limita o pedido. */
   quantidadeMaxima: number;
 }
 

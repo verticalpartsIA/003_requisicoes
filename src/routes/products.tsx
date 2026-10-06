@@ -550,24 +550,8 @@ function ProductsPage() {
         toast.error("Verifique o código do produto antes de adicionar.");
         return;
       }
-      // Estoque mínimo não configurado no Omie (0) não significa "já está no
-      // mínimo" — significa que não há teto definido, então não bloqueamos
-      // nem limitamos a quantidade nesse caso.
-      if (stockInfo.estoque_minimo > 0) {
-        if (stockInfo.quantidade_maxima <= 0) {
-          toast.error(
-            "Este produto já está no estoque mínimo ou acima — não é possível pedir reposição agora.",
-          );
-          return;
-        }
-        if (parseFloat(draftQty) > stockInfo.quantidade_maxima) {
-          setDraftAttemptedSave(true);
-          toast.error(
-            `Quantidade máxima que pode ser pedida agora: ${stockInfo.quantidade_maxima} (para não passar do estoque mínimo).`,
-          );
-          return;
-        }
-      }
+      // Estoque mínimo é piso (nível de reposição), não teto: o Omie não limita
+      // a quantidade pedida a ele, então aqui também não se trava a quantidade.
     } else if (draftDesc.trim().length < 5) {
       setDraftAttemptedSave(true);
       toast.error("Descrição deve ter pelo menos 5 caracteres.");
@@ -1225,14 +1209,14 @@ function ProductsPage() {
                                 </p>
                               ) : stockInfo.quantidade_maxima > 0 ? (
                                 <p className="text-xs text-center text-vp-yellow-dark font-medium">
-                                  Você pode pedir até{" "}
+                                  Faltam{" "}
                                   <span className="font-bold">{stockInfo.quantidade_maxima}</span>{" "}
-                                  unidades para atingir o estoque mínimo.
+                                  unidades para atingir o estoque mínimo (referência — a quantidade
+                                  pedida não é limitada).
                                 </p>
                               ) : (
                                 <p className="text-xs text-center text-muted-foreground">
-                                  Estoque disponível já está no mínimo ou acima — não é necessário
-                                  repor agora.
+                                  Estoque disponível já está no mínimo ou acima.
                                 </p>
                               )}
                             </div>
@@ -1266,18 +1250,10 @@ function ProductsPage() {
                             type="number"
                             min="0"
                             step="1"
-                            max={
-                              stockInfo && stockInfo.estoque_minimo > 0
-                                ? stockInfo.quantidade_maxima
-                                : undefined
-                            }
                             placeholder="0"
                             value={draftQty}
                             onChange={(e) => setDraftQty(e.target.value)}
-                            disabled={
-                              !stockInfo ||
-                              (stockInfo.estoque_minimo > 0 && stockInfo.quantidade_maxima <= 0)
-                            }
+                            disabled={!stockInfo}
                             className={cn(
                               draftAttemptedSave &&
                                 (!draftQty || parseFloat(draftQty) <= 0) &&
