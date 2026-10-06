@@ -1,7 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/features/auth/auth-context";
-import { getAnalytics, type AnalyticsPayload } from "@/features/analytics/api";
+import { getAnalytics, getApprovalsByLevel, type AnalyticsPayload } from "@/features/analytics/api";
+import type { ApprovalsByLevelResult } from "@/features/analytics/approvals-by-level";
 import { getAccessToken } from "@/lib/auth-token-client";
 import {
   BarChart3,
@@ -39,6 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -312,6 +314,185 @@ const FEED_META: Record<
     badge: "bg-slate-50 text-slate-600 border-slate-200",
   },
 };
+
+/* ────────────────────────────────────────────────
+ *  Aprovações por nível, com filtro de datas livre
+ * ──────────────────────────────────────────────── */
+
+const fmtBRLFull = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+const toDateInput = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+function datePreset(kind: "month" | "lastMonth" | "30d" | "year"): { from: string; to: string } {
+  const now = new Date();
+  if (kind === "month")
+    return {
+      from: toDateInput(new Date(now.getFullYear(), now.getMonth(), 1)),
+      to: toDateInput(now),
+    };
+  if (kind === "lastMonth") {
+    return {
+      from: toDateInput(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+      to: toDateInput(new Date(now.getFullYear(), now.getMonth(), 0)),
+    };
+  }
+  if (kind === "year")
+    return { from: toDateInput(new Date(now.getFullYear(), 0, 1)), to: toDateInput(now) };
+  const start = new Date(now);
+  start.setDate(start.getDate() - 30);
+  return { from: toDateInput(start), to: toDateInput(now) };
+}
+
+function ApprovalsByLevelCard({ module }: { module: string }) {
+  const [range, setRange] = useState(() => datePreset("30d"));
+  const [result, setResult] = useState<ApprovalsByLevelResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
+
+  const invalid = !range.from || !range.to || range.from > range.to;
+
+  useEffect(() => {
+    if (invalid) return;
+    const id = ++requestId.current;
+    setLoading(true);
+    setError(null);
+    void (async () => {
+      try {
+        const res = await getApprovalsByLevel({
+          data: { accessToken: await getAccessToken(), from: range.from, to: range.to, module },
+        });
+        if (id === requestId.current) setResult(res);
+      } catch (err) {
+        console.error("[analytics] approvals-by-level", err);
+        if (id === requestId.current) setError("Não foi possível carregar as aprovações.");
+      } finally {
+        if (id === requestId.current) setLoading(false);
+      }
+    })();
+  }, [range.from, range.to, module, invalid]);
+
+  const presets: { key: Parameters<typeof datePreset>[0]; label: string }[] = [
+    { key: "month", label: "Este mês" },
+    { key: "lastMonth", label: "Mês passado" },
+    { key: "30d", label: "Últimos 30 dias" },
+    { key: "year", label: "Este ano" },
+  ];
+
+  return (
+    <Card className="card-hover-yellow">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-semibold">Aprovações por Nível</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Quantas requisições cada nível aprovou e o valor delas, pela data da decisão
+          {module !== "Todos" ? ` · ${module}` : ""}
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="abl-from" className="text-xs">
+              De
+            </Label>
+            <Input
+              id="abl-from"
+              type="date"
+              value={range.from}
+              max={range.to || undefined}
+              onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))}
+              className="h-9 w-[150px]"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="abl-to" className="text-xs">
+              Até
+            </Label>
+            <Input
+              id="abl-to"
+              type="date"
+              value={range.to}
+              min={range.from || undefined}
+              onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))}
+              className="h-9 w-[150px]"
+            />
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {presets.map((p) => (
+              <Button
+                key={p.key}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 text-xs"
+                onClick={() => setRange(datePreset(p.key))}
+              >
+                {p.label}
+              </Button>
+            ))}
+          </div>
+          {loading && !invalid && (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          )}
+        </div>
+
+        {invalid ? (
+          <p className="text-xs text-red-600">
+            Informe um período válido (data inicial até a final).
+          </p>
+        ) : error ? (
+          <p className="text-xs text-red-600">{error}</p>
+        ) : result ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b text-muted-foreground">
+                  <th className="text-left py-2 font-medium">Nível</th>
+                  <th className="text-right py-2 font-medium">Aprovadas</th>
+                  <th className="text-right py-2 font-medium">Valor aprovado</th>
+                  <th className="text-right py-2 font-medium">Reprovadas</th>
+                  <th className="text-right py-2 font-medium">Valor reprovado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.levels.map((l) => (
+                  <tr key={l.level} className="border-b border-border/50">
+                    <td className="py-2 font-medium text-foreground">Nível {l.level}</td>
+                    <td className="py-2 text-right font-bold text-foreground">{l.approvedCount}</td>
+                    <td className="py-2 text-right text-foreground">
+                      {fmtBRLFull(l.approvedValue)}
+                    </td>
+                    <td className="py-2 text-right text-muted-foreground">{l.rejectedCount}</td>
+                    <td className="py-2 text-right text-muted-foreground">
+                      {fmtBRLFull(l.rejectedValue)}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="font-semibold">
+                  <td className="py-2 text-foreground">Total</td>
+                  <td className="py-2 text-right text-foreground">{result.totals.approvedCount}</td>
+                  <td className="py-2 text-right text-foreground">
+                    {fmtBRLFull(result.totals.approvedValue)}
+                  </td>
+                  <td className="py-2 text-right text-muted-foreground">
+                    {result.totals.rejectedCount}
+                  </td>
+                  <td className="py-2 text-right text-muted-foreground">
+                    {fmtBRLFull(result.totals.rejectedValue)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="mt-2 text-[10px] text-muted-foreground">
+              O nível é a alçada exigida pelo valor da requisição. Cada requisição conta uma vez,
+              pela decisão mais recente dela no período.
+            </p>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
 
 /* ────────────────────────────────────────────────
  *  Page Component
@@ -1009,6 +1190,8 @@ function AnalyticsPage() {
                 </CardContent>
               </Card>
             </div>
+
+            <ApprovalsByLevelCard module={moduleFilter} />
 
             {/* Quality + Efficiency + Top Buyers */}
             <div className="grid lg:grid-cols-3 gap-4">
