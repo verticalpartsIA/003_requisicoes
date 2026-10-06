@@ -10,8 +10,16 @@ import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-
 // nQtde e nQtdeRec item a item em produtos_consulta — não é preciso um
 // ConsultarPedCompra por pedido (sem N+1), então uma invocação dá conta.
 
-function omieKey() { return Deno.env.get('OMIE_APP_KEY') ?? '8463170967' }
-function omieSecret() { return Deno.env.get('OMIE_APP_SECRET') ?? '69e22b773842044fdb218178521cac59' }
+function omieKey() {
+  const v = Deno.env.get('OMIE_APP_KEY')
+  if (!v) throw new Error('Variável de ambiente obrigatória ausente: OMIE_APP_KEY')
+  return v
+}
+function omieSecret() {
+  const v = Deno.env.get('OMIE_APP_SECRET')
+  if (!v) throw new Error('Variável de ambiente obrigatória ausente: OMIE_APP_SECRET')
+  return v
+}
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)) }
 
 const REGISTROS_POR_PAGINA = 50

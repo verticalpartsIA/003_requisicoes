@@ -36,6 +36,15 @@ export function getSupabaseEnv() {
   };
 }
 
+/** Credenciais do Omie. Sem valor padrão no código: ausência vira erro claro
+ *  (lido só quando uma chamada ao Omie acontece, não na importação do módulo). */
+export function getOmieEnv() {
+  return {
+    appKey: requireEnv("OMIE_APP_KEY"),
+    appSecret: requireEnv("OMIE_APP_SECRET"),
+  };
+}
+
 export function getDefaultRequester() {
   return {
     name: getEnvValue("DEFAULT_REQUESTER_NAME") || "Operador VerticalParts",

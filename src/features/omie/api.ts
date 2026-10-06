@@ -2,13 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseRest } from "@/lib/supabase-rest";
 import { decodeHtmlEntitiesDeep } from "@/lib/html-entities";
-
-function omieKey() {
-  return process.env.OMIE_APP_KEY ?? "8463170967";
-}
-function omieSecret() {
-  return process.env.OMIE_APP_SECRET ?? "69e22b773842044fdb218178521cac59";
-}
+import { getOmieEnv } from "@/lib/env";
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -23,10 +17,11 @@ async function omiePost<T>(
   param: unknown[],
   attempt = 1,
 ): Promise<T> {
+  const { appKey, appSecret } = getOmieEnv();
   const resp = await fetch(`https://app.omie.com.br/api/v1/${endpoint}/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ call, app_key: omieKey(), app_secret: omieSecret(), param }),
+    body: JSON.stringify({ call, app_key: appKey, app_secret: appSecret, param }),
   });
   const data = (await resp.json()) as { faultstring?: string } & T;
   if (data.faultstring) {
