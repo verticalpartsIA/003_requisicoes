@@ -204,6 +204,9 @@ function ProductsPage() {
   const [justification, setJustification] = useState("");
 
   useEffect(() => {
+    // Link ?edit= / ?duplicate=: o ticket carregado do banco é a fonte da verdade;
+    // um rascunho antigo (com item em edição, índices etc.) não pode se misturar.
+    if (editTicketNumber || duplicateTicketNumber) return;
     try {
       const saved = sessionStorage.getItem(DIALOG_KEY);
       if (!saved) return;
@@ -249,6 +252,7 @@ function ProductsPage() {
     } catch {
       /* ignore */
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só na montagem
   }, []);
 
   useEffect(() => {
@@ -349,6 +353,9 @@ function ProductsPage() {
         setDeliveryDeadline(parseLocalDate(data.desired_date as string));
       }
       setTriageCompleted(true); // edição/duplicação pula triagem
+      // Descarta qualquer item em edição/rascunho de uma sessão anterior.
+      setShowAddForm(false);
+      setEditingIdx(null);
       setStep(0);
       setDialogOpen(true);
     })();
