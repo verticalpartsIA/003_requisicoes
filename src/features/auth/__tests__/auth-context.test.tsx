@@ -5,6 +5,7 @@ type AuthListener = (event: string, session: unknown) => void;
 
 const h = vi.hoisted(() => ({
   listener: null as null | ((event: string, session: unknown) => void),
+  failProfile: false,
 }));
 
 const user = { id: "user-1", email: "a@vp.com" };
