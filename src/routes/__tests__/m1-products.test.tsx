@@ -239,6 +239,48 @@ describe("M1 - Requisição de Produtos", () => {
         expect(screen.queryByPlaceholderText("Ex.: VPCON-677")).not.toBeInTheDocument();
       });
     });
+
+    // Regressão: estoque mínimo é piso, não teto. O Omie não limita a quantidade
+    // pedida a ele; o app travava em (mínimo - disponível) e impedia pedir 10
+    // de um item com mínimo 5 (VPER-1064n, físico 0, reservado 0).
+    it("Estoque: permite pedir quantidade acima do que falta para o mínimo", async () => {
+      getOmieStockPositionClient.mockResolvedValueOnce({
+        codigo: "Vper-1064n",
+        descricao: "Relé Temporizador 0,5-10 Segundos - Ref.: CCO - NCE N",
+        estoqueFisico: 0,
+        estoqueReservado: 0,
+        estoqueDisponivel: 0,
+        estoqueMinimo: 5,
+        quantidadeMaxima: 5,
+      });
+
+      const { container } = renderProductsPage();
+      await openDialog(container);
+      await user.click(await waitFor(() => screen.getByRole("button", { name: /Estoque/i })));
+      await user.click(
+        await waitFor(() => screen.getByRole("button", { name: /Adicionar produto/i })),
+      );
+      await user.type(
+        await waitFor(() => screen.getByPlaceholderText("Ex.: VPCON-677")),
+        "Vper-1064n",
+      );
+      await user.click(screen.getByRole("button", { name: /Verificar/i }));
+      await waitFor(() => {
+        expect(screen.getByText(/Faltam/i)).toBeInTheDocument();
+      });
+
+      const qtyInput = screen.getByPlaceholderText("0") as HTMLInputElement;
+      expect(qtyInput).toBeEnabled();
+      expect(qtyInput).not.toHaveAttribute("max");
+      await user.type(qtyInput, "10");
+
+      await user.click(screen.getByRole("button", { name: /^Adicionar$/i }));
+
+      await waitFor(() => {
+        expect(screen.queryByPlaceholderText("Ex.: VPCON-677")).not.toBeInTheDocument();
+      });
+      expect(screen.queryByText(/Quantidade máxima que pode ser pedida/i)).not.toBeInTheDocument();
+    });
   });
 
   /* Regras de negócio do formulário (constantes de validação documentadas).

@@ -81,9 +81,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [roleAssignments, setRoleAssignments] = useState<RoleAssignment[]>([]);
   const [isRecoverySession, setIsRecoverySession] = useState(false);
-  // Usuário cujo perfil/papéis já foram (ou estão sendo) carregados. Serve para
+  // Usuário cujo perfil/papéis JÁ foram carregados com sucesso. Serve para
   // distinguir um login de verdade de um evento de revalidação da MESMA sessão.
+  // Só é marcado depois do sucesso: se a busca falhar, o próximo evento tenta de novo.
   const loadedUserIdRef = useRef<string | null>(null);
+  // Usuário cuja busca está em andamento (descarta resultado de busca obsoleta).
+  const pendingUserIdRef = useRef<string | null>(null);
 
   const refreshProfile = async () => {
     const currentUser = (await supabaseBrowser.auth.getUser()).data.user ?? user;
@@ -121,9 +124,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(userData.user);
 
         if (userData.user) {
-          loadedUserIdRef.current = userData.user.id;
           const result = await loadProfileAndRoles(userData.user.id);
           if (!mounted) return;
+          loadedUserIdRef.current = userData.user.id;
           setProfile(result.profile);
           setRoleAssignments(result.roleAssignments);
           setRoles(result.roleAssignments.map((assignment) => assignment.role));
@@ -159,6 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!nextSession?.user) {
         loadedUserIdRef.current = null;
+        pendingUserIdRef.current = null;
         setProfile(null);
         setRoles([]);
         setRoleAssignments([]);
@@ -166,14 +170,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      loadedUserIdRef.current = nextSession.user.id;
+      const nextUserId = nextSession.user.id;
+      loadedUserIdRef.current = null;
+      pendingUserIdRef.current = nextUserId;
       setIsLoading(true);
-      void loadProfileAndRoles(nextSession.user.id)
+      void loadProfileAndRoles(nextUserId)
         .then((result) => {
-          if (!mounted) return;
+          if (!mounted || pendingUserIdRef.current !== nextUserId) return;
+          loadedUserIdRef.current = nextUserId;
           setProfile(result.profile);
           setRoleAssignments(result.roleAssignments);
           setRoles(result.roleAssignments.map((assignment) => assignment.role));
+        })
+        .catch(() => {
+          // Mantém loadedUserIdRef nulo: o próximo evento de auth tenta de novo.
         })
         .finally(() => {
           if (mounted) setIsLoading(false);

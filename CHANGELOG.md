@@ -7,6 +7,8 @@ os fixes/features mais investigativos linkam para um relatório em
 
 ## 2026-10-06
 
+- fix(auth/M1): dois achados do Codex no PR #126. (1) o `AuthProvider` marcava o usuário como carregado antes de perfil/papéis chegarem; uma falha de rede deixava a pessoa sem papéis até F5, pois os eventos seguintes eram ignorados — agora só marca após o sucesso e tenta de novo no próximo evento. (2) abrir `?edit=`/`?duplicate=` restaurava o rascunho antigo (`editingIdx`, campos do item), podendo sobrescrever item errado ou estourar índice — agora o rascunho não é restaurado nesses links e o item em edição é zerado ao carregar o ticket.
+- fix(M1): removida a trava de quantidade na requisição de Estoque. O app limitava o pedido a `mínimo − disponível`, tratando o estoque mínimo como teto, mas no Omie ele é piso (nível de reposição) e não bloqueia nada — um item com mínimo 5 não podia ser pedido em 10. Agora o campo aceita qualquer quantidade; o "faltam X para o mínimo" virou só referência. Valores mostrados (físico/reservado/disponível/mínimo) conferidos com o Omie para VPER-1064n: batem.
 - fix(auth): formulários/popups fechavam e perdiam o que foi digitado ao trocar de aba e voltar. O `supabase-js` reemite `SIGNED_IN`/`TOKEN_REFRESHED` ao voltar para a aba, e o `AuthProvider` ligava `isLoading` a cada evento, fazendo `__root.tsx` trocar o app inteiro pela tela de boot (desmontando a rota). Agora eventos do mesmo usuário só atualizam a sessão. Também passa a persistir em `sessionStorage` o item em edição do M1 (campos `draft*`, validações Omie/estoque). Ver `docs/reports/2026-10-06-formularios-perdem-estado-ao-trocar-aba.md`
 
 ## 2026-10-01

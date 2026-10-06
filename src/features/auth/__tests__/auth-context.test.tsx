@@ -5,6 +5,7 @@ type AuthListener = (event: string, session: unknown) => void;
 
 const h = vi.hoisted(() => ({
   listener: null as null | ((event: string, session: unknown) => void),
+  failProfile: false,
 }));
 
 const user = { id: "user-1", email: "a@vp.com" };
@@ -15,7 +16,10 @@ vi.mock("@/lib/supabase-browser", () => {
     const q: Record<string, unknown> = {};
     q.select = () => q;
     q.eq = () => q;
-    q.maybeSingle = () => Promise.resolve({ data, error: null });
+    q.maybeSingle = () =>
+      Promise.resolve(
+        h.failProfile ? { data: null, error: new Error("rede") } : { data, error: null },
+      );
     q.then = (resolve: (v: unknown) => unknown) => resolve({ data, error: null });
     return q;
   };
@@ -47,6 +51,7 @@ function Probe({ onRender }: { onRender: (v: ReturnType<typeof useAuth>) => void
 describe("AuthProvider — revalidação da sessão ao voltar para a aba", () => {
   beforeEach(() => {
     h.listener = null;
+    h.failProfile = false;
   });
 
   async function setup() {
@@ -89,6 +94,26 @@ describe("AuthProvider — revalidação da sessão ao voltar para a aba", () =>
 
     expect(renders.slice(before).some((r) => r.isLoading === true)).toBe(true);
     await waitFor(() => expect(renders.at(-1)?.isLoading).toBe(false));
+  });
+
+  it("se a busca de perfil falhar, o próximo evento do mesmo usuário tenta de novo", async () => {
+    h.failProfile = true;
+    const renders: ReturnType<typeof useAuth>[] = [];
+    render(
+      <AuthProvider>
+        <Probe onRender={(v) => renders.push(v)} />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(renders.at(-1)?.isLoading).toBe(false));
+    expect(renders.at(-1)?.roles).toEqual([]);
+
+    h.failProfile = false;
+    await act(async () => {
+      h.listener?.("TOKEN_REFRESHED", sessionFor("user-1", "t2"));
+    });
+
+    await waitFor(() => expect(renders.at(-1)?.roles).toContain("solicitante"));
+    expect(renders.at(-1)?.isLoading).toBe(false);
   });
 
   it("SIGNED_OUT limpa a sessão", async () => {
