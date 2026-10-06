@@ -223,6 +223,29 @@ function ProductsPage() {
       if (typeof s.deliveryLocation === "string") setDeliveryLocation(s.deliveryLocation);
       if (typeof s.urgencyLevel === "string") setUrgencyLevel(s.urgencyLevel);
       if (typeof s.justification === "string") setJustification(s.justification);
+      // Item que estava sendo digitado (ainda não adicionado à lista) e
+      // validações já feitas — sem isso, voltar à tela zerava o formulário.
+      if (typeof s.showAddForm === "boolean") setShowAddForm(s.showAddForm);
+      if (typeof s.editingIdx === "number") setEditingIdx(s.editingIdx);
+      if (typeof s.draftCode === "string") setDraftCode(s.draftCode);
+      if (typeof s.draftCodeValidated === "boolean") setDraftCodeValidated(s.draftCodeValidated);
+      if (typeof s.draftName === "string") setDraftName(s.draftName);
+      if (typeof s.draftDesc === "string") setDraftDesc(s.draftDesc);
+      if (typeof s.draftQty === "string") setDraftQty(s.draftQty);
+      if (typeof s.draftSpecs === "string") setDraftSpecs(s.draftSpecs);
+      if (typeof s.draftBrand === "string") setDraftBrand(s.draftBrand);
+      if (typeof s.draftModel === "string") setDraftModel(s.draftModel);
+      if (Array.isArray(s.draftLinks) && s.draftLinks.length > 0) {
+        setDraftLinks(s.draftLinks as string[]);
+      }
+      if (typeof s.draftSuggestion === "string") setDraftSuggestion(s.draftSuggestion);
+      if (typeof s.showDraftTechnical === "boolean") setShowDraftTechnical(s.showDraftTechnical);
+      if (s.omieResult && typeof s.omieResult === "object") {
+        setOmieResult(s.omieResult as { vendedor: string; numero: string });
+      }
+      if (s.stockInfo && typeof s.stockInfo === "object") {
+        setStockInfo(s.stockInfo as StockSnapshot);
+      }
     } catch {
       /* ignore */
     }
@@ -348,6 +371,21 @@ function ProductsPage() {
           deliveryLocation,
           urgencyLevel,
           justification,
+          showAddForm,
+          editingIdx,
+          draftCode,
+          draftCodeValidated,
+          draftName,
+          draftDesc,
+          draftQty,
+          draftSpecs,
+          draftBrand,
+          draftModel,
+          draftLinks,
+          draftSuggestion,
+          showDraftTechnical,
+          omieResult,
+          stockInfo,
         }),
       );
     } catch {
@@ -356,7 +394,23 @@ function ProductsPage() {
   }, [
     dialogOpen,
     step,
+    triageCompleted,
     items,
+    showAddForm,
+    editingIdx,
+    draftCode,
+    draftCodeValidated,
+    draftName,
+    draftDesc,
+    draftQty,
+    draftSpecs,
+    draftBrand,
+    draftModel,
+    draftLinks,
+    draftSuggestion,
+    showDraftTechnical,
+    omieResult,
+    stockInfo,
     requestKind,
     pedidoNum,
     deliveryDeadline,

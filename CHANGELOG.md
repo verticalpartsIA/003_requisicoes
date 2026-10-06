@@ -5,6 +5,10 @@ linha por entrega — para o contexto completo (logs, causa raiz, decisões),
 os fixes/features mais investigativos linkam para um relatório em
 `docs/reports/`.
 
+## 2026-10-06
+
+- fix(auth): formulários/popups fechavam e perdiam o que foi digitado ao trocar de aba e voltar. O `supabase-js` reemite `SIGNED_IN`/`TOKEN_REFRESHED` ao voltar para a aba, e o `AuthProvider` ligava `isLoading` a cada evento, fazendo `__root.tsx` trocar o app inteiro pela tela de boot (desmontando a rota). Agora eventos do mesmo usuário só atualizam a sessão. Também passa a persistir em `sessionStorage` o item em edição do M1 (campos `draft*`, validações Omie/estoque). Ver `docs/reports/2026-10-06-formularios-perdem-estado-ao-trocar-aba.md`
+
 ## 2026-10-01
 
 - fix(auth): SSO do portal vpsistema.com continuava quebrado após o fix anterior (PR #103) — aquele fix presumia que portal e VPRequisições usavam o mesmo projeto Supabase (são dois projetos diferentes, confirmado via API) e trocou o client para `@supabase/ssr`, cujo `flowType` padrão "pkce" ignora o `#access_token=` gerado pelo mecanismo de SSO que o portal já tinha (`sso-proxy` + `generateLink`/magiclink). Revertido para `createClient` simples com `flowType: "implicit"`. Ver `docs/reports/2026-10-01-sso-portal-flowtype-regressao.md`

@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 
@@ -73,6 +81,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [roleAssignments, setRoleAssignments] = useState<RoleAssignment[]>([]);
   const [isRecoverySession, setIsRecoverySession] = useState(false);
+  // Usuário cujo perfil/papéis já foram (ou estão sendo) carregados. Serve para
+  // distinguir um login de verdade de um evento de revalidação da MESMA sessão.
+  const loadedUserIdRef = useRef<string | null>(null);
 
   const refreshProfile = async () => {
     const currentUser = (await supabaseBrowser.auth.getUser()).data.user ?? user;
@@ -110,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(userData.user);
 
         if (userData.user) {
+          loadedUserIdRef.current = userData.user.id;
           const result = await loadProfileAndRoles(userData.user.id);
           if (!mounted) return;
           setProfile(result.profile);
@@ -136,7 +148,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(nextSession?.user ?? null);
       setIsRecoverySession(event === "PASSWORD_RECOVERY");
 
+      // O supabase-js reemite SIGNED_IN ao voltar para a aba e TOKEN_REFRESHED
+      // a cada renovação de token. Para o mesmo usuário isso não é um novo
+      // login: só atualiza a sessão. Ligar isLoading aqui trocaria o app
+      // inteiro pela tela de boot (__root.tsx) e desmontaria os formulários
+      // em preenchimento.
+      if (nextSession?.user && nextSession.user.id === loadedUserIdRef.current) {
+        return;
+      }
+
       if (!nextSession?.user) {
+        loadedUserIdRef.current = null;
         setProfile(null);
         setRoles([]);
         setRoleAssignments([]);
@@ -144,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      loadedUserIdRef.current = nextSession.user.id;
       setIsLoading(true);
       void loadProfileAndRoles(nextSession.user.id)
         .then((result) => {
