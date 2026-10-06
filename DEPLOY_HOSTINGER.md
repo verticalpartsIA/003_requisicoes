@@ -82,9 +82,14 @@ DEFAULT_REQUESTER_EMAIL=operador@verticalparts.com.br
 DEFAULT_REQUESTER_DEPARTMENT=Compras
 ```
 
+**Obrigatórias para o Omie** (sem valor padrão no código — sem elas as telas que consultam o
+Omie, como a verificação de código/estoque no M1, falham com erro claro):
+`OMIE_APP_KEY` e `OMIE_APP_SECRET`. Nas Edge Functions `sync-omie-*` do Supabase, as mesmas
+duas variáveis precisam existir como *secrets* da função.
+
 **Opcionais** (têm valor padrão fixo no código — só sobrescreva se precisar):
 `VITE_TRACK_ACTIVITY_KEY`, `EVOLUTION_URL`/`EVOLUTION_APIKEY`/`EVOLUTION_INSTANCE`
-(WhatsApp do Quadro de Comando), `OMIE_APP_KEY`/`OMIE_APP_SECRET`,
+(WhatsApp do Quadro de Comando),
 `VPCLICK_URL`/`VPCLICK_SERVICE_KEY`/`VPCLICK_LIST_ID`, `VPREQ_BASE_URL`.
 
 Notas:
