@@ -2,6 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseRest } from "@/lib/supabase-rest";
 import { verifyAccessToken } from "@/lib/server-auth";
+import {
+  aggregateApprovalsByLevel,
+  brtRange,
+  type ApprovalDecisionRow,
+  type ApprovalsByLevelResult,
+} from "./approvals-by-level";
 
 /* ────────────────────────────────────────────────
  * Metas de SLA por estágio (horas). Config de negócio,
@@ -731,4 +737,39 @@ export const getAnalytics = createServerFn({ method: "POST" })
       live,
       generatedAt: now.toISOString(),
     };
+  });
+
+/** Aprovações/reprovações por nível (alçada) numa janela de datas livre. */
+export const getApprovalsByLevel = createServerFn({ method: "POST" })
+  .inputValidator(
+    z
+      .object({
+        accessToken: z.string().min(1),
+        from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        module: z.string().default("Todos"),
+      })
+      .refine((v) => v.from <= v.to, { message: "A data inicial deve ser anterior à final." }),
+  )
+  .handler(async ({ data }): Promise<ApprovalsByLevelResult> => {
+    await verifyAccessToken(data.accessToken);
+    const { startIso, endIso } = brtRange(data.from, data.to);
+
+    const [approvalsResp, reqsResp] = await Promise.all([
+      supabaseRest<ApprovalDecisionRow[]>(
+        `approvals?select=requisition_id,approval_level,total_value,decision,decided_at` +
+          `&decision=in.(approved,rejected)` +
+          `&decided_at=gte.${encodeURIComponent(startIso)}&decided_at=lte.${encodeURIComponent(endIso)}` +
+          `&limit=10000`,
+      ),
+      supabaseRest<{ id: string; module: string }[]>(`requisitions?select=id,module&limit=10000`),
+    ]);
+
+    const moduleById = new Map((reqsResp.data ?? []).map((r) => [r.id, r.module]));
+    return aggregateApprovalsByLevel(approvalsResp.data ?? [], {
+      startIso,
+      endIso,
+      module: data.module,
+      moduleOf: (id) => moduleById.get(id),
+    });
   });
