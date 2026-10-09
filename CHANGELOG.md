@@ -5,6 +5,10 @@ linha por entrega — para o contexto completo (logs, causa raiz, decisões),
 os fixes/features mais investigativos linkam para um relatório em
 `docs/reports/`.
 
+## 2026-10-09
+
+- feat(central-eventos): o aviso de SLA passa a ser publicado também na Central de Eventos (vpsistema.com/eventos) como `requisicao.sla_vencida`, **em modo sombra**: o WhatsApp do SLA (035) continua saindo exatamente como antes; a Central só registra e simula, para comparar durante 7 dias úteis antes de qualquer troca. `database/037_central_eventos_outbox.sql`: trigger em `sla_notifications` copia cada aviso para a caixa de saída `central_eventos_outbox` (nunca falha o job de SLA); `private.central_eventos_publicar()` (pg_cron, a cada minuto) assina (HMAC-SHA256 de `timestamp.corpo`) e envia via `pg_net` à API `eventos-ingest`, confere as respostas e tenta de novo com espera crescente (até 8 vezes; 400/401/403/404/413 são definitivos). O evento leva ticket, título, etapa, e-mail do requisitante e o resultado do envio legado; telefone não sai. **Desligada até configurar o segredo** (`select vault.create_secret('<segredo>', 'central_eventos_segredo')`, mesmo valor cadastrado na Central como `eventos_hmac_vprequisicoes`). Testada em branch descartável do Supabase com a função real da Central: evento entregue e gravado; chave com acento rejeitada com erro legível (corrigida no trigger).
+
 ## 2026-10-06
 
 - feat(analytics): novo cartão "Aprovações por Nível" na aba Executivo de `/analytics` — quantas requisições o Nível 1, 2 e 3 aprovaram (e reprovaram) e o valor delas, com filtro de datas livre (De/Até + atalhos) e respeitando o filtro de módulo. Nível = `approval_level` (alçada exigida pelo valor); cada requisição conta uma vez, pela decisão mais recente no período; datas em horário de Brasília. Agregação em `src/features/analytics/approvals-by-level.ts` (testada) e função de servidor `getApprovalsByLevel`.
