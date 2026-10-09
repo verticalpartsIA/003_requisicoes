@@ -141,10 +141,17 @@ begin
     if not found then
       -- resposta ainda não chegou (ou já foi expurgada pelo pg_net): espera até 10 min
       if r.proxima_tentativa_em < now() - interval '10 minutes' then
-        update public.central_eventos_outbox
-           set status = 'pendente', ultimo_erro = 'sem resposta do pg_net',
-               proxima_tentativa_em = now()
-         where id = r.id;
+        if r.tentativas >= 8 then
+          update public.central_eventos_outbox
+             set status = 'falha',
+                 ultimo_erro = 'desistiu após ' || r.tentativas || ' tentativas sem resposta do pg_net'
+           where id = r.id;
+        else
+          update public.central_eventos_outbox
+             set status = 'pendente', ultimo_erro = 'sem resposta do pg_net',
+                 proxima_tentativa_em = now()
+           where id = r.id;
+        end if;
       end if;
       continue;
     end if;
