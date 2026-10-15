@@ -408,6 +408,15 @@ function QuotingPage() {
     try {
       await returnQuotationForInfoClient(returnItem.requisitionId, returnReason.trim());
       toast.success("Requisição devolvida ao solicitante.");
+      void notifyWhatsappClient({
+        stage: "REQUISITANTE_DEVOLVIDO_INFO",
+        requisitionId: returnItem.requisitionId,
+        ticketNumber: returnItem.ticketNumber,
+        title: returnItem.title,
+        module: returnItem.module,
+        requesterName: "",
+        rejectionReason: returnReason.trim(),
+      }).catch(console.warn);
       closeReturnDialog();
       setQueue(await listQuotationQueueClient());
       await router.invalidate();

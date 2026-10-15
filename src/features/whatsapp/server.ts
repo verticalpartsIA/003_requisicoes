@@ -18,6 +18,7 @@ import { z } from "zod";
 import { supabaseRest } from "@/lib/supabase-rest";
 import { getApprovalLevelForValue, DEFAULT_TIER_THRESHOLDS } from "@/lib/approval";
 import { buildPartialApprovalMessage } from "@/features/whatsapp/partial-approval";
+import { buildReturnedForInfoMessage } from "@/features/whatsapp/returned-for-info";
 import {
   createApprovalQuickLink,
   QUICK_LINK_TTL_HOURS,
@@ -245,6 +246,7 @@ const notifySchema = z.object({
     "COMPRA_APROVADA",
     "REQUISITANTE_CIENCIA_OK",
     "REQUISITANTE_REPROVADO_GESTOR",
+    "REQUISITANTE_DEVOLVIDO_INFO",
     "REQUISITANTE_APROVADO_FINANCEIRO",
     "REQUISITANTE_REPROVADO_FINANCEIRO",
     "REQUISITANTE_APROVADO_PARCIAL",
@@ -374,6 +376,17 @@ export const notifyWhatsappStage = createServerFn({ method: "POST" })
           `Sua requisição *${ticketNumber}* foi reprovada pelo seu gestor.\n\n${title}\n\n` +
           `Motivo: ${rejectionReason || "não informado"}\n\n` +
           `Se for o caso de ajustar alguma pendência, você pode editar e reenviar.`;
+        await sendToAll(numbers, text, ctx);
+      } else if (stage === "REQUISITANTE_DEVOLVIDO_INFO") {
+        // O front da Cotação não conhece o perfil do solicitante — resolve pela requisição.
+        const reqId = requesterId ?? (await resolveRequesterProfileId(requisitionId));
+        const numbers = await getWhatsappNumbers(reqId ? [reqId] : []);
+        const text = buildReturnedForInfoMessage({
+          ticketNumber,
+          title,
+          reason: rejectionReason,
+          baseUrl: base,
+        });
         await sendToAll(numbers, text, ctx);
       } else if (stage === "REQUISITANTE_APROVADO_FINANCEIRO") {
         const numbers = await getWhatsappNumbers(requesterId ? [requesterId] : []);

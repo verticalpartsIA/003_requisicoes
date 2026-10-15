@@ -25,10 +25,11 @@ Os links de ciência e de aprovação por alçada chegam, os donos veem, e eles 
 | Correção de preço (reaprovação) | `APROVACAO_PENDENTE` ✔ **(novo)** |
 | Aprovação total / parcial / reprovação (sistema e link) | `COMPRA_APROVADA` + `REQUISITANTE_*` ✔ |
 | Edição após reprovação/devolução → Cotação | `COMPRADOR_COTAR` ✔ **(novo)** |
+| Cotação devolvida por falta de informação | `REQUISITANTE_DEVOLVIDO_INFO` ✔ **(novo)** |
 | Compra / recebimento | `REQUISITANTE_COMPRADO` / `EXPEDICAO_RECEBIMENTO` ✔ |
 
 ## Pendências (não alteradas, decisão do Gelson)
-- **Devolução por falta de informação** (`returnQuotationForInfoClient`): o solicitante não recebe WhatsApp (não existe estágio para isso).
+- ~~**Devolução por falta de informação** (`returnQuotationForInfoClient`): o solicitante não recebe WhatsApp.~~ **Resolvido** (mesmo dia): novo estágio `REQUISITANTE_DEVOLVIDO_INFO`, disparado em `quoting.tsx` após a devolução; mensagem em `src/features/whatsapp/returned-for-info.ts`.
 - **Reprovação do gestor seguida de edição**: o ticket continua `REJEITADO` (comentado como fora de escopo em `requisitions/api.ts`); nenhum aviso sai.
 - **Destinatários de `APROVACAO_PENDENTE`**: só aprovadores com `approval_tier` **exatamente** igual ao nível; o banco, ao decidir, aceita tier ≥ nível, e admins não recebem. Ex.: Diego (nível 3) decidiu uma aprovação de nível 2 sem ter sido avisado.
 - Token de teste emitido na investigação (aprovação M1-000241, usuário Gelson): expira sozinho; apagar de `approval_quick_links` se preferir.
