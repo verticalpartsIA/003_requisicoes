@@ -3,6 +3,7 @@ import { friendlySupabaseError } from "@/lib/supabase-error";
 import type { TicketRow } from "@/components/tickets-table";
 import { updateRequisition, deleteRequisition } from "@/features/requisitions/api";
 import { getAccessToken } from "@/lib/auth-token-client";
+import { notifyWhatsappClient } from "@/features/whatsapp/client";
 
 export interface UpdateRequisitionInput {
   requisitionId: string;
@@ -17,6 +18,18 @@ export interface UpdateRequisitionInput {
 
 export async function updateRequisitionClient(input: UpdateRequisitionInput) {
   const result = await updateRequisition({ data: input });
+  if (result.resumedToQuotation) {
+    // Reenvio após reprovação/devolução: o ticket voltou para a Cotação (mesmo
+    // gatilho de quando o gestor dá a ciência), então o cotador recebe o aviso.
+    void notifyWhatsappClient({
+      stage: "COMPRADOR_COTAR",
+      requisitionId: input.requisitionId,
+      ticketNumber: result.ticketNumber,
+      title: input.title,
+      module: result.module,
+      requesterName: "", // o servidor resolve o solicitante real (o editor pode ser outra pessoa)
+    }).catch(console.warn);
+  }
   return result;
 }
 

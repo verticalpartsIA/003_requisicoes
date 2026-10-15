@@ -3,7 +3,7 @@
  *
  * O aprovador recebe um link `/aprovar/<token>` no WhatsApp e decide o ticket
  * inteiro (aprovar tudo / reprovar tudo) direto no celular, sem login. Regras
- * de segurança (token aleatório com só o hash no banco, uso único, 4h,
+ * de segurança (token aleatório com só o hash no banco, uso único, 24h,
  * amarrado a aprovação+aprovador, alçada revalidada) vivem em
  * database/036_approval_quick_links.sql — aqui só emitimos o token e
  * chamamos a função de decisão.
@@ -54,7 +54,7 @@ export const getQuickApproval = createServerFn({ method: "GET" })
     if (new Date(link.expires_at).getTime() < Date.now()) {
       return {
         status: "expired",
-        message: "Este link expirou (validade de 4 horas). Abra o sistema para decidir.",
+        message: "Este link expirou (validade de 24 horas). Abra o sistema para decidir.",
       };
     }
 

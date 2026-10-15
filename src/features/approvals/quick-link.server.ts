@@ -8,7 +8,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { supabaseRest } from "@/lib/supabase-rest";
 
-export const QUICK_LINK_TTL_HOURS = 4;
+export const QUICK_LINK_TTL_HOURS = 24;
 
 export function hashQuickToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");

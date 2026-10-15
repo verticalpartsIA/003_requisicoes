@@ -228,7 +228,9 @@ function AprovarRapidoPage() {
                   abra no sistema
                 </a>
                 . Link válido até{" "}
-                {new Date(preview.expiresAt).toLocaleTimeString("pt-BR", {
+                {new Date(preview.expiresAt).toLocaleString("pt-BR", {
+                  day: "2-digit",
+                  month: "2-digit",
                   hour: "2-digit",
                   minute: "2-digit",
                 })}

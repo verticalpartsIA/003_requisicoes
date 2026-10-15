@@ -114,7 +114,15 @@ export const updateRequisition = createServerFn({ method: "POST" })
       ],
     });
 
-    return { ok: true, edition: newEdition, ticketNumber };
+    return {
+      ok: true,
+      edition: newEdition,
+      ticketNumber,
+      module: rec?.module ?? "",
+      // true quando a edição devolveu o ticket à fila de Cotação (reprovação na
+      // Aprovação ou devolução por falta de informação) — o cotador precisa ser avisado.
+      resumedToQuotation: resumeStatus === "ABERTO",
+    };
   });
 
 // ─── Excluir requisição (somente admin) ───────────────────────────────────────
