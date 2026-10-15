@@ -144,9 +144,28 @@ function AprovarRapidoPage() {
               {preview.suppliers.length > 0 && (
                 <ul className="space-y-1 text-sm">
                   {preview.suppliers.map((s, i) => (
-                    <li key={`${s.name}-${i}`} className="flex justify-between gap-3">
-                      <span>{s.name}</span>
-                      <span className="font-medium">{brl(s.price)}</span>
+                    <li key={`${s.name}-${i}`} className="space-y-0.5">
+                      {s.itemDescription && (
+                        <p className="text-xs text-muted-foreground">
+                          {s.itemDescription}
+                          {s.quantity != null && ` — qtd. ${s.quantity.toLocaleString("pt-BR")}`}
+                        </p>
+                      )}
+                      <div className="flex justify-between gap-3">
+                        <span>{s.name}</span>
+                        <span className="font-medium">{brl(s.price)}</span>
+                      </div>
+                      {s.unitPrice != null && (
+                        <p className="text-xs text-muted-foreground text-right">
+                          {brl(s.unitPrice)} por unidade
+                        </p>
+                      )}
+                      {s.priceWarning && (
+                        <p className="flex items-start gap-1 text-xs text-destructive">
+                          <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                          Valor unitário {s.priceWarning}. Confira antes de aprovar.
+                        </p>
+                      )}
                     </li>
                   ))}
                 </ul>

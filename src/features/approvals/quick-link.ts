@@ -13,7 +13,19 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSupabaseEnv } from "@/lib/env";
 import { hashQuickToken } from "@/features/approvals/quick-link.server";
+import { describeOutlier, findPriceOutliers } from "@/features/quotations/price-outlier";
 import { supabaseRest } from "@/lib/supabase-rest";
+
+export interface QuickApprovalSupplier {
+  name: string;
+  /** Total da linha (valor unitário × quantidade). */
+  price: number;
+  itemDescription: string | null;
+  quantity: number | null;
+  unitPrice: number | null;
+  /** Texto de alerta quando o unitário foge das outras propostas do item. */
+  priceWarning: string | null;
+}
 
 export type QuickApprovalPreview =
   | { status: "invalid" | "expired" | "used" | "decided" | "not_pending"; message: string }
@@ -30,13 +42,53 @@ export type QuickApprovalPreview =
       totalValue: number;
       approvalLevel: number;
       itemCount: number;
-      suppliers: { name: string; price: number }[];
+      suppliers: QuickApprovalSupplier[];
     };
 
 interface LinkRow {
   approval_id: string;
   expires_at: string;
   used_at: string | null;
+}
+
+interface BidRow {
+  supplier_name: string;
+  price: number | null;
+  item_id: string | null;
+  is_winner: boolean;
+}
+
+/** Monta a lista de vencedores com item, quantidade e valor unitário. */
+export function buildQuickApprovalSuppliers(
+  bids: BidRow[],
+  items: { id: string; description: string | null; quantity: number | null }[],
+): QuickApprovalSupplier[] {
+  const itemById = new Map(items.map((it) => [it.id, it]));
+  return bids
+    .filter((b) => b.is_winner)
+    .map((b) => {
+      const item = b.item_id ? itemById.get(b.item_id) : undefined;
+      const quantity = item?.quantity != null ? Number(item.quantity) : null;
+      const price = Number(b.price ?? 0);
+      const unitPrice = quantity && quantity > 0 ? price / quantity : null;
+
+      let priceWarning: string | null = null;
+      if (item && unitPrice != null) {
+        const sameItem = bids.filter((o) => o.item_id === b.item_id);
+        const unitPrices = sameItem.map((o) => (quantity ? Number(o.price ?? 0) / quantity : 0));
+        const outlier = findPriceOutliers(unitPrices).find((o) => sameItem[o.index] === b);
+        if (outlier) priceWarning = describeOutlier(outlier.ratio);
+      }
+
+      return {
+        name: b.supplier_name,
+        price,
+        itemDescription: item?.description ?? null,
+        quantity,
+        unitPrice,
+        priceWarning,
+      };
+    });
 }
 
 const tokenSchema = z.object({ token: z.string().min(20).max(200) });
@@ -97,11 +149,22 @@ export const getQuickApproval = createServerFn({ method: "GET" })
     const itemsResp = await supabaseRest<{ id: string }[]>(
       `approval_items?select=id&approval_id=eq.${approval.id}`,
     );
-    const suppliersResp = approval.quotation_id
-      ? await supabaseRest<{ supplier_name: string; price: number | null }[]>(
-          `quotation_suppliers?select=supplier_name,price&quotation_id=eq.${approval.quotation_id}&is_winner=eq.true`,
+    // Todas as propostas (não só as vencedoras): servem de base para avisar
+    // quando o preço vencedor foge das demais do mesmo item.
+    const bidsResp = approval.quotation_id
+      ? await supabaseRest<BidRow[]>(
+          `quotation_suppliers?select=supplier_name,price,item_id,is_winner&quotation_id=eq.${approval.quotation_id}`,
         )
-      : { data: [] as { supplier_name: string; price: number | null }[] };
+      : { data: [] as BidRow[] };
+    const itemIds = [
+      ...new Set(bidsResp.data.map((b) => b.item_id).filter((id): id is string => !!id)),
+    ];
+    const reqItemsResp = itemIds.length
+      ? await supabaseRest<{ id: string; description: string | null; quantity: number | null }[]>(
+          `requisition_items?select=id,description,quantity&id=in.(${itemIds.join(",")})`,
+        )
+      : { data: [] as { id: string; description: string | null; quantity: number | null }[] };
+    const suppliers = buildQuickApprovalSuppliers(bidsResp.data, reqItemsResp.data);
 
     return {
       status: "ok",
@@ -116,7 +179,7 @@ export const getQuickApproval = createServerFn({ method: "GET" })
       totalValue: approval.total_value ?? 0,
       approvalLevel: approval.approval_level,
       itemCount: itemsResp.data.length,
-      suppliers: suppliersResp.data.map((s) => ({ name: s.supplier_name, price: s.price ?? 0 })),
+      suppliers,
     };
   });
 

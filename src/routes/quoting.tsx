@@ -71,6 +71,7 @@ import {
 } from "@/features/quotations/client";
 import { useAuth } from "@/features/auth/auth-context";
 import { parseBRLNumber } from "@/lib/number";
+import { describeOutlier, findPriceOutliers } from "@/features/quotations/price-outlier";
 import { getM5SummaryItems } from "@/lib/m5-freight-summary";
 
 type QuotationStatus =
@@ -81,6 +82,9 @@ type QuotationStatus =
   | "completed";
 type WinCriteria = "price" | "deadline" | "price_deadline";
 type Phase = "suppliers" | "proposals" | "winner";
+/** Quantos campos de fornecedor a cotação M1 mostra de início (o comprador pode
+ *  adicionar ou remover). */
+const M1_MIN_SUPPLIER_SLOTS = 3;
 /** Uma proposta de fornecedor para um item específico, na cotação fracionada
  *  do M1 (fase "propostas por item"). O preço aqui é sempre o UNITÁRIO
  *  digitado pelo comprador — a multiplicação pela quantidade só acontece na
@@ -177,10 +181,12 @@ function QuotingPage() {
   >({});
   const [isM2Saving, setIsM2Saving] = useState(false);
 
-  // M1 fracionado — comparação de até 3 fornecedores por item (compartilha
+  // M1 fracionado — comparação de N fornecedores por item (compartilha
   // o diálogo/m2Item com o M2, mas com fases e dados próprios)
   const [m1Phase, setM1Phase] = useState<M1Phase>("suppliers");
-  const [m1Suppliers, setM1Suppliers] = useState<string[]>(["", "", ""]);
+  const [m1Suppliers, setM1Suppliers] = useState<string[]>(
+    Array.from({ length: M1_MIN_SUPPLIER_SLOTS }, () => ""),
+  );
   const [m1Bids, setM1Bids] = useState<Record<string, ItemBidSlot[]>>({});
   const [m1Winners, setM1Winners] = useState<Record<string, number | null>>({});
   const [m1WinCriteria, setM1WinCriteria] = useState<WinCriteria>("price");
@@ -289,21 +295,21 @@ function QuotingPage() {
     }
 
     if (item.travelItems && item.travelItems.length > 0) {
-      // M1 multi-itens: até 3 fornecedores cotam os mesmos produtos, e cada
+      // M1 multi-itens: vários fornecedores cotam os mesmos produtos, e cada
       // item pode ter um vencedor diferente (um vence em preço, outro em
-      // prazo) — fraciona a compra entre eles. Reconstrói até 3 nomes de
+      // prazo) — fraciona a compra entre eles. Reconstrói os nomes de
       // fornecedor a partir de TODAS as propostas já salvas (não só a
       // vencedora), para permitir reabrir e comparar de novo.
       const items = item.travelItems;
       const namesInOrder: string[] = [];
       items.forEach((ti) => {
         (ti.bids || []).forEach((b) => {
-          if (b.supplierName && !namesInOrder.includes(b.supplierName) && namesInOrder.length < 3) {
+          if (b.supplierName && !namesInOrder.includes(b.supplierName)) {
             namesInOrder.push(b.supplierName);
           }
         });
       });
-      while (namesInOrder.length < 3) namesInOrder.push("");
+      while (namesInOrder.length < M1_MIN_SUPPLIER_SLOTS) namesInOrder.push("");
 
       const bids: Record<string, ItemBidSlot[]> = {};
       const winners: Record<string, number | null> = {};
@@ -615,10 +621,55 @@ function QuotingPage() {
     }
   };
 
-  // ─── M1 fracionado: comparação de até 3 fornecedores por item ───────────
+  // ─── M1 fracionado: comparação de N fornecedores por item ───────────────
 
   const updateM1SupplierName = (index: number, name: string) => {
     setM1Suppliers((prev) => prev.map((n, i) => (i === index ? name : n)));
+  };
+
+  const addM1Supplier = () => {
+    setM1Suppliers((prev) => [...prev, ""]);
+    // Mantém todo array de propostas com o mesmo tamanho da lista de
+    // fornecedores, senão o slot novo ficaria undefined ao digitar o preço.
+    setM1Bids((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).map(([itemId, slots]) => [
+          itemId,
+          [...slots, { price: "", deadline: "", notes: "" }],
+        ]),
+      ),
+    );
+  };
+
+  // As propostas removidas somem do banco ao finalizar (saveM1ItemBidsClient
+  // apaga o que não vier mais no payload), então é seguro remover aqui.
+  const removeM1Supplier = (index: number) => {
+    setM1Suppliers((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
+    setM1Bids((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).map(([itemId, slots]) => [
+          itemId,
+          slots.filter((_, i) => i !== index),
+        ]),
+      ),
+    );
+    setM1Winners((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).map(([itemId, winner]) => [
+          itemId,
+          winner == null || winner === index ? null : winner > index ? winner - 1 : winner,
+        ]),
+      ),
+    );
+  };
+
+  // Propostas com valor unitário muito fora das outras do mesmo item
+  // (índice do fornecedor → texto do aviso). Ver price-outlier.ts.
+  const m1OutliersFor = (itemId: string): Map<number, string> => {
+    const prices = m1Suppliers.map((name, idx) =>
+      name.trim() ? parseFloat(m1Bids[itemId]?.[idx]?.price || "") || 0 : 0,
+    );
+    return new Map(findPriceOutliers(prices).map((o) => [o.index, describeOutlier(o.ratio)]));
   };
 
   // Nomes duplicados (mesmo só diferindo por espaços) quebram a reconstrução
@@ -714,6 +765,18 @@ function QuotingPage() {
         toast.error(`Selecione o fornecedor vencedor para: ${itemLabel(ti)}`);
         return;
       }
+    }
+
+    const suspectWinners = m1Items.filter((ti) => {
+      const idx = m1Winners[ti.id];
+      return idx != null && m1OutliersFor(ti.id).has(idx);
+    });
+    if (suspectWinners.length > 0) {
+      const lista = suspectWinners.map((ti) => `• ${itemLabel(ti)}`).join("\n");
+      const ok = window.confirm(
+        `O valor unitário do vencedor está muito fora das outras propostas em:\n${lista}\n\nConfirma que os valores estão corretos?`,
+      );
+      if (!ok) return;
     }
 
     setIsM2Saving(true);
@@ -1322,7 +1385,7 @@ function QuotingPage() {
                 {m1Phase === "suppliers" && (
                   <div className="space-y-4 mt-2">
                     <p className="text-sm text-muted-foreground">
-                      Cadastre até <strong>3 fornecedores</strong> para cotar os {m1Items.length}{" "}
+                      Cadastre os <strong>fornecedores</strong> para cotar os {m1Items.length}{" "}
                       item(ns) deste pedido. Na próxima etapa você registra o preço de cada um por
                       item — fornecedores diferentes podem vencer itens diferentes.
                     </p>
@@ -1332,13 +1395,29 @@ function QuotingPage() {
                           Fornecedor {idx + 1}
                           {idx > 0 ? " (opcional)" : ""}
                         </Label>
-                        <Input
-                          placeholder="Ex: ABC Ltda"
-                          value={name}
-                          onChange={(e) => updateM1SupplierName(idx, e.target.value)}
-                        />
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Ex: ABC Ltda"
+                            value={name}
+                            onChange={(e) => updateM1SupplierName(idx, e.target.value)}
+                          />
+                          {m1Suppliers.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Remover fornecedor ${idx + 1}`}
+                              onClick={() => removeM1Supplier(idx)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     ))}
+                    <Button type="button" variant="outline" size="sm" onClick={addM1Supplier}>
+                      <Plus className="h-4 w-4 mr-1" /> Adicionar fornecedor
+                    </Button>
                     {hasDuplicateM1SupplierNames && (
                       <p className="text-xs text-destructive">
                         Não repita o nome de um fornecedor — use nomes diferentes para cada um.
@@ -1365,58 +1444,67 @@ function QuotingPage() {
                       Informe o valor unitário e o prazo de cada fornecedor para cada item. Deixe em
                       branco quem não cotou aquele item.
                     </p>
-                    {m1Items.map((ti) => (
-                      <Card key={ti.id} className="border border-border">
-                        <CardContent className="p-3 space-y-2">
-                          <div className="text-xs">
-                            {ti.productCode && (
-                              <span className="font-mono text-muted-foreground mr-1">
-                                [{ti.productCode}]
+                    {m1Items.map((ti) => {
+                      const outliers = m1OutliersFor(ti.id);
+                      return (
+                        <Card key={ti.id} className="border border-border">
+                          <CardContent className="p-3 space-y-2">
+                            <div className="text-xs">
+                              {ti.productCode && (
+                                <span className="font-mono text-muted-foreground mr-1">
+                                  [{ti.productCode}]
+                                </span>
+                              )}
+                              <span className="font-semibold text-foreground">
+                                {ti.description || "Item"}
                               </span>
-                            )}
-                            <span className="font-semibold text-foreground">
-                              {ti.description || "Item"}
-                            </span>
-                            {ti.quantity != null && (
-                              <span className="text-muted-foreground"> — qtd. {ti.quantity}</span>
-                            )}
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            {m1Suppliers.map((name, idx) =>
-                              name.trim() ? (
-                                <div
-                                  key={idx}
-                                  className="rounded-md border border-border p-2 space-y-1"
-                                >
-                                  <p className="text-[11px] font-semibold text-foreground truncate">
-                                    {name}
-                                  </p>
-                                  <Input
-                                    className="h-7 text-xs"
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    placeholder="Valor unit. (R$)"
-                                    value={m1Bids[ti.id]?.[idx]?.price || ""}
-                                    onChange={(e) =>
-                                      updateM1Bid(ti.id, idx, "price", e.target.value)
-                                    }
-                                  />
-                                  <Input
-                                    className="h-7 text-xs"
-                                    type="date"
-                                    value={m1Bids[ti.id]?.[idx]?.deadline || ""}
-                                    onChange={(e) =>
-                                      updateM1Bid(ti.id, idx, "deadline", e.target.value)
-                                    }
-                                  />
-                                </div>
-                              ) : null,
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+                              {ti.quantity != null && (
+                                <span className="text-muted-foreground"> — qtd. {ti.quantity}</span>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              {m1Suppliers.map((name, idx) =>
+                                name.trim() ? (
+                                  <div
+                                    key={idx}
+                                    className="rounded-md border border-border p-2 space-y-1"
+                                  >
+                                    <p className="text-[11px] font-semibold text-foreground truncate">
+                                      {name}
+                                    </p>
+                                    <Input
+                                      className="h-7 text-xs"
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      placeholder="Valor unit. (R$)"
+                                      value={m1Bids[ti.id]?.[idx]?.price || ""}
+                                      onChange={(e) =>
+                                        updateM1Bid(ti.id, idx, "price", e.target.value)
+                                      }
+                                    />
+                                    <Input
+                                      className="h-7 text-xs"
+                                      type="date"
+                                      value={m1Bids[ti.id]?.[idx]?.deadline || ""}
+                                      onChange={(e) =>
+                                        updateM1Bid(ti.id, idx, "deadline", e.target.value)
+                                      }
+                                    />
+                                    {outliers.has(idx) && (
+                                      <p className="flex items-start gap-1 text-[11px] text-destructive">
+                                        <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                                        Valor unitário {outliers.get(idx)}. Confira a digitação.
+                                      </p>
+                                    )}
+                                  </div>
+                                ) : null,
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
                     <DialogFooter>
                       <Button variant="ghost" onClick={() => setM1Phase("suppliers")}>
                         Voltar
@@ -1462,6 +1550,7 @@ function QuotingPage() {
                     </div>
                     {m1Items.map((ti) => {
                       const slots = m1Bids[ti.id] || [];
+                      const outliers = m1OutliersFor(ti.id);
                       return (
                         <Card key={ti.id} className="border border-border">
                           <CardContent className="p-3 space-y-2">
@@ -1506,6 +1595,12 @@ function QuotingPage() {
                                       {price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                                       /un. · {slot?.deadline || "sem prazo"}
                                     </p>
+                                    {outliers.has(idx) && (
+                                      <p className="flex items-start gap-1 text-[11px] text-destructive mt-1">
+                                        <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                                        {outliers.get(idx)}
+                                      </p>
+                                    )}
                                   </button>
                                 );
                               })}

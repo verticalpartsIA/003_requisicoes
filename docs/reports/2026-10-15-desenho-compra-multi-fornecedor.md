@@ -15,9 +15,8 @@ cada um com forma de pagamento e observações próprias.
 
 O preço gravado em `quotation_suppliers.price` é o **total da linha** (valor unitário digitado × quantidade,
 `quoting.tsx:733`). O M1-000221 mostra o risco: o cabo 3×0,75 saiu a R$ 299 e R$ 437 por unidade, 100× o
-esperado nas duas propostas, o que sugere erro de digitação. Em `quoting.tsx:726` o valor unitário é lido com
-`parseFloat` (que lê "4,37" como 4), enquanto o fluxo de correção usa `parseBRLNumber` (`quoting.tsx:536`).
-**A confirmar** se isso contribuiu para o caso.
+esperado nas duas propostas, o que sugere erro de digitação. O campo do valor unitário é `type="number"`, que já normaliza a vírgula, então `parseFloat` **não** é a causa
+(correção da hipótese inicial); o erro de 100× é de digitação.
 
 ## 2. Modelo proposto
 
@@ -258,7 +257,7 @@ $$;
 - Por proposta, além de valor unitário e prazo: **quantidade ofertada** (vazio = tudo) e **condição de pagamento**.
 - Vencedor por item passa a aceitar **mais de um fornecedor**: o comprador marca a quantidade de cada um
   (ex.: Santil 3 rolos + Norte 97). O sistema avisa se a soma ≠ quantidade pedida.
-- **Validação de preço:** ler o valor com `parseBRLNumber`, não `parseFloat`; alertar quando a proposta
+- **Validação de preço:** alertar quando a proposta
   estiver > 3× ou < 1/3 da mediana das outras propostas do item ou do último preço comprado (Omie), exigindo
   confirmação. Teria sinalizado o cabo 3×0,75 do M1-000221 antes de chegar ao aprovador.
 
@@ -311,7 +310,7 @@ Não alocado: nenhum item ✔        Total dos pedidos R$ 37.272,10 = aprovado �
 
 ## 5. Fases
 
-1. **Rápida (sem migração):** remover o limite de 3 na cotação, trocar `parseFloat` por `parseBRLNumber`, alerta
+1. **Rápida (sem migração):** remover o limite de 3 na cotação, alerta
    de preço fora do padrão, item e quantidade na lista de fornecedores da aprovação rápida.
 2. **Principal:** migração 039, `confirm_purchase_orders`, nova tela de Compra, PDF e auditoria.
 3. **Fechamento:** recebimento por pedido, cotação com quantidade ofertada / vários vencedores por item,
