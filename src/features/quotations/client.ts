@@ -825,6 +825,9 @@ export async function correctQuotationPriceClient(
   });
   if (secondLogError)
     console.warn("[audit_logs] APPROVAL_REQUESTED failed:", secondLogError.message);
+
+  // O chamador usa o novo total para avisar a alçada certa (APROVACAO_PENDENTE).
+  return { newTotal, newApprovalLevel };
 }
 
 async function saveItemQuotes(

@@ -232,12 +232,23 @@ function QuotingPage() {
         supplierId: w.supplierId,
         newPrice: parseBRLNumber(correctPrices[w.supplierId]) ?? w.price,
       }));
-      await correctQuotationPriceClient(
+      const { newTotal } = await correctQuotationPriceClient(
         correctItem.requisitionId,
         corrections,
         correctReason.trim(),
       );
       toast.success("Preço corrigido. A requisição foi reenviada para aprovação (V3).");
+      // A aprovação volta a ficar pendente (possivelmente em outra alçada): sem
+      // este aviso o aprovador nunca soube que precisava decidir de novo.
+      void notifyWhatsappClient({
+        stage: "APROVACAO_PENDENTE",
+        requisitionId: correctItem.requisitionId,
+        ticketNumber: correctItem.ticketNumber,
+        title: correctItem.title,
+        module: correctItem.module,
+        requesterName: "",
+        totalValue: newTotal,
+      }).catch(console.warn);
       closeCorrectDialog();
       refreshCorrectableQueue();
       await router.invalidate();

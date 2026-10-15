@@ -13,7 +13,7 @@ describe("hashQuickToken", () => {
     expect(hashQuickToken("segredo")).not.toContain("segredo");
   });
 
-  it("a validade do link é de 4 horas (decisão do Gelson, 30/09/2026)", () => {
-    expect(QUICK_LINK_TTL_HOURS).toBe(4);
+  it("a validade do link é de 24 horas (ampliada de 4h por decisão do Gelson, 15/10/2026)", () => {
+    expect(QUICK_LINK_TTL_HOURS).toBe(24);
   });
 });
