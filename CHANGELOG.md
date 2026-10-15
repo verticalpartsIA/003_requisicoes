@@ -7,6 +7,7 @@ os fixes/features mais investigativos linkam para um relatório em
 
 ## 2026-10-15
 
+- docs: desenho da compra com vários fornecedores (pedidos de compra por fornecedor, cada um com pagamento e observações; cotação sem limite de 3; recebimento por pedido), com rascunho da migração 039 e das telas — **só proposta, nada implementado**. Origem: ticket M1-000221, reprovado por preço unitário suspeito. [Desenho](docs/reports/2026-10-15-desenho-compra-multi-fornecedor.md).
 - feat(whatsapp): o solicitante passa a receber WhatsApp (`REQUISITANTE_DEVOLVIDO_INFO`) quando o comprador devolve a requisição na Cotação por falta de informação — antes o ticket ia para REJEITADO sem aviso nenhum. A mensagem traz o motivo e o link de Movimentações para corrigir e reenviar. Pendência levantada no [relatório](docs/reports/2026-10-15-links-whatsapp-ciencia-aprovacao.md).
 - feat(whatsapp): link de aprovação rápida passa a valer **24 h** (era 4 h) e a página mostra data e hora do vencimento; nova migração `038` só atualiza a mensagem de erro do banco · fix(whatsapp): dois gatilhos que não avisavam ninguém — (1) correção de preço em Compra reabre a aprovação mas o aprovador não recebia o aviso/link, agora sai `APROVACAO_PENDENTE` com o novo total; (2) edição de requisição reprovada/devolvida volta para a Cotação e o cotador não recebia `COMPRADOR_COTAR`. Investigação completa (envio × leitura × uso dos links, auditoria dos gatilhos): [relatório](docs/reports/2026-10-15-links-whatsapp-ciencia-aprovacao.md).
 
