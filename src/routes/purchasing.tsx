@@ -49,6 +49,17 @@ import { toast } from "sonner";
 import { AccessGuard } from "@/components/access-guard";
 import { confirmPurchaseClient, listPendingPurchasesClient } from "@/features/purchases/client";
 import { useAuth } from "@/features/auth/auth-context";
+import {
+  confirmPurchaseOrdersClient,
+  purchaseOrdersAvailableClient,
+} from "@/features/purchases/orders-client";
+import {
+  buildDefaultOrders,
+  validateOrders,
+  type ApprovedProduct,
+  type DraftOrder,
+} from "@/features/purchases/allocation";
+import { PurchaseOrdersForm } from "@/features/purchases/purchase-orders-form";
 import { notifyVpClickClient } from "@/features/vpclick/client";
 import { notifyWhatsappClient } from "@/features/whatsapp/client";
 import { getM5SummaryItems } from "@/lib/m5-freight-summary";
@@ -106,14 +117,37 @@ function PurchasingPage() {
   const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [dialogError, setDialogError] = useState<{ message: string; action: string } | null>(null);
+  // Pedidos por fornecedor (M1 multi-itens) — só quando a migração 039 existe.
+  const [ordersAvailable, setOrdersAvailable] = useState(false);
+  const [orders, setOrders] = useState<DraftOrder[]>([]);
 
   useEffect(() => {
     if (!session) return;
     void listPendingPurchasesClient().then(setItems);
+    void purchaseOrdersAvailableClient().then(setOrdersAvailable);
   }, [session]);
+
+  /** Itens aprovados do M1 prontos para alocar entre pedidos; null = fluxo antigo. */
+  const approvedProducts = (item: PurchaseItem | null): ApprovedProduct[] | null => {
+    if (!ordersAvailable || !item || item.moduleCode !== "M1") return null;
+    const products = (item.approvedTravelItems || []).filter((i) => i.itemType === "produto");
+    if (products.length === 0 || products.length !== (item.approvedTravelItems || []).length) {
+      return null;
+    }
+    return products.map((i) => ({
+      itemId: i.itemId,
+      description: i.description || "Produto",
+      productCode: i.productCode ?? null,
+      quantity: i.quantity ?? 1,
+      price: i.price,
+      supplierName: i.supplierName,
+    }));
+  };
 
   const openDetail = (item: PurchaseItem) => {
     setSelected(item);
+    const products = approvedProducts(item);
+    setOrders(products ? buildDefaultOrders(products) : []);
     setSendToV5(categoryConfig[item.category]?.defaultV5 ?? false);
     setV5Reason("");
     setPurchaseOrderNumber("");
@@ -125,6 +159,7 @@ function PurchasingPage() {
 
   const closeDialog = () => {
     setSelected(null);
+    setOrders([]);
     setSendToV5(false);
     setV5Reason("");
     setPurchaseOrderNumber("");
@@ -182,6 +217,82 @@ function PurchasingPage() {
     // como referência de fornecedor/valor, em vez de um único vencedor.
     const approvedItems = selected.approvedTravelItems || [];
     const hasApprovedItems = approvedItems.length > 0;
+    const products = approvedProducts(selected);
+
+    // M1 com pedidos por fornecedor: cada pedido tem número, pagamento e
+    // observações próprios; a confirmação é atômica no banco.
+    if (products) {
+      const errors = validateOrders(products, orders);
+      if (errors.length > 0) {
+        setDialogError({
+          message: errors[0],
+          action:
+            errors.length > 1
+              ? `Mais ${errors.length - 1} pendência(s): ${errors.slice(1).join(" ")}`
+              : "Corrija e tente novamente.",
+        });
+        return;
+      }
+      if (sendToV5 && !v5Reason.trim()) {
+        setDialogError({
+          message: "Você marcou encaminhar para V5 mas não informou o motivo.",
+          action:
+            "Preencha o campo 'Motivo do encaminhamento' explicando por que a entrega precisa ser conferida.",
+        });
+        return;
+      }
+      setIsSaving(true);
+      try {
+        await confirmPurchaseOrdersClient({
+          requisitionId: selected.requisitionId,
+          approvalId: selected.approvalId,
+          requiresReceipt: sendToV5,
+          // O motivo do envio ao V5 acompanha o 1º pedido (as observações
+          // comerciais são por fornecedor, no próprio formulário).
+          orders: orders.map((o, i) =>
+            i === 0 && sendToV5 && v5Reason.trim()
+              ? {
+                  ...o,
+                  notes: [o.notes.trim(), `Motivo V5: ${v5Reason.trim()}`]
+                    .filter(Boolean)
+                    .join("\n"),
+                }
+              : o,
+          ),
+        });
+        toast.success(
+          sendToV5
+            ? "Compra finalizada e encaminhada para recebimento (V5)."
+            : "Compra finalizada com sucesso.",
+        );
+        void notifyVpClickClient({
+          stage: "V4",
+          requisitionId: selected.requisitionId,
+          ticketNumber: selected.id,
+          title: selected.title,
+          module: selected.module,
+          requesterName: selected.requesterName,
+          requiresReceipt: sendToV5,
+        }).catch(console.warn);
+        void notifyWhatsappClient({
+          stage: "REQUISITANTE_COMPRADO",
+          requisitionId: selected.requisitionId,
+          ticketNumber: selected.id,
+          title: selected.title,
+          module: selected.module,
+          requesterName: selected.requesterName,
+          requesterId: selected.requesterProfileId ?? undefined,
+        }).catch(console.warn);
+        closeDialog();
+        setItems(await listPendingPurchasesClient());
+        await router.invalidate();
+      } catch (error) {
+        setDialogError(extractError(error));
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
 
     // ── Validações antes de chamar o backend ──────────────────────────
     const winner = hasApprovedItems
@@ -464,6 +575,7 @@ function PurchasingPage() {
                 const hasApprovedItems = approvedItems.length > 0;
                 const winner = hasApprovedItems ? null : selected.suppliers.find((s) => s.isWinner);
                 const cat = categoryConfig[selected.category];
+                const orderProducts = approvedProducts(selected);
 
                 return (
                   <>
@@ -633,32 +745,40 @@ function PurchasingPage() {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-sm font-medium">Número do Pedido *</Label>
-                        <Input
-                          placeholder="Ex.: PC-2026-0012"
-                          value={purchaseOrderNumber}
-                          onChange={(e) => setPurchaseOrderNumber(e.target.value)}
-                        />
+                    {orderProducts ? (
+                      <PurchaseOrdersForm
+                        items={orderProducts}
+                        orders={orders}
+                        onChange={setOrders}
+                      />
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">Número do Pedido *</Label>
+                          <Input
+                            placeholder="Ex.: PC-2026-0012"
+                            value={purchaseOrderNumber}
+                            onChange={(e) => setPurchaseOrderNumber(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">Número da NF</Label>
+                          <Input
+                            placeholder="Opcional"
+                            value={invoiceNumber}
+                            onChange={(e) => setInvoiceNumber(e.target.value)}
+                          />
+                        </div>
+                        <div className="col-span-2 space-y-1.5">
+                          <Label className="text-sm font-medium">Forma de Pagamento</Label>
+                          <Input
+                            placeholder="Ex.: boleto 28 dias"
+                            value={paymentMethod}
+                            onChange={(e) => setPaymentMethod(e.target.value)}
+                          />
+                        </div>
                       </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-sm font-medium">Número da NF</Label>
-                        <Input
-                          placeholder="Opcional"
-                          value={invoiceNumber}
-                          onChange={(e) => setInvoiceNumber(e.target.value)}
-                        />
-                      </div>
-                      <div className="col-span-2 space-y-1.5">
-                        <Label className="text-sm font-medium">Forma de Pagamento</Label>
-                        <Input
-                          placeholder="Ex.: boleto 28 dias"
-                          value={paymentMethod}
-                          onChange={(e) => setPaymentMethod(e.target.value)}
-                        />
-                      </div>
-                    </div>
+                    )}
 
                     <Card className="border border-dashed">
                       <CardContent className="p-4 space-y-3">
@@ -697,17 +817,19 @@ function PurchasingPage() {
                           </div>
                         )}
 
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-muted-foreground">
-                            Observações da compra
-                          </Label>
-                          <Textarea
-                            placeholder="Condições comerciais, observações internas, instruções adicionais..."
-                            value={notes}
-                            onChange={(e) => setNotes(e.target.value)}
-                            rows={3}
-                          />
-                        </div>
+                        {!orderProducts && (
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground">
+                              Observações da compra
+                            </Label>
+                            <Textarea
+                              placeholder="Condições comerciais, observações internas, instruções adicionais..."
+                              value={notes}
+                              onChange={(e) => setNotes(e.target.value)}
+                              rows={3}
+                            />
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
 

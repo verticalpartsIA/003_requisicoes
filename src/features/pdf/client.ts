@@ -19,39 +19,48 @@ async function fetchRequisitionPdfData(ticketNumber: string): Promise<BuildInput
   if (reqError) throw new Error(`Falha ao buscar requisição: ${reqError.message}`);
   if (!req) throw new Error(`Requisição ${ticketNumber} não encontrada.`);
 
-  const [{ data: quot }, { data: approval }, { data: purchase }, { data: receipt }, { data: auditLogs }] =
-    await Promise.all([
-      supabaseBrowser
-        .from("quotations")
-        .select("win_criteria,quotation_suppliers(*)")
-        .eq("requisition_id", req.id)
-        .maybeSingle(),
-      supabaseBrowser
-        .from("approvals")
-        .select("*")
-        .eq("requisition_id", req.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabaseBrowser
-        .from("purchases")
-        .select("*")
-        .eq("requisition_id", req.id)
-        .maybeSingle(),
-      supabaseBrowser
-        .from("receipts")
-        .select("*")
-        .eq("requisition_id", req.id)
-        .maybeSingle(),
-      supabaseBrowser
-        .from("audit_logs")
-        .select("*")
-        .eq("ticket_number", ticketNumber)
-        .order("created_at", { ascending: true }),
-    ]);
+  const [
+    { data: quot },
+    { data: approval },
+    { data: purchase },
+    { data: receipt },
+    { data: auditLogs },
+  ] = await Promise.all([
+    supabaseBrowser
+      .from("quotations")
+      .select("win_criteria,quotation_suppliers(*)")
+      .eq("requisition_id", req.id)
+      .maybeSingle(),
+    supabaseBrowser
+      .from("approvals")
+      .select("*")
+      .eq("requisition_id", req.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabaseBrowser.from("purchases").select("*").eq("requisition_id", req.id).maybeSingle(),
+    supabaseBrowser.from("receipts").select("*").eq("requisition_id", req.id).maybeSingle(),
+    supabaseBrowser
+      .from("audit_logs")
+      .select("*")
+      .eq("ticket_number", ticketNumber)
+      .order("created_at", { ascending: true }),
+  ]);
 
-  const suppliersRaw = ((quot?.quotation_suppliers ?? []) as Array<Record<string, unknown>>)
-    .sort((a, b) => (a.is_winner ? -1 : 1) - (b.is_winner ? -1 : 1)); // vencedor primeiro
+  // Pedidos por fornecedor (migração 039). Se a tabela ainda não existe, o
+  // erro é ignorado e o PDF usa o resumo de `purchases`.
+  const { data: purchaseOrders } = await supabaseBrowser
+    .from("purchase_orders")
+    .select(
+      "*,purchase_order_items(quantity,unit_price,line_total,requisition_items(description,product_code))",
+    )
+    .eq("requisition_id", req.id)
+    .neq("status", "CANCELADO")
+    .order("created_at", { ascending: true });
+
+  const suppliersRaw = ((quot?.quotation_suppliers ?? []) as Array<Record<string, unknown>>).sort(
+    (a, b) => (a.is_winner ? -1 : 1) - (b.is_winner ? -1 : 1),
+  ); // vencedor primeiro
 
   // URLs assinadas para imagens (bucket travel-docs)
   const moduleData = (req.module_data ?? {}) as Record<string, unknown>;
@@ -79,7 +88,9 @@ async function fetchRequisitionPdfData(ticketNumber: string): Promise<BuildInput
   if (req.module === "M2") {
     const travelers = (moduleData.travelers ?? []) as Array<Record<string, unknown>>;
     for (let i = 0; i < travelers.length; i++) {
-      const photoPath = (travelers[i].docPhotoPath ?? travelers[i].doc_photo_path) as string | undefined;
+      const photoPath = (travelers[i].docPhotoPath ?? travelers[i].doc_photo_path) as
+        | string
+        | undefined;
       if (photoPath) {
         const url = await signedImageUrl(photoPath);
         if (url) imageUrls[`traveler_${i}`] = url;
@@ -93,6 +104,7 @@ async function fetchRequisitionPdfData(ticketNumber: string): Promise<BuildInput
     winCriteria: (quot?.win_criteria ?? null) as string | null,
     approval: approval ?? null,
     purchase: purchase ?? null,
+    purchaseOrders: (purchaseOrders ?? []) as Array<Record<string, unknown>>,
     receipt: receipt ?? null,
     auditLogs: auditLogs ?? [],
     imageUrls,
@@ -164,7 +176,8 @@ async function uploadRequisitionPdf(ticketNumber: string, blob: Blob): Promise<s
   const { data, error: signError } = await supabaseBrowser.storage
     .from(PDF_BUCKET)
     .createSignedUrl(path, 3600);
-  if (signError || !data) throw new Error(`Falha ao gerar link do PDF: ${signError?.message ?? "desconhecido"}`);
+  if (signError || !data)
+    throw new Error(`Falha ao gerar link do PDF: ${signError?.message ?? "desconhecido"}`);
 
   return data.signedUrl;
 }

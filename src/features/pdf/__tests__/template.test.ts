@@ -159,3 +159,66 @@ describe("buildHtml — M5 (Frete)", () => {
     expect(html).toContain("Frete — Dados do Formulário");
   });
 });
+
+describe("buildHtml — V4 com pedidos por fornecedor", () => {
+  const order = (supplier: string, extra: Record<string, unknown> = {}) => ({
+    supplier_name: supplier,
+    order_number: "PC-1",
+    invoice_number: null,
+    payment_method: "Boleto",
+    payment_terms: "28 dias",
+    expected_delivery: "2026-10-30",
+    freight_value: 10,
+    discount_value: 0,
+    total_value: 478.8,
+    notes: "entregar na doca 2",
+    purchase_order_items: [
+      {
+        quantity: 400,
+        unit_price: 1.172,
+        line_total: 468.8,
+        requisition_items: { description: "Fio 2x0,75", product_code: "VPMP-304" },
+      },
+    ],
+    ...extra,
+  });
+
+  it("imprime um quadro por pedido com pagamento, itens e observações", () => {
+    const html = buildHtml({
+      ...baseInput({}),
+      purchase: { supplier_name: "A, B", supplier_price: 478.8 },
+      purchaseOrders: [
+        order("SANTIL"),
+        order("NORTE", { order_number: "PC-2", payment_method: "PIX" }),
+      ],
+    });
+    expect(html).toContain("2 pedido(s)");
+    expect(html).toContain("SANTIL");
+    expect(html).toContain("NORTE");
+    expect(html).toContain("PC-2");
+    expect(html).toContain("Boleto");
+    expect(html).toContain("PIX");
+    expect(html).toContain("28 dias");
+    expect(html).toContain("[VPMP-304] Fio 2x0,75");
+    expect(html).toContain("entregar na doca 2");
+  });
+
+  it("escapa HTML digitado nos campos do pedido", () => {
+    const html = buildHtml({
+      ...baseInput({}),
+      purchase: { supplier_name: "X" },
+      purchaseOrders: [order("<b>EVIL</b>")],
+    });
+    expect(html).not.toContain("<b>EVIL</b>");
+    expect(html).toContain("&lt;b&gt;EVIL&lt;/b&gt;");
+  });
+
+  it("sem pedidos mantém o resumo antigo de purchases", () => {
+    const html = buildHtml({
+      ...baseInput({}),
+      purchase: { supplier_name: "FORNECEDOR UNICO", purchase_order_number: "PC-9" },
+    });
+    expect(html).toContain("FORNECEDOR UNICO");
+    expect(html).not.toContain("pedido(s)");
+  });
+});

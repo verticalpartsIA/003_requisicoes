@@ -20,6 +20,8 @@ export interface BuildInput {
   winCriteria: string | null;
   approval: Record<string, unknown> | null;
   purchase: Record<string, unknown> | null;
+  /** Pedidos de compra por fornecedor (M1 fracionado, migração 039), com itens. */
+  purchaseOrders?: Array<Record<string, unknown>>;
   receipt: Record<string, unknown> | null;
   auditLogs: Array<Record<string, unknown>>;
   imageUrls: Record<string, string>;
@@ -507,7 +509,41 @@ export function buildHtml(d: BuildInput): string {
   // ─ V4 Compra ───────────────────────────────────────────────────────────────
 
   let v4Section = "";
-  if (d.purchase) {
+  const orders = d.purchaseOrders ?? [];
+  if (d.purchase && orders.length > 0) {
+    const esc = (v: unknown) =>
+      f(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const orderCards = orders
+      .map((o) => {
+        const rows = ((o.purchase_order_items ?? []) as Array<Record<string, unknown>>)
+          .map((it) => {
+            const ri = (it.requisition_items ?? {}) as Record<string, unknown>;
+            return `<tr>
+              <td style="padding:2px 6px;">${ri.product_code ? `[${esc(ri.product_code)}] ` : ""}${esc(ri.description)}</td>
+              <td style="padding:2px 6px;text-align:right;">${esc(it.quantity)}</td>
+              <td style="padding:2px 6px;text-align:right;">${fP(it.unit_price)}</td>
+              <td style="padding:2px 6px;text-align:right;">${fP(it.line_total)}</td>
+            </tr>`;
+          })
+          .join("");
+        return card(`
+      ${fld("Fornecedor", esc(o.supplier_name))}
+      ${grid2(fld("Nº do Pedido", esc(o.order_number)), fld("NF", esc(o.invoice_number)))}
+      ${grid2(fld("Forma de Pagamento", esc(o.payment_method)), fld("Condição", esc(o.payment_terms)))}
+      ${grid2(fld("Entrega Prevista", o.expected_delivery ? fDate(`${o.expected_delivery}T12:00:00`).split(",")[0] : "—"), fld("Frete / Desconto", `${fP(o.freight_value)} / ${fP(o.discount_value)}`))}
+      <table style="width:100%;font-size:11px;border-collapse:collapse;margin:6px 0;">
+        <tr style="background:#f3f4f6;"><th style="padding:2px 6px;text-align:left;">Item</th><th style="padding:2px 6px;text-align:right;">Qtd</th><th style="padding:2px 6px;text-align:right;">Unit.</th><th style="padding:2px 6px;text-align:right;">Total</th></tr>
+        ${rows}
+      </table>
+      ${fld("Total do Pedido", fP(o.total_value))}
+      ${o.notes ? fld("Observações", esc(o.notes)) : ""}
+    `);
+      })
+      .join("");
+    v4Section = `
+    ${sectionHead("V4", "#dbeafe", "#1d4ed8", `Compra — ${orders.length} pedido(s)`)}
+    ${orderCards}`;
+  } else if (d.purchase) {
     const p = d.purchase;
     v4Section = `
     ${sectionHead("V4", "#dbeafe", "#1d4ed8", "Compra")}
