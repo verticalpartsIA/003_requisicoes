@@ -14,6 +14,7 @@ export type WhatsappStage =
   | "COMPRA_APROVADA"
   | "REQUISITANTE_CIENCIA_OK"
   | "REQUISITANTE_REPROVADO_GESTOR"
+  | "REQUISITANTE_DEVOLVIDO_INFO"
   | "REQUISITANTE_APROVADO_FINANCEIRO"
   | "REQUISITANTE_REPROVADO_FINANCEIRO"
   | "REQUISITANTE_APROVADO_PARCIAL"
@@ -34,7 +35,7 @@ export interface WhatsappNotifyInput {
   requesterDepartment?: string;
   /** APROVACAO_PENDENTE: define a alçada (nível 1/2/3) que deve ser notificada. */
   totalValue?: number;
-  /** REQUISITANTE_REPROVADO_*: motivo informado por quem reprovou. */
+  /** REQUISITANTE_REPROVADO_* / REQUISITANTE_DEVOLVIDO_INFO: motivo informado por quem reprovou/devolveu. */
   rejectionReason?: string;
   /** REQUISITANTE_APROVADO_PARCIAL: itens reprovados (rótulo pronto) e quantos seguiram. */
   rejectedItems?: string[];
