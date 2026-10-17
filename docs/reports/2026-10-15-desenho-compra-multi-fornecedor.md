@@ -46,8 +46,19 @@ O rascunho que estava aqui virou a migração real, conferida contra o schema de
 em Postgres local (PGlite, com stubs de `auth`/`private`) em 22 cenários: compra dividida entre 3 fornecedores,
 pagamento e observação por pedido, resumo em `purchases`, ação `PURCHASE_CONFIRMED`, todos os erros de
 validação sem gravar nada, papel de comprador, só M1, refazer pedidos quando nada foi recebido, e conclusão
-marcando os pedidos como recebidos. **Não foi testada no Supabase real** (RLS e `can_view_requisition` não foram
-exercitadas) — ver "Como aplicar" abaixo.
+marcando os pedidos como recebidos. Depois disso foi aplicada numa **branch descartável do Supabase** (`teste-039-pedidos-compra`, ref
+`eakguwglyxojfnmlfebg`) e testada com usuários autenticados simulados (comprador, solicitante dono da requisição
+e usuário sem vínculo): 21 de 22 verificações passaram na primeira rodada e a restante era erro de conta do
+próprio teste (o resumo em `purchases` inclui o frete). O teste no banco real achou **dois defeitos do
+rascunho**, já corrigidos em `039`: (1) a grafia `'CONCLÍDO'` (sem o U) em duas linhas — o enum é `'CONCLUÍDO'` e o
+gatilho em `requisitions` teria falhado em toda atualização de status; (2) a mensagem de "total acima do aprovado"
+saía com número no formato americano. O teste local (PGlite) não pegou o item 1 porque eu tinha criado o enum com
+a mesma grafia errada, por isso o teste no banco real foi essencial.
+
+**Limites do teste na branch:** a branch nasceu **vazia** (o schema base de produção, arquivos 001–010, não está no
+histórico de migrações do Supabase), então o schema base foi recriado a partir dos arquivos do repositório
+(001, helpers de 002, 007, 023/024) — é uma réplica, não produção: não tem as políticas e funções mais novas
+(032–038) nem o status `GESTOR` do enum de produção. `receipts` e o fluxo de recebimento não foram exercitados.
 
 O que difere do rascunho original:
 - A cotação **não** ganhou `available_quantity`/`payment_terms` (fica para a fase 3).
@@ -58,15 +69,15 @@ O que difere do rascunho original:
   não entram na comparação, porque a cotação nunca os incluiu.
 - Refazer pedidos (ticket que volta a COMPRA após recebimento com problema) substitui os anteriores **só se nada
   foi recebido**; senão recusa.
-- Um gatilho em `requisitions` marca os pedidos como `RECEBIDO` quando o ticket vai a CONCLÍDO, para o Recebimento
+- Um gatilho em `requisitions` marca os pedidos como `RECEBIDO` quando o ticket vai a CONCLUÍDO, para o Recebimento
   atual (por ticket) não deixar pedidos "pendentes" até a fase 3.
 - Só M1; M2–M6 seguem no fluxo antigo.
 
 ### Como aplicar
-1. Aplicar `039` (SQL Editor ou `sb_apply_migration`), de preferência antes em branch descartável.
+1. Aplicar `039` em produção (SQL Editor ou `sb_apply_migration`). A branch de teste já validou o arquivo.
 2. Só depois publicar a tela: ela sonda `purchase_orders` e, enquanto a tabela não existir, mantém o formulário
    antigo — então publicar antes é seguro, mas a tela nova só aparece depois da migração.
-3. Conferir no Supabase real: um ticket M1 de teste com 2+ itens, 2 fornecedores, e um usuário sem papel de comprador.
+3. Depois de aplicar, conferir com um ticket M1 de teste (2+ itens, 2 fornecedores) e um usuário sem papel de comprador.
 
 ## 4. Telas
 
@@ -114,7 +125,7 @@ Não alocado: nenhum item ✔        Total dos pedidos R$ 37.272,10 = aprovado �
 ### 4.4 Recebimento (`receipt.tsx`)
 - Agrupar por **pedido de compra** (fornecedor, nº do pedido, entrega prevista), com quantidade recebida por
   item (aceita parcial: 3 de 5 rolos).
-- Ticket só vai a CONCLÍDO quando todos os pedidos estiverem recebidos; enquanto isso mostra
+- Ticket só vai a CONCLUÍDO quando todos os pedidos estiverem recebidos; enquanto isso mostra
   "2 de 3 pedidos recebidos".
 
 ### 4.5 Demais pontos

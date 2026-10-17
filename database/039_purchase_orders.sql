@@ -311,7 +311,8 @@ begin
 
   if v_subtotal > v_approved + 0.01 * v_lines then
     raise exception 'O total dos itens (R$ %) excede o valor aprovado (R$ %). Corrija o preço na Cotação para reabrir a aprovação.',
-      to_char(v_subtotal, 'FM999G999G990D00'), to_char(v_approved, 'FM999G999G990D00');
+      translate(to_char(v_subtotal, 'FM999,999,990.00'), ',.', '.,'),
+      translate(to_char(v_approved, 'FM999,999,990.00'), ',.', '.,');
   end if;
 
   select coalesce(sum(total_value), 0) into v_total
@@ -344,7 +345,7 @@ begin
          purchased_at = excluded.purchased_at,
          updated_at = now();
 
-  v_next := case when p_requires_receipt then 'RECEBIMENTO' else 'CONCLÍDO' end;
+  v_next := case when p_requires_receipt then 'RECEBIMENTO' else 'CONCLUÍDO' end;
   update public.requisitions
      set status = v_next,
          completed_at = case when p_requires_receipt then null else now() end
@@ -399,7 +400,7 @@ security definer
 set search_path = public
 as $$
 begin
-  if new.status = 'CONCLÍDO' and old.status is distinct from 'CONCLÍDO' then
+  if new.status = 'CONCLUÍDO' and old.status is distinct from 'CONCLUÍDO' then
     update public.purchase_order_items poi
        set received_quantity = poi.quantity
       from public.purchase_orders po
