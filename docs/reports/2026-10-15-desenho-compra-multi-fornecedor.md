@@ -40,7 +40,7 @@ Decisões:
 - Se o total dos pedidos passar do valor aprovado, **reabre a aprovação**, reaproveitando o fluxo de
   "correção de preço em Compra" que já existe (`quoting.tsx:1699`).
 
-## 3. Migração SQL (fase 2 — **implementada em `database/039_purchase_orders.sql`, ainda não aplicada**)
+## 3. Migração SQL (fase 2 — `database/039_purchase_orders.sql`, **aplicada em produção em 2026-10-22**)
 
 O rascunho que estava aqui virou a migração real, conferida contra o schema de produção (leitura) e testada
 em Postgres local (PGlite, com stubs de `auth`/`private`) em 22 cenários: compra dividida entre 3 fornecedores,
@@ -74,7 +74,7 @@ O que difere do rascunho original:
 - Só M1; M2–M6 seguem no fluxo antigo.
 
 ### Como aplicar
-1. Aplicar `039` em produção (SQL Editor ou `sb_apply_migration`). A branch de teste já validou o arquivo.
+1. ~~Aplicar `039` em produção~~ — feito em 2026-10-22 (versão `20261022154820`), validada antes na branch de teste.
 2. Só depois publicar a tela: ela sonda `purchase_orders` e, enquanto a tabela não existir, mantém o formulário
    antigo — então publicar antes é seguro, mas a tela nova só aparece depois da migração.
 3. Depois de aplicar, conferir com um ticket M1 de teste (2+ itens, 2 fornecedores) e um usuário sem papel de comprador.
