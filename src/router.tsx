@@ -1,8 +1,41 @@
+import { useEffect } from "react";
 import { createRouter, useRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 
+/** Erro típico de aba com bundle antigo: o deploy sobrescreve /assets/ no
+ *  servidor (nomes com hash), então um chunk carregado sob demanda some e o
+ *  import dinâmico falha. Recarregar a página resolve. */
+export function isStaleBundleError(error: unknown): boolean {
+  const msg = error instanceof Error ? `${error.name} ${error.message}` : String(error ?? "");
+  return /dynamically imported module|Importing a module script failed|Loading chunk|ChunkLoadError|error loading dynamically/i.test(
+    msg,
+  );
+}
+
+const RELOAD_FLAG = "vp_error_auto_reload_at";
+
+function autoReloadOnce(): boolean {
+  try {
+    const last = Number(sessionStorage.getItem(RELOAD_FLAG) || 0);
+    // evita loop de reload: no máximo 1x a cada 30s
+    if (Date.now() - last < 30_000) return false;
+    sessionStorage.setItem(RELOAD_FLAG, String(Date.now()));
+  } catch {
+    return false;
+  }
+  window.location.reload();
+  return true;
+}
+
 function DefaultErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
+
+  useEffect(() => {
+    // Em produção a mensagem não aparecia em lugar nenhum — registra no
+    // console para dar para diagnosticar o que o usuário viu.
+    console.error("[route-error]", error);
+    if (isStaleBundleError(error)) autoReloadOnce();
+  }, [error]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -27,14 +60,19 @@ function DefaultErrorComponent({ error, reset }: { error: Error; reset: () => vo
         <p className="mt-2 text-sm text-muted-foreground">
           Ocorreu um erro inesperado. Tente novamente.
         </p>
-        {import.meta.env.DEV && error.message && (
-          <pre className="mt-4 max-h-40 overflow-auto rounded-md bg-muted p-3 text-left font-mono text-xs text-destructive">
-            {error.message}
-          </pre>
+        {error.message && (
+          <p className="mt-3 break-words text-xs text-muted-foreground/70">
+            Detalhe técnico: {error.message.slice(0, 200)}
+          </p>
         )}
         <div className="mt-6 flex items-center justify-center gap-3">
           <button
             onClick={() => {
+              // Se o erro veio de bundle desatualizado, só recarregar resolve.
+              if (isStaleBundleError(error)) {
+                window.location.reload();
+                return;
+              }
               router.invalidate();
               reset();
             }}
