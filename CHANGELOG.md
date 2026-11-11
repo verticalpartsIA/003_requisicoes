@@ -5,6 +5,10 @@ linha por entrega — para o contexto completo (logs, causa raiz, decisões),
 os fixes/features mais investigativos linkam para um relatório em
 `docs/reports/`.
 
+## 2026-11-11
+
+- fix(erro-genérico): relato da Talita — ao salvar uma cotação aparecia "Algo deu errado" e só o reload resolvia. A causa exata não é reproduzível por leitura do código (nenhum erro de render determinístico no fluxo de salvar de `/quoting` e `/products`), então a tela de erro passou a (1) mostrar o detalhe técnico e registrar `[route-error]` no console em produção (antes a mensagem só aparecia em DEV), (2) recarregar sozinha, no máx. 1x/30s, quando o erro é de bundle desatualizado (import dinâmico que falhou após deploy sobrescrever `/assets/`) e (3) fazer o "Tentar novamente" recarregar nesse caso. Pedir à usuária o "Detalhe técnico" se voltar a ocorrer.
+
 ## 2026-10-15
 
 - feat(whatsapp): o solicitante passa a receber WhatsApp (`REQUISITANTE_DEVOLVIDO_INFO`) quando o comprador devolve a requisição na Cotação por falta de informação — antes o ticket ia para REJEITADO sem aviso nenhum. A mensagem traz o motivo e o link de Movimentações para corrigir e reenviar. Pendência levantada no [relatório](docs/reports/2026-10-15-links-whatsapp-ciencia-aprovacao.md).
