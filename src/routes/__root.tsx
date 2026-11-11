@@ -50,6 +50,10 @@ export const Route = createRootRoute({
         content: "Sistema de gestão de compras e requisições da VerticalParts",
       },
       { name: "author", content: "VerticalParts" },
+      // A tradução automática do navegador (Edge/Chrome) troca os textos por
+      // <font> e o React quebra com "removeChild ... not a child" ao fechar
+      // diálogos. O app já é em português: desliga a oferta de tradução.
+      { name: "google", content: "notranslate" },
       { property: "og:title", content: "VPRequisições — VerticalParts" },
       {
         property: "og:description",
@@ -71,7 +75,7 @@ export const Route = createRootRoute({
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="pt-BR" translate="no">
       <head>
         <HeadContent />
       </head>

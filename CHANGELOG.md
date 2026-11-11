@@ -7,6 +7,8 @@ os fixes/features mais investigativos linkam para um relatório em
 
 ## 2026-11-11
 
+- fix(erro-genérico): causa raiz do "Algo deu errado" ao salvar (Talita, M1 `?edit=`): `NotFoundError: Failed to execute 'removeChild'` — o Edge estava traduzindo a página (o HTML declarava `lang="en"`) e o React perdeu os nós ao fechar o diálogo. Agora `<html lang="pt-BR" translate="no">` + `<meta name="google" content="notranslate">`.
+
 - fix(erro-genérico): relato da Talita — ao salvar uma cotação aparecia "Algo deu errado" e só o reload resolvia. A causa exata não é reproduzível por leitura do código (nenhum erro de render determinístico no fluxo de salvar de `/quoting` e `/products`), então a tela de erro passou a (1) mostrar o detalhe técnico e registrar `[route-error]` no console em produção (antes a mensagem só aparecia em DEV), (2) recarregar sozinha, no máx. 1x/30s, quando o erro é de bundle desatualizado (import dinâmico que falhou após deploy sobrescrever `/assets/`) e (3) fazer o "Tentar novamente" recarregar nesse caso. Pedir à usuária o "Detalhe técnico" se voltar a ocorrer.
 
 ## 2026-10-15
